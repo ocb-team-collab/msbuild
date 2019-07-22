@@ -84,7 +84,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// <summary>
         /// Executes the task.
         /// </summary>
-        public Task<WorkUnitResult> ExecuteTask(TargetLoggingContext targetLoggingContext, BuildRequestEntry requestEntry, ITargetBuilderCallback targetBuilderCallback, ProjectTargetInstanceChild task, TaskExecutionMode mode, Lookup lookupForInference, Lookup lookupForExecution, CancellationToken cancellationToken)
+        public Task<WorkUnitResult> ExecuteTask(TargetLoggingContext targetLoggingContext, BuildRequestEntry requestEntry, ITargetBuilderCallback targetBuilderCallback, ProjectTargetInstanceChild task, TaskExecutionMode mode, Lookup lookupForInference, Lookup lookupForExecution, CancellationToken cancellationToken, List<StaticTarget.Task> tasks)
         {
             if (cancellationToken.IsCancellationRequested)
             {

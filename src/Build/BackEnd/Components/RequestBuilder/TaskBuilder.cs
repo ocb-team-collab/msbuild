@@ -145,7 +145,7 @@ namespace Microsoft.Build.BackEnd
         /// 3. If the task is not batched, execute it.
         /// 4. If the task was batched, hold on to its Lookup until all of the natches are done, then merge them.
         /// </remarks>
-        public async Task<WorkUnitResult> ExecuteTask(TargetLoggingContext loggingContext, BuildRequestEntry requestEntry, ITargetBuilderCallback targetBuilderCallback, ProjectTargetInstanceChild taskInstance, TaskExecutionMode mode, Lookup inferLookup, Lookup executeLookup, CancellationToken cancellationToken)
+        public async Task<WorkUnitResult> ExecuteTask(TargetLoggingContext loggingContext, BuildRequestEntry requestEntry, ITargetBuilderCallback targetBuilderCallback, ProjectTargetInstanceChild taskInstance, TaskExecutionMode mode, Lookup inferLookup, Lookup executeLookup, CancellationToken cancellationToken, List<StaticTarget.Task> tasks)
         {
             ErrorUtilities.VerifyThrow(taskInstance != null, "Need to specify the task instance.");
 
@@ -174,12 +174,12 @@ namespace Microsoft.Build.BackEnd
             WorkUnitResult taskResult = new WorkUnitResult(WorkUnitResultCode.Failed, WorkUnitActionCode.Stop, null);
             if ((mode & TaskExecutionMode.InferOutputsOnly) == TaskExecutionMode.InferOutputsOnly)
             {
-                taskResult = await ExecuteTask(TaskExecutionMode.InferOutputsOnly, inferLookup);
+                taskResult = await ExecuteTask(TaskExecutionMode.InferOutputsOnly, inferLookup, tasks);
             }
 
             if ((mode & TaskExecutionMode.ExecuteTaskAndGatherOutputs) == TaskExecutionMode.ExecuteTaskAndGatherOutputs)
             {
-                taskResult = await ExecuteTask(TaskExecutionMode.ExecuteTaskAndGatherOutputs, executeLookup);
+                taskResult = await ExecuteTask(TaskExecutionMode.ExecuteTaskAndGatherOutputs, executeLookup, tasks);
             }
 
             return taskResult;
@@ -290,7 +290,7 @@ namespace Microsoft.Build.BackEnd
         /// Called to execute a task within a target. This method instantiates the task, sets its parameters, and executes it. 
         /// </summary>
         /// <returns>true, if successful</returns>
-        private async Task<WorkUnitResult> ExecuteTask(TaskExecutionMode mode, Lookup lookup)
+        private async Task<WorkUnitResult> ExecuteTask(TaskExecutionMode mode, Lookup lookup, List<StaticTarget.Task> tasks)
         {
             ErrorUtilities.VerifyThrowArgumentNull(lookup, "lookup");
 
@@ -328,7 +328,7 @@ namespace Microsoft.Build.BackEnd
                 for (int i = 0; i < buckets.Count; i++)
                 {
                     // Execute the batch bucket, pass in which bucket we are executing so that we know when to get a new taskId for the bucket.
-                    taskResult = await ExecuteBucket(taskHost, (ItemBucket)buckets[i], mode, lookupHash);
+                    taskResult = await ExecuteBucket(taskHost, (ItemBucket)buckets[i], mode, lookupHash, tasks);
 
                     aggregateResult = aggregateResult.AggregateResult(taskResult);
 
@@ -370,7 +370,7 @@ namespace Microsoft.Build.BackEnd
         /// Execute a single bucket
         /// </summary>
         /// <returns>true if execution succeeded</returns>        
-        private async Task<WorkUnitResult> ExecuteBucket(TaskHost taskHost, ItemBucket bucket, TaskExecutionMode howToExecuteTask, Dictionary<string, string> lookupHash)
+        private async Task<WorkUnitResult> ExecuteBucket(TaskHost taskHost, ItemBucket bucket, TaskExecutionMode howToExecuteTask, Dictionary<string, string> lookupHash, List<StaticTarget.Task> tasks)
         {
             // On Intrinsic tasks, we do not allow batchable params, therefore metadata is excluded.
             ParserOptions parserOptions = (_taskNode == null) ? ParserOptions.AllowPropertiesAndItemLists : ParserOptions.AllowAll;
@@ -418,6 +418,9 @@ namespace Microsoft.Build.BackEnd
                     // We need to find the task before logging the task started event so that the using task statement comes before the task started event 
                     IDictionary<string, string> taskIdentityParameters = GatherTaskIdentityParameters(bucket.Expander);
                     TaskRequirements? requirements = _taskExecutionHost.FindTask(taskIdentityParameters);
+
+                    var task = new StaticTarget.Task();
+
                     if (requirements != null)
                     {
                         TaskLoggingContext taskLoggingContext = _targetLoggingContext.LogTaskBatchStarted(_projectFullPath, _targetChildInstance);
@@ -438,7 +441,7 @@ namespace Microsoft.Build.BackEnd
                             }
                             else
                             {
-                                taskResult = await InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask);
+                                taskResult = await InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, task);
                             }
 
                             if (lookupHash != null)
@@ -472,6 +475,8 @@ namespace Microsoft.Build.BackEnd
                             }
                         }
                     }
+
+                    tasks.Add(task);
                 }
                 else
                 {
@@ -553,7 +558,7 @@ namespace Microsoft.Build.BackEnd
                     Lookup.Scope scope = bucket.Lookup.EnterScope("STA Thread for Task");
                     try
                     {
-                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask).Result;
+                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, null).Result;
                     }
                     catch (Exception e) when (!ExceptionHandling.IsCriticalException(e))
                     {
@@ -640,7 +645,7 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Initializes and executes the task.
         /// </summary>
-        private async Task<WorkUnitResult> InitializeAndExecuteTask(TaskLoggingContext taskLoggingContext, ItemBucket bucket, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask)
+        private async Task<WorkUnitResult> InitializeAndExecuteTask(TaskLoggingContext taskLoggingContext, ItemBucket bucket, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
         {
             if (!_taskExecutionHost.InitializeForBatch(taskLoggingContext, bucket, taskIdentityParameters))
             {
@@ -651,7 +656,7 @@ namespace Microsoft.Build.BackEnd
             {
                 // UNDONE: Move this and the task host.
                 taskHost.LoggingContext = taskLoggingContext;
-                WorkUnitResult executionResult = await ExecuteInstantiatedTask(_taskExecutionHost, taskLoggingContext, taskHost, bucket, howToExecuteTask);
+                WorkUnitResult executionResult = await ExecuteInstantiatedTask(_taskExecutionHost, taskLoggingContext, taskHost, bucket, howToExecuteTask, task);
 
                 ErrorUtilities.VerifyThrow(executionResult != null, "Unexpected null execution result");
 
@@ -727,7 +732,7 @@ namespace Microsoft.Build.BackEnd
         /// <param name="bucket">The batching bucket</param>
         /// <param name="howToExecuteTask">The task execution mode</param>
         /// <returns>The result of running the task.</returns>
-        private async Task<WorkUnitResult> ExecuteInstantiatedTask(ITaskExecutionHost taskExecutionHost, TaskLoggingContext taskLoggingContext, TaskHost taskHost, ItemBucket bucket, TaskExecutionMode howToExecuteTask)
+        private async Task<WorkUnitResult> ExecuteInstantiatedTask(ITaskExecutionHost taskExecutionHost, TaskLoggingContext taskLoggingContext, TaskHost taskHost, ItemBucket bucket, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
         {
             UpdateContinueOnError(bucket, taskHost);
 
@@ -743,6 +748,9 @@ namespace Microsoft.Build.BackEnd
             }
             else
             {
+                task.Parameters = taskExecutionHost.CalculatedParameters;
+                task.Name = taskExecutionHost.TaskType;
+
                 bool taskReturned = false;
                 Exception taskException = null;
 

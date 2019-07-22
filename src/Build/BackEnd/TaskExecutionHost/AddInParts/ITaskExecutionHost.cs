@@ -57,6 +57,10 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         bool LogTaskInputs { get; }
 
+        Dictionary<string, object> CalculatedParameters { get; }
+
+        string TaskType { get; }
+
         /// <summary>
         /// Initialize the host with the objects required to communicate with the host process.
         /// </summary>

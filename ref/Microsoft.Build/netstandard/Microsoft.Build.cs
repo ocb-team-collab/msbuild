@@ -1,5 +1,28 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
+namespace Microsoft.Build.BackEnd
+{
+    public partial class StaticGraph
+    {
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget> StaticTargets;
+        public StaticGraph() { }
+    }
+    public partial class StaticTarget
+    {
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task> Tasks;
+        public StaticTarget() { }
+        public partial class Task
+        {
+            [System.Runtime.Serialization.DataMemberAttribute]
+            public string Name;
+            [System.Runtime.Serialization.DataMemberAttribute]
+            public System.Collections.Generic.Dictionary<string, object> Parameters;
+            public Task() { }
+        }
+    }
+}
 namespace Microsoft.Build.Construction
 {
     public abstract partial class ElementLocation

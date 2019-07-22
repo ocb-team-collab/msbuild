@@ -220,3 +220,5 @@ Samples/MultiprocessBuild/PortableTask.dll
 stage1/
 
 .tools
+
+launchSettings.json

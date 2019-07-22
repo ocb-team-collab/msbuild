@@ -119,6 +119,14 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         private List<TaskItem> _remotedTaskItems;
 
+        private Dictionary<string, object> _calculatedParameters = new Dictionary<string, object>();
+
+        public Dictionary<string, object> CalculatedParameters { get { return _calculatedParameters; } }
+
+        private string _taskType = null;
+
+        public string TaskType { get { return _taskType; }}
+
         /// <summary>
         /// We need access to the build component host so that we can get at the 
         /// task host node provider when running a task wrapped by TaskHostTask
@@ -310,7 +318,7 @@ namespace Microsoft.Build.BackEnd
 
             TaskInstance.BuildEngine = _buildEngine;
             TaskInstance.HostObject = _taskHost;
-
+            
             return true;
         }
 
@@ -947,6 +955,8 @@ namespace Microsoft.Build.BackEnd
                         AppDomainSetup,
 #endif
                         IsOutOfProc);
+
+                    _taskType = assemblyTaskFactory.TaskType.FullName;
                 }
                 else
                 {
@@ -1316,6 +1326,8 @@ namespace Microsoft.Build.BackEnd
 
             try
             {
+                _calculatedParameters.Add(parameter.Name, parameterValue);
+
                 _taskFactoryWrapper.SetPropertyValue(TaskInstance, parameter, parameterValue);
                 success = true;
             }
