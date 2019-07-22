@@ -17,6 +17,7 @@ using ProjectLoggingContext = Microsoft.Build.BackEnd.Logging.ProjectLoggingCont
 using BuildAbortedException = Microsoft.Build.Exceptions.BuildAbortedException;
 using System.Threading.Tasks;
 using Microsoft.Build.Framework;
+using System.IO;
 
 namespace Microsoft.Build.BackEnd
 {
@@ -162,9 +163,11 @@ namespace Microsoft.Build.BackEnd
 
             // Now process the targets
             ITaskBuilder taskBuilder = _componentHost.GetComponent(BuildComponentType.TaskBuilder) as ITaskBuilder;
+
+            var staticGraph = new StaticGraph();
             try
             {
-                await ProcessTargetStack(taskBuilder);
+                await ProcessTargetStack(taskBuilder, staticGraph.StaticTargets);
             }
             finally
             {
@@ -180,6 +183,11 @@ namespace Microsoft.Build.BackEnd
             if (_cancellationToken.IsCancellationRequested)
             {
                 throw new BuildAbortedException();
+            }
+
+            using (var stream = new FileStream(_projectInstance.FullPath + ".graph.json", FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
+            {
+                new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(StaticGraph)).WriteObject(stream, staticGraph);
             }
 
             // Gather up outputs for the requested targets and return those.  All of our information should be in the base lookup now.
@@ -277,7 +285,7 @@ namespace Microsoft.Build.BackEnd
                         // We push the targets one at a time to emulate the original CallTarget behavior.
                         bool pushed = await PushTargets(targetToPush, currentTargetEntry, callTargetLookup, false, true, TargetBuiltReason.None);
                         ErrorUtilities.VerifyThrow(pushed, "Failed to push any targets onto the stack.  Target: {0} Current Target: {1}", targets[i], currentTargetEntry.Target.Name);
-                        await ProcessTargetStack(taskBuilder);
+                        await ProcessTargetStack(taskBuilder, null /* TODO(hackathon): null */);
 
                         if (!_cancellationToken.IsCancellationRequested)
                         {
@@ -379,7 +387,7 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Processes the target stack until its empty or we hit a recursive break (due to CallTarget etc.)
         /// </summary>
-        private async Task ProcessTargetStack(ITaskBuilder taskBuilder)
+        private async Task ProcessTargetStack(ITaskBuilder taskBuilder, List<StaticTarget> staticTargets)
         {
             // Keep building while we have targets to build and haven't been canceled.
             bool stopProcessingStack = false;
@@ -466,7 +474,7 @@ namespace Microsoft.Build.BackEnd
                             _requestEntry.RequestConfiguration.ActivelyBuildingTargets[currentTargetEntry.Name] = _requestEntry.Request.GlobalRequestId;
 
                             // Execute all of the tasks on this target.
-                            await currentTargetEntry.ExecuteTarget(taskBuilder, _requestEntry, _projectLoggingContext, _cancellationToken);
+                            await currentTargetEntry.ExecuteTarget(taskBuilder, _requestEntry, _projectLoggingContext, _cancellationToken, staticTargets);
                         }
 
                         break;

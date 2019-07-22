@@ -1,0 +1,1 @@
+this folder is self-contained MsBuild project files used for testing things

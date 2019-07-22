@@ -1,0 +1,8 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Phrase>Hello World!</Phrase>
+  </PropertyGroup>
+  <Target Name="Build">
+    <Exec Command="cmd /c echo $(Phrase)"/>  
+  </Target>
+</Project>

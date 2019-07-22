@@ -405,7 +405,7 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Runs all of the tasks for this target, batched as necessary.
         /// </summary>
-        internal async Task ExecuteTarget(ITaskBuilder taskBuilder, BuildRequestEntry requestEntry, ProjectLoggingContext projectLoggingContext, CancellationToken cancellationToken)
+        internal async Task ExecuteTarget(ITaskBuilder taskBuilder, BuildRequestEntry requestEntry, ProjectLoggingContext projectLoggingContext, CancellationToken cancellationToken, List<StaticTarget> staticTargets)
         {
 #if MSBUILDENABLEVSPROFILING 
             try
@@ -500,7 +500,7 @@ namespace Microsoft.Build.BackEnd
                                 }
 
                                 // We either have some work to do or at least we need to infer outputs from inputs.
-                                bucketResult = await ProcessBucket(taskBuilder, targetLoggingContext, GetTaskExecutionMode(dependencyResult), lookupForInference, lookupForExecution);
+                                bucketResult = await ProcessBucket(taskBuilder, targetLoggingContext, GetTaskExecutionMode(dependencyResult), lookupForInference, lookupForExecution, staticTargets);
 
                                 // Now aggregate the result with the existing known results.  There are four rules, assuming the target was not 
                                 // skipped due to being up-to-date:
@@ -807,7 +807,7 @@ namespace Microsoft.Build.BackEnd
         /// <returns>
         /// The result of the tasks, based on the last task which ran.
         /// </returns>
-        private async Task<WorkUnitResult> ProcessBucket(ITaskBuilder taskBuilder, TargetLoggingContext targetLoggingContext, TaskExecutionMode mode, Lookup lookupForInference, Lookup lookupForExecution)
+        private async Task<WorkUnitResult> ProcessBucket(ITaskBuilder taskBuilder, TargetLoggingContext targetLoggingContext, TaskExecutionMode mode, Lookup lookupForInference, Lookup lookupForExecution, List<StaticTarget> staticTargets)
         {
             WorkUnitResultCode aggregatedTaskResult = WorkUnitResultCode.Success;
             WorkUnitActionCode finalActionCode = WorkUnitActionCode.Continue;
@@ -819,6 +819,7 @@ namespace Microsoft.Build.BackEnd
                 _currentTaskBuilder = taskBuilder;
 
                 int currentTask = 0;
+                var staticTarget = new StaticTarget();
 
                 // Walk through all of the tasks and execute them in order.
                 for (; (currentTask < _target.Children.Count) && !_cancellationToken.IsCancellationRequested; ++currentTask)
@@ -826,7 +827,7 @@ namespace Microsoft.Build.BackEnd
                     ProjectTargetInstanceChild targetChildInstance = _target.Children[currentTask];
 
                     // Execute the task.
-                    lastResult = await taskBuilder.ExecuteTask(targetLoggingContext, _requestEntry, _targetBuilderCallback, targetChildInstance, mode, lookupForInference, lookupForExecution, _cancellationToken);
+                    lastResult = await taskBuilder.ExecuteTask(targetLoggingContext, _requestEntry, _targetBuilderCallback, targetChildInstance, mode, lookupForInference, lookupForExecution, _cancellationToken, staticTarget.Tasks);
 
                     if (lastResult.ResultCode == WorkUnitResultCode.Failed)
                     {
@@ -843,6 +844,8 @@ namespace Microsoft.Build.BackEnd
                         break;
                     }
                 }
+
+                staticTargets.Add(staticTarget);
 
                 if (_cancellationToken.IsCancellationRequested)
                 {
