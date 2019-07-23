@@ -476,7 +476,8 @@ namespace Microsoft.Build.BackEnd
                         }
                     }
 
-                    tasks.Add(task);
+                    if (task.Name != null)
+                        tasks.Add(task);
                 }
                 else
                 {
@@ -744,13 +745,27 @@ namespace Microsoft.Build.BackEnd
                 return new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
             }
 
-            task.Parameters = taskExecutionHost.CalculatedParameters;
-            task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;
-            task.AssemblyFile = taskExecutionHost.LoadedTask.Assembly.AssemblyFile;
-            task.AssemblyName = taskExecutionHost.LoadedTask.Assembly.AssemblyName;
+            // If this is the MSBuild task, we need to execute it's special internal method.
+            TaskExecutionHost host = taskExecutionHost as TaskExecutionHost;
 
             if (_buildRequestEntry.IsStatic)
+            {
+
+                if (host.TaskInstance is ITaskStatic)
+                {
+                    taskExecutionHost.Execute();
+                    GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket);
+                }
+                else
+                {
+                    task.Parameters = taskExecutionHost.CalculatedParameters;
+                    task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;
+                    task.AssemblyFile = taskExecutionHost.LoadedTask.Assembly.AssemblyFile;
+                    task.AssemblyName = taskExecutionHost.LoadedTask.Assembly.AssemblyName;
+                }
+
                 return new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
+            }
 
             bool taskResult = false;
 
@@ -760,8 +775,6 @@ namespace Microsoft.Build.BackEnd
             bool taskReturned = false;
             Exception taskException = null;
 
-            // If this is the MSBuild task, we need to execute it's special internal method.
-            TaskExecutionHost host = taskExecutionHost as TaskExecutionHost;
             Type taskType = host.TaskInstance.GetType();
 
             try

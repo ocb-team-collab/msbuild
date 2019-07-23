@@ -45,7 +45,7 @@ namespace Microsoft.Build.Tasks
         public string VcxToDefaultPlatformMapping { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class AssignTargetPath : Microsoft.Build.Tasks.TaskExtension
+    public partial class AssignTargetPath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public AssignTargetPath() { }
         [Microsoft.Build.Framework.OutputAttribute]

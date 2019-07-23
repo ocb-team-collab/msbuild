@@ -282,6 +282,10 @@ namespace Microsoft.Build.Framework
     public partial interface ITaskHost
     {
     }
+    public partial interface ITaskHybrid : Microsoft.Build.Framework.ITask
+    {
+        bool ExecuteStatic();
+    }
     [System.Runtime.InteropServices.ComVisibleAttribute(true)]
     [System.Runtime.InteropServices.GuidAttribute("8661674F-2148-4F71-A92A-49875511C528")]
     public partial interface ITaskItem
@@ -303,6 +307,12 @@ namespace Microsoft.Build.Framework
         System.Collections.IDictionary CloneCustomMetadataEscaped();
         string GetMetadataValueEscaped(string metadataName);
         void SetMetadataValueLiteral(string metadataName, string metadataValue);
+    }
+    public partial interface ITaskStatic
+    {
+        Microsoft.Build.Framework.IBuildEngine BuildEngine { get; set; }
+        Microsoft.Build.Framework.ITaskHost HostObject { get; set; }
+        bool Execute();
     }
     public partial class LazyFormattedBuildEventArgs : Microsoft.Build.Framework.BuildEventArgs
     {
