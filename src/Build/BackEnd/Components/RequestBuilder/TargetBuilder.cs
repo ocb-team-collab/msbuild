@@ -185,9 +185,12 @@ namespace Microsoft.Build.BackEnd
                 throw new BuildAbortedException();
             }
 
-            using (var stream = new FileStream(_projectInstance.FullPath + ".graph.json", FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
+            if (entry.IsStatic)
             {
-                new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(StaticGraph)).WriteObject(stream, staticGraph);
+                using (var stream = new FileStream(_projectInstance.FullPath + ".graph.json", FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
+                {
+                    new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(StaticGraph)).WriteObject(stream, staticGraph);
+                }
             }
 
             // Gather up outputs for the requested targets and return those.  All of our information should be in the base lookup now.
