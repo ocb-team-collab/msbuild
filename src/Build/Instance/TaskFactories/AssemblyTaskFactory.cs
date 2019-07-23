@@ -145,7 +145,12 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         public TaskPropertyInfo[] GetTaskParameters()
         {
-            PropertyInfo[] infos = _loadedType.Type.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+            return GetTaskParameters(_loadedType);
+        }
+
+        public static TaskPropertyInfo[] GetTaskParameters(LoadedType loadedType)
+        {
+            PropertyInfo[] infos = loadedType.Type.GetProperties(BindingFlags.Instance | BindingFlags.Public);
             var propertyInfos = new TaskPropertyInfo[infos.Length];
             for (int i = 0; i < infos.Length; i++)
             {

@@ -749,7 +749,9 @@ namespace Microsoft.Build.BackEnd
             else
             {
                 task.Parameters = taskExecutionHost.CalculatedParameters;
-                task.Name = taskExecutionHost.TaskType;
+                task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;
+                task.AssemblyFile = taskExecutionHost.LoadedTask.Assembly.AssemblyFile;
+                task.AssemblyName = taskExecutionHost.LoadedTask.Assembly.AssemblyName;
 
                 bool taskReturned = false;
                 Exception taskException = null;

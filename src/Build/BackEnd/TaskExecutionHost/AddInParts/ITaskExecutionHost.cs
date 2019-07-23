@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
+using Microsoft.Build.Shared;
 using ElementLocation = Microsoft.Build.Construction.ElementLocation;
 using TargetLoggingContext = Microsoft.Build.BackEnd.Logging.TargetLoggingContext;
 using TaskLoggingContext = Microsoft.Build.BackEnd.Logging.TaskLoggingContext;
@@ -59,7 +60,7 @@ namespace Microsoft.Build.BackEnd
 
         Dictionary<string, object> CalculatedParameters { get; }
 
-        string TaskType { get; }
+        LoadedType LoadedTask { get; }
 
         /// <summary>
         /// Initialize the host with the objects required to communicate with the host process.

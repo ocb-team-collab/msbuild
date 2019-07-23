@@ -123,9 +123,9 @@ namespace Microsoft.Build.BackEnd
 
         public Dictionary<string, object> CalculatedParameters { get { return _calculatedParameters; } }
 
-        private string _taskType = null;
+        private LoadedType _loadedTask = null;
 
-        public string TaskType { get { return _taskType; }}
+        public LoadedType LoadedTask { get { return _loadedTask; }}
 
         /// <summary>
         /// We need access to the build component host so that we can get at the 
@@ -958,7 +958,7 @@ namespace Microsoft.Build.BackEnd
 #endif
                         IsOutOfProc);
 
-                    _taskType = assemblyTaskFactory.TaskType.FullName;
+                    _loadedTask = _taskFactoryWrapper.TaskFactoryLoadedType;
                 }
                 else
                 {
@@ -1330,7 +1330,7 @@ namespace Microsoft.Build.BackEnd
             {
                 _calculatedParameters.Add(parameter.Name, parameterValue);
 
-                _taskFactoryWrapper.SetPropertyValue(TaskInstance, parameter, parameterValue);
+                TaskFactoryWrapper.SetPropertyValue(TaskInstance, parameter, parameterValue);
                 success = true;
             }
             catch (LoggerException)

@@ -34,6 +34,12 @@ namespace Microsoft.Build.BackEnd
             public string Name;
 
             [DataMember]
+            public string AssemblyFile;
+
+            [DataMember]
+            public string AssemblyName;
+
+            [DataMember]
             public Dictionary<string, object> Parameters = new Dictionary<string, object>();
         }
 

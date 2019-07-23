@@ -16,6 +16,10 @@ namespace Microsoft.Build.BackEnd
         public partial class Task
         {
             [System.Runtime.Serialization.DataMemberAttribute]
+            public string AssemblyFile;
+            [System.Runtime.Serialization.DataMemberAttribute]
+            public string AssemblyName;
+            [System.Runtime.Serialization.DataMemberAttribute]
             public string Name;
             [System.Runtime.Serialization.DataMemberAttribute]
             public System.Collections.Generic.Dictionary<string, object> Parameters;
