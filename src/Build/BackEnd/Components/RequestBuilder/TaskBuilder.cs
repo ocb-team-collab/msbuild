@@ -434,7 +434,7 @@ namespace Microsoft.Build.BackEnd
                                 )
                             {
 #if FEATURE_APARTMENT_STATE
-                                taskResult = ExecuteTaskInSTAThread(bucket, taskLoggingContext, taskIdentityParameters, taskHost, howToExecuteTask);
+                                taskResult = ExecuteTaskInSTAThread(bucket, taskLoggingContext, taskIdentityParameters, taskHost, howToExecuteTask, task);
 #else
                                 throw new PlatformNotSupportedException(TaskRequirements.RequireSTAThread.ToString());
 #endif
@@ -545,7 +545,7 @@ namespace Microsoft.Build.BackEnd
         /// Any bug fixes made to this code, please ensure that you also fix that code.  
         /// </comment>
         [SuppressMessage("Microsoft.Design", "CA1031:DoNotCatchGeneralExceptionTypes", Justification = "Exception is caught and rethrown in the correct thread.")]
-        private WorkUnitResult ExecuteTaskInSTAThread(ItemBucket bucket, TaskLoggingContext taskLoggingContext, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask)
+        private WorkUnitResult ExecuteTaskInSTAThread(ItemBucket bucket, TaskLoggingContext taskLoggingContext, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
         {
             WorkUnitResult taskResult = new WorkUnitResult(WorkUnitResultCode.Failed, WorkUnitActionCode.Stop, null);
             Thread staThread = null;
@@ -558,7 +558,7 @@ namespace Microsoft.Build.BackEnd
                     Lookup.Scope scope = bucket.Lookup.EnterScope("STA Thread for Task");
                     try
                     {
-                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, null).Result;
+                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, task).Result;
                     }
                     catch (Exception e) when (!ExceptionHandling.IsCriticalException(e))
                     {
