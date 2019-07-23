@@ -1,0 +1,11 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"> 
+	<ItemGroup>
+		<None Include='A1'/>
+	</ItemGroup>
+	<Target Name="Main">
+		<AssignTargetPath Files="@(None)" RootFolder="$(MSBuildProjectDirectory)">
+			<Output TaskParameter="AssignedFiles" ItemName="_NoneWithTargetPath" />
+		</AssignTargetPath>
+		<Message Text="None={@(_NoneWithTargetPath)}" />
+	</Target>
+</Project>

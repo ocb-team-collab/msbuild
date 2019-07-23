@@ -434,7 +434,7 @@ namespace Microsoft.Build.BackEnd
                                 )
                             {
 #if FEATURE_APARTMENT_STATE
-                                taskResult = ExecuteTaskInSTAThread(bucket, taskLoggingContext, taskIdentityParameters, taskHost, howToExecuteTask);
+                                taskResult = ExecuteTaskInSTAThread(bucket, taskLoggingContext, taskIdentityParameters, taskHost, howToExecuteTask, task);
 #else
                                 throw new PlatformNotSupportedException(TaskRequirements.RequireSTAThread.ToString());
 #endif
@@ -476,7 +476,8 @@ namespace Microsoft.Build.BackEnd
                         }
                     }
 
-                    tasks.Add(task);
+                    if (task.Name != null)
+                        tasks.Add(task);
                 }
                 else
                 {
@@ -545,7 +546,7 @@ namespace Microsoft.Build.BackEnd
         /// Any bug fixes made to this code, please ensure that you also fix that code.  
         /// </comment>
         [SuppressMessage("Microsoft.Design", "CA1031:DoNotCatchGeneralExceptionTypes", Justification = "Exception is caught and rethrown in the correct thread.")]
-        private WorkUnitResult ExecuteTaskInSTAThread(ItemBucket bucket, TaskLoggingContext taskLoggingContext, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask)
+        private WorkUnitResult ExecuteTaskInSTAThread(ItemBucket bucket, TaskLoggingContext taskLoggingContext, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
         {
             WorkUnitResult taskResult = new WorkUnitResult(WorkUnitResultCode.Failed, WorkUnitActionCode.Stop, null);
             Thread staThread = null;
@@ -558,7 +559,7 @@ namespace Microsoft.Build.BackEnd
                     Lookup.Scope scope = bucket.Lookup.EnterScope("STA Thread for Task");
                     try
                     {
-                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, null).Result;
+                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, task).Result;
                     }
                     catch (Exception e) when (!ExceptionHandling.IsCriticalException(e))
                     {
@@ -736,215 +737,230 @@ namespace Microsoft.Build.BackEnd
         {
             UpdateContinueOnError(bucket, taskHost);
 
+            if (!taskExecutionHost.SetTaskParameters(_taskNode.ParametersForBuild))
+            {
+                // The task cannot be initialized.
+                ProjectErrorUtilities.VerifyThrowInvalidProject(false, _targetChildInstance.Location, "TaskParametersError", _taskNode.Name, String.Empty);
+
+                return new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
+            }
+
+            // If this is the MSBuild task, we need to execute it's special internal method.
+            TaskExecutionHost host = taskExecutionHost as TaskExecutionHost;
+
+            if (_buildRequestEntry.IsStatic)
+            {
+
+                if (host.TaskInstance is ITaskStatic)
+                {
+                    taskExecutionHost.Execute();
+                    GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket);
+                }
+                else
+                {
+                    task.Parameters = taskExecutionHost.CalculatedParameters;
+                    task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;
+                    task.AssemblyFile = taskExecutionHost.LoadedTask.Assembly.AssemblyFile;
+                    task.AssemblyName = taskExecutionHost.LoadedTask.Assembly.AssemblyName;
+                }
+
+                return new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
+            }
+
             bool taskResult = false;
 
             WorkUnitResultCode resultCode = WorkUnitResultCode.Success;
             WorkUnitActionCode actionCode = WorkUnitActionCode.Continue;
 
-            if (!taskExecutionHost.SetTaskParameters(_taskNode.ParametersForBuild))
+            bool taskReturned = false;
+            Exception taskException = null;
+
+            Type taskType = host.TaskInstance.GetType();
+
+            try
             {
-                // The task cannot be initialized.
-                ProjectErrorUtilities.VerifyThrowInvalidProject(false, _targetChildInstance.Location, "TaskParametersError", _taskNode.Name, String.Empty);
-            }
-            else
-            {
-                task.Parameters = taskExecutionHost.CalculatedParameters;
-                task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;
-                task.AssemblyFile = taskExecutionHost.LoadedTask.Assembly.AssemblyFile;
-                task.AssemblyName = taskExecutionHost.LoadedTask.Assembly.AssemblyName;
-
-                bool taskReturned = false;
-                Exception taskException = null;
-
-                // If this is the MSBuild task, we need to execute it's special internal method.
-                TaskExecutionHost host = taskExecutionHost as TaskExecutionHost;
-                Type taskType = host.TaskInstance.GetType();
-
-                try
+                if (taskType == typeof(MSBuild))
                 {
-                    if (taskType == typeof(MSBuild))
+                    MSBuild msbuildTask = host.TaskInstance as MSBuild;
+                    ErrorUtilities.VerifyThrow(msbuildTask != null, "Unexpected MSBuild internal task.");
+
+                    var undeclaredProjects = GetUndeclaredProjects(msbuildTask);
+
+                    if (undeclaredProjects != null && undeclaredProjects.Count != 0)
                     {
-                        MSBuild msbuildTask = host.TaskInstance as MSBuild;
-                        ErrorUtilities.VerifyThrow(msbuildTask != null, "Unexpected MSBuild internal task.");
+                        _continueOnError = ContinueOnError.ErrorAndStop;
 
-                        var undeclaredProjects = GetUndeclaredProjects(msbuildTask);
-
-                        if (undeclaredProjects != null && undeclaredProjects.Count != 0)
-                        {
-                            _continueOnError = ContinueOnError.ErrorAndStop;
-
-                            taskException = new InvalidProjectFileException(
-                                taskHost.ProjectFileOfTaskNode,
-                                taskHost.LineNumberOfTaskNode,
-                                taskHost.ColumnNumberOfTaskNode,
-                                0,
-                                0,
-                                ResourceUtilities.FormatResourceStringIgnoreCodeAndKeyword(
-                                    "UndeclaredMSBuildTasksNotAllowedInIsolatedGraphBuilds",
-                                    string.Join(";", undeclaredProjects.Select(p => $"\"{p}\"")),
-                                    taskExecutionHost.ProjectInstance.FullPath),
-                                null,
-                                null,
-                                null);
-                        }
-                        else
-                        {
-                            _targetBuilderCallback.EnterMSBuildCallbackState();
-
-                            try
-                            {
-                                taskResult = await msbuildTask.ExecuteInternal();
-                            }
-                            finally
-                            {
-                                _targetBuilderCallback.ExitMSBuildCallbackState();
-                            }
-                        }
-                    }
-                    else if (taskType == typeof(CallTarget))
-                    {
-                        CallTarget callTargetTask = host.TaskInstance as CallTarget;
-                        taskResult = await callTargetTask.ExecuteInternal();
+                        taskException = new InvalidProjectFileException(
+                            taskHost.ProjectFileOfTaskNode,
+                            taskHost.LineNumberOfTaskNode,
+                            taskHost.ColumnNumberOfTaskNode,
+                            0,
+                            0,
+                            ResourceUtilities.FormatResourceStringIgnoreCodeAndKeyword(
+                                "UndeclaredMSBuildTasksNotAllowedInIsolatedGraphBuilds",
+                                string.Join(";", undeclaredProjects.Select(p => $"\"{p}\"")),
+                                taskExecutionHost.ProjectInstance.FullPath),
+                            null,
+                            null,
+                            null);
                     }
                     else
                     {
-#if FEATURE_FILE_TRACKER
-                        using (FullTracking.Track(taskLoggingContext.TargetLoggingContext.Target.Name, _taskNode.Name, _buildRequestEntry.ProjectRootDirectory, _buildRequestEntry.RequestConfiguration.Project.PropertiesToBuildWith))
-#endif
+                        _targetBuilderCallback.EnterMSBuildCallbackState();
+
+                        try
                         {
-                            taskResult = taskExecutionHost.Execute();
+                            taskResult = await msbuildTask.ExecuteInternal();
+                        }
+                        finally
+                        {
+                            _targetBuilderCallback.ExitMSBuildCallbackState();
                         }
                     }
                 }
-                catch (Exception ex)
+                else if (taskType == typeof(CallTarget))
                 {
-                    if (ExceptionHandling.IsCriticalException(ex) || (Environment.GetEnvironmentVariable("MSBUILDDONOTCATCHTASKEXCEPTIONS") == "1"))
-                    {
-                        throw;
-                    }
-
-                    taskException = ex;
-                }
-
-                if (taskException == null)
-                {
-                    taskReturned = true;
-
-                    // Set the property "MSBuildLastTaskResult" to reflect whether the task succeeded or not.
-                    // The main use of this is if ContinueOnError is true -- so that the next task can consult the result.
-                    // So we want it to be "false" even if ContinueOnError is true. 
-                    // The constants "true" and "false" should NOT be localized. They become property values.
-                    bucket.Lookup.SetProperty(ProjectPropertyInstance.Create(ReservedPropertyNames.lastTaskResult, taskResult ? "true" : "false", true/* may be reserved */, _buildRequestEntry.RequestConfiguration.Project.IsImmutable));
+                    CallTarget callTargetTask = host.TaskInstance as CallTarget;
+                    taskResult = await callTargetTask.ExecuteInternal();
                 }
                 else
                 {
-                    var type = taskException.GetType();
-
-                    if (type == typeof(LoggerException))
-                    {
-                        // if a logger has failed, abort immediately
-                        // Polite logger failure
-                        _continueOnError = ContinueOnError.ErrorAndStop;
-
-                        // Rethrow wrapped in order to avoid losing the callstack
-                        throw new LoggerException(taskException.Message, taskException);
-                    }
-                    else if (type == typeof(InternalLoggerException))
-                    {
-                        // Logger threw arbitrary exception
-                        _continueOnError = ContinueOnError.ErrorAndStop;
-                        InternalLoggerException ex = taskException as InternalLoggerException;
-
-                        // Rethrow wrapped in order to avoid losing the callstack
-                        throw new InternalLoggerException(taskException.Message, taskException, ex.BuildEventArgs, ex.ErrorCode, ex.HelpKeyword, ex.InitializationException);
-                    }
-#if FEATURE_VARIOUS_EXCEPTIONS
-                    else if (type == typeof(ThreadAbortException))
-                    {
-                        Thread.ResetAbort();
-                        _continueOnError = ContinueOnError.ErrorAndStop;
-
-                        // Cannot rethrow wrapped as ThreadAbortException is sealed and has no appropriate constructor
-                        // Stack will be lost
-                        throw taskException;
-                    }
+#if FEATURE_FILE_TRACKER
+                    using (FullTracking.Track(taskLoggingContext.TargetLoggingContext.Target.Name, _taskNode.Name, _buildRequestEntry.ProjectRootDirectory, _buildRequestEntry.RequestConfiguration.Project.PropertiesToBuildWith))
 #endif
-                    else if (type == typeof(BuildAbortedException))
                     {
-                        _continueOnError = ContinueOnError.ErrorAndStop;
-
-                        // Rethrow wrapped in order to avoid losing the callstack
-                        throw new BuildAbortedException(taskException.Message, ((BuildAbortedException)taskException));
+                        taskResult = taskExecutionHost.Execute();
                     }
-                    else if (type == typeof(CircularDependencyException))
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ExceptionHandling.IsCriticalException(ex) || (Environment.GetEnvironmentVariable("MSBUILDDONOTCATCHTASKEXCEPTIONS") == "1"))
+                {
+                    throw;
+                }
+
+                taskException = ex;
+            }
+
+            if (taskException == null)
+            {
+                taskReturned = true;
+
+                // Set the property "MSBuildLastTaskResult" to reflect whether the task succeeded or not.
+                // The main use of this is if ContinueOnError is true -- so that the next task can consult the result.
+                // So we want it to be "false" even if ContinueOnError is true. 
+                // The constants "true" and "false" should NOT be localized. They become property values.
+                bucket.Lookup.SetProperty(ProjectPropertyInstance.Create(ReservedPropertyNames.lastTaskResult, taskResult ? "true" : "false", true/* may be reserved */, _buildRequestEntry.RequestConfiguration.Project.IsImmutable));
+            }
+            else
+            {
+                var type = taskException.GetType();
+
+                if (type == typeof(LoggerException))
+                {
+                    // if a logger has failed, abort immediately
+                    // Polite logger failure
+                    _continueOnError = ContinueOnError.ErrorAndStop;
+
+                    // Rethrow wrapped in order to avoid losing the callstack
+                    throw new LoggerException(taskException.Message, taskException);
+                }
+                else if (type == typeof(InternalLoggerException))
+                {
+                    // Logger threw arbitrary exception
+                    _continueOnError = ContinueOnError.ErrorAndStop;
+                    InternalLoggerException ex = taskException as InternalLoggerException;
+
+                    // Rethrow wrapped in order to avoid losing the callstack
+                    throw new InternalLoggerException(taskException.Message, taskException, ex.BuildEventArgs, ex.ErrorCode, ex.HelpKeyword, ex.InitializationException);
+                }
+#if FEATURE_VARIOUS_EXCEPTIONS
+                else if (type == typeof(ThreadAbortException))
+                {
+                    Thread.ResetAbort();
+                    _continueOnError = ContinueOnError.ErrorAndStop;
+
+                    // Cannot rethrow wrapped as ThreadAbortException is sealed and has no appropriate constructor
+                    // Stack will be lost
+                    throw taskException;
+                }
+#endif
+                else if (type == typeof(BuildAbortedException))
+                {
+                    _continueOnError = ContinueOnError.ErrorAndStop;
+
+                    // Rethrow wrapped in order to avoid losing the callstack
+                    throw new BuildAbortedException(taskException.Message, ((BuildAbortedException)taskException));
+                }
+                else if (type == typeof(CircularDependencyException))
+                {
+                    _continueOnError = ContinueOnError.ErrorAndStop;
+                    ProjectErrorUtilities.ThrowInvalidProject(taskLoggingContext.Task.Location, "CircularDependency", taskLoggingContext.TargetLoggingContext.Target.Name);
+                }
+                else if (type == typeof(InvalidProjectFileException))
+                {
+                    // Just in case this came out of a task, make sure it's not
+                    // marked as having been logged.
+                    InvalidProjectFileException ipex = (InvalidProjectFileException)taskException;
+                    ipex.HasBeenLogged = false;
+
+                    if (_continueOnError != ContinueOnError.ErrorAndStop)
                     {
-                        _continueOnError = ContinueOnError.ErrorAndStop;
-                        ProjectErrorUtilities.ThrowInvalidProject(taskLoggingContext.Task.Location, "CircularDependency", taskLoggingContext.TargetLoggingContext.Target.Name);
-                    }
-                    else if (type == typeof(InvalidProjectFileException))
-                    {
-                        // Just in case this came out of a task, make sure it's not
-                        // marked as having been logged.
-                        InvalidProjectFileException ipex = (InvalidProjectFileException)taskException;
-                        ipex.HasBeenLogged = false;
-
-                        if (_continueOnError != ContinueOnError.ErrorAndStop)
-                        {
-                            taskLoggingContext.LogInvalidProjectFileError(ipex);
-                            taskLoggingContext.LogComment(MessageImportance.Normal, "ErrorConvertedIntoWarning");
-                        }
-                        else
-                        {
-                            // Rethrow wrapped in order to avoid losing the callstack
-                            throw new InvalidProjectFileException(ipex.Message, ipex);
-                        }
-                    }
-                    else if (type == typeof(Exception) || type.GetTypeInfo().IsSubclassOf(typeof(Exception)))
-                    {
-                        // Occasionally, when debugging a very uncommon task exception, it is useful to loop the build with 
-                        // a debugger attached to break on 2nd chance exceptions.
-                        // That requires that there needs to be a way to not catch here, by setting an environment variable.
-                        if (ExceptionHandling.IsCriticalException(taskException) || (Environment.GetEnvironmentVariable("MSBUILDDONOTCATCHTASKEXCEPTIONS") == "1"))
-                        {
-                            // Wrapping in an Exception will unfortunately mean that this exception would fly through any IsCriticalException above.
-                            // However, we should not have any, also we should not have stashed such an exception anyway.
-                            throw new Exception(taskException.Message, taskException);
-                        }
-
-                        Exception exceptionToLog = taskException;
-
-                        if (exceptionToLog is TargetInvocationException)
-                        {
-                            exceptionToLog = exceptionToLog.InnerException;
-                        }
-
-                        // handle any exception thrown by the task during execution
-                        // NOTE: We catch ALL exceptions here, to attempt to completely isolate the Engine
-                        // from failures in the task.
-                        if (_continueOnError == ContinueOnError.WarnAndContinue)
-                        {
-                            taskLoggingContext.LogTaskWarningFromException
-                            (
-                                exceptionToLog,
-                                new BuildEventFileInfo(_targetChildInstance.Location),
-                                _taskNode.Name);
-
-                            // Log a message explaining why we converted the previous error into a warning.
-                            taskLoggingContext.LogComment(MessageImportance.Normal, "ErrorConvertedIntoWarning");
-                        }
-                        else
-                        {
-                            taskLoggingContext.LogFatalTaskError
-                            (
-                                exceptionToLog,
-                                new BuildEventFileInfo(_targetChildInstance.Location),
-                                _taskNode.Name);
-                        }
+                        taskLoggingContext.LogInvalidProjectFileError(ipex);
+                        taskLoggingContext.LogComment(MessageImportance.Normal, "ErrorConvertedIntoWarning");
                     }
                     else
                     {
-                        ErrorUtilities.ThrowInternalErrorUnreachable();
+                        // Rethrow wrapped in order to avoid losing the callstack
+                        throw new InvalidProjectFileException(ipex.Message, ipex);
                     }
+                }
+                else if (type == typeof(Exception) || type.GetTypeInfo().IsSubclassOf(typeof(Exception)))
+                {
+                    // Occasionally, when debugging a very uncommon task exception, it is useful to loop the build with 
+                    // a debugger attached to break on 2nd chance exceptions.
+                    // That requires that there needs to be a way to not catch here, by setting an environment variable.
+                    if (ExceptionHandling.IsCriticalException(taskException) || (Environment.GetEnvironmentVariable("MSBUILDDONOTCATCHTASKEXCEPTIONS") == "1"))
+                    {
+                        // Wrapping in an Exception will unfortunately mean that this exception would fly through any IsCriticalException above.
+                        // However, we should not have any, also we should not have stashed such an exception anyway.
+                        throw new Exception(taskException.Message, taskException);
+                    }
+
+                    Exception exceptionToLog = taskException;
+
+                    if (exceptionToLog is TargetInvocationException)
+                    {
+                        exceptionToLog = exceptionToLog.InnerException;
+                    }
+
+                    // handle any exception thrown by the task during execution
+                    // NOTE: We catch ALL exceptions here, to attempt to completely isolate the Engine
+                    // from failures in the task.
+                    if (_continueOnError == ContinueOnError.WarnAndContinue)
+                    {
+                        taskLoggingContext.LogTaskWarningFromException
+                        (
+                            exceptionToLog,
+                            new BuildEventFileInfo(_targetChildInstance.Location),
+                            _taskNode.Name);
+
+                        // Log a message explaining why we converted the previous error into a warning.
+                        taskLoggingContext.LogComment(MessageImportance.Normal, "ErrorConvertedIntoWarning");
+                    }
+                    else
+                    {
+                        taskLoggingContext.LogFatalTaskError
+                        (
+                            exceptionToLog,
+                            new BuildEventFileInfo(_targetChildInstance.Location),
+                            _taskNode.Name);
+                    }
+                }
+                else
+                {
+                    ErrorUtilities.ThrowInternalErrorUnreachable();
                 }
 
                 // If the task returned attempt to gather its outputs.  If gathering outputs fails set the taskResults
@@ -959,6 +975,7 @@ namespace Microsoft.Build.BackEnd
                 // pri message that says this task is continuing because ContinueOnError=true
                 resultCode = taskResult ? WorkUnitResultCode.Success : WorkUnitResultCode.Failed;
                 actionCode = WorkUnitActionCode.Continue;
+
                 if (resultCode == WorkUnitResultCode.Failed)
                 {
                     if (_continueOnError == ContinueOnError.ErrorAndStop)
@@ -988,9 +1005,7 @@ namespace Microsoft.Build.BackEnd
                 }
             }
 
-            WorkUnitResult result = new WorkUnitResult(resultCode, actionCode, null);
-
-            return result;
+            return new WorkUnitResult(resultCode, actionCode, null);
         }
 
         private List<string> GetUndeclaredProjects(MSBuild msbuildTask)
