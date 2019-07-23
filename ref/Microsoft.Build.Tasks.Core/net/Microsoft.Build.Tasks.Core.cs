@@ -172,7 +172,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] Paths { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class Copy : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask
+    public partial class Copy : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskHybrid
     {
         public Copy() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -190,6 +190,7 @@ namespace Microsoft.Build.Tasks
         public bool UseSymboliclinksIfPossible { get { throw null; } set { } }
         public void Cancel() { }
         public override bool Execute() { throw null; }
+        public bool ExecuteStatic() { throw null; }
     }
     public partial class CreateCSharpManifestResourceName : Microsoft.Build.Tasks.CreateManifestResourceName
     {
