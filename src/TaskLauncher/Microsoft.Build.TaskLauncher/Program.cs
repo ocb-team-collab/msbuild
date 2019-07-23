@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using Microsoft.Build.BackEnd;
@@ -17,11 +18,173 @@ namespace Microsoft.Build.TaskLauncher
     {
         public static int Main(string[] args)
         {
+            if (args.Length == 0 || args[0] == "/?" || args[0] == "-?" || args[0] == "-help" || args[0] == "--help" || args[0] == "/help")
+            {
+                Usage();
+                return 0;
+            }
+            if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunTarget();
+            }
+            else if (args[0].Equals("print", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length != 3)
+                {
+                    Usage();
+                    return 1;
+                }
+
+                if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("pkgdomino")))
+                {
+                    Console.WriteLine("%PKGDOMINO% must be set to root of Domino folder");
+                    return 1;
+                }
+
+                StaticGraph graph = ReadStaticGraph(args[1]);
+                PrintPips(graph, args[2]);
+                WriteConfigDsc(args[2]);
+                WriteModuleConfigDsc(args[2]);
+                Console.WriteLine(@"%PKGDOMINO%\bxl.exe /c:" + args[2] + @"\config.dsc");
+                return 0;
+            }
+            else
+            {
+                Usage();
+                return 1;
+            }
+        }
+
+        private static void Usage()
+        {
+            Console.WriteLine("Usage:\n\trun < targetJson\t\t\t\tRuns a target given its json description.\n\tprint graphJsonFile outputFolder\t\tPrints DominoScript into the output folder for a given graph json.");
+        }
+
+        private static StaticGraph ReadStaticGraph(string file)
+        {
+            StaticGraph graph;
+            var ser = new DataContractJsonSerializer(typeof(StaticGraph));
+            using (var stream = new FileStream(file, FileMode.Open))
+            {
+                graph = (StaticGraph)ser.ReadObject(stream);
+            }
+
+            return graph;
+        }
+
+        private static int PrintPips(StaticGraph graph, string outputFolder)
+        {
+            StringBuilder specContents = new StringBuilder();
+            specContents.AppendLine("import {Cmd, Transformer} from \"Sdk.Transformers\";\n");
+            specContents.AppendLine(
+                string.Format("const tool: Transformer.ToolDefinition = {{ exe: f`{0}`, dependsOnWindowsDirectories: true, prepareTempDirectory: true, runtimeDirectoryDependencies: [ Transformer.sealSourceDirectory(d`{1}`) ] }};\n",
+                    System.Reflection.Assembly.GetExecutingAssembly().Location,
+                    Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)));
+
+            var ser = new DataContractJsonSerializer(typeof(StaticTarget));
+
+            int i = 0;
+            StringBuilder stdIn = new StringBuilder();
+            foreach (var target in graph.StaticTargets)
+            {
+                using (var stream = new MemoryStream())
+                {
+                    ser.WriteObject(stream, target);
+                    stream.Position = 0;
+                    using (StreamReader sr = new StreamReader(stream))
+                    {
+                        string line;
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            stdIn.AppendLine(line);
+                        }
+                    }
+                }
+
+                specContents.AppendLine(
+                    string.Format("const {0} = Transformer.execute(\n{{\n\ttool: tool,\n\targuments: [ Cmd.rawArgument(\"run\") ],\n\tconsoleInput: \"{1}\",\n\tdescription: \"{2}\",\n\tworkingDirectory: d`{3}`,\n\tconsoleOutput: p`{4}`,\n\tdependencies: [{5}]\n}});\n",
+                        "target" + i,
+                        NormalizeRawString(stdIn.ToString(), stdIn),
+                        "target" + i,
+                        Directory.GetCurrentDirectory(),
+                        Path.Combine(Directory.GetCurrentDirectory(), "target" + i + ".out"),
+                        $@"f`{Environment.GetEnvironmentVariable("ProgramData")}\Microsoft\VisualStudio\Setup\x86\Microsoft.VisualStudio.Setup.Configuration.Native.dll`"));
+                i++;
+
+            }
+
+            string specFile = Path.Combine(outputFolder, "spec.dsc");
+            File.Delete(specFile);
+
+            File.WriteAllText(specFile, specContents.ToString());
+
+            return 0;
+        }
+
+        private static void WriteConfigDsc(string outputFolder)
+        {
+            string configDsc = string.Format("config({{\n\tmodules: [f`module.config.dsc` ],\n\tresolvers: [{{\n\t\tkind: \"SourceResolver\",\n\t\tpackages: [ f`{0}` ]\n}}],\n\tmounts: [ {{ name: a`src`, path: p`{1}`, trackSourceFileChanges: true, isWritable: false, isReadable: true }}, {{ name: a`ProgramData`, path: p`{2}`, trackSourceFileChanges: true, isWritable: false, isReadable: true }} ]\n}});",
+                $"{Environment.GetEnvironmentVariable("pkgdomino")}/sdk/sdk.transformers/package.config.dsc",
+                Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location),
+                Environment.GetEnvironmentVariable("ProgramData"));
+            string configFile = Path.Combine(outputFolder, "config.dsc");
+            File.Delete(configFile);
+            File.WriteAllText(configFile, configDsc);
+
+        }
+
+        private static void WriteModuleConfigDsc(string outputFolder)
+        {
+            string modulePath = Path.Combine(outputFolder, "module.config.dsc");
+            File.Delete(modulePath);
+            File.WriteAllText(modulePath, "module({ name: 'test', nameResolutionSemantics: NameResolutionSemantics.implicitProjectReferences, projects: [ f`spec.dsc` ]});");
+        }
+
+        private static string NormalizeRawString(string raw, StringBuilder builder)
+        {
+            builder.Clear();
+
+            foreach (char t in raw)
+            {
+                switch (t)
+                {
+                    case '"':
+                        builder.Append("\\\"");
+                        break;
+                    case '\\':
+                        builder.Append("\\\\");
+                        break;
+                    case '\b':
+                        builder.Append("\\b");
+                        break;
+                    case '\f':
+                        builder.Append("\\f");
+                        break;
+                    case '\n':
+                        builder.Append("\\n");
+                        break;
+                    case '\r':
+                        builder.Append("\\r");
+                        break;
+                    case '\t':
+                        builder.Append("\\t");
+                        break;
+                    default:
+                        builder.Append(t);
+                        break;
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private static int RunTarget()
+        {
             StaticTarget target;
             var ser = new DataContractJsonSerializer(typeof(StaticTarget));
             using (var memoryStream = new MemoryStream())
             {
-                using (var writer = new StreamWriter(memoryStream, Encoding.Default, 1024*4, true))
+                using (var writer = new StreamWriter(memoryStream, Encoding.Default, 1024 * 4, true))
                 {
                     string s;
                     while ((s = Console.ReadLine()) != null)
@@ -41,7 +204,7 @@ namespace Microsoft.Build.TaskLauncher
 
                 ITask task = TaskLoader.CreateTask(loadedType, staticTask.Name, staticTask.AssemblyName, 0, 0, null
 
-                #if FEATURE_APPDOMAIN
+#if FEATURE_APPDOMAIN
             , null
 #endif
             , false
@@ -79,11 +242,11 @@ namespace Microsoft.Build.TaskLauncher
 
         public bool ContinueOnError => throw new NotImplementedException();
 
-        public int LineNumberOfTaskNode => throw new NotImplementedException();
+        public int LineNumberOfTaskNode => 0;
 
-        public int ColumnNumberOfTaskNode => throw new NotImplementedException();
+        public int ColumnNumberOfTaskNode => 0;
 
-        public string ProjectFileOfTaskNode => throw new NotImplementedException();
+        public string ProjectFileOfTaskNode => "a project";
 
         public bool BuildProjectFile(string projectFileName, string[] targetNames, IDictionary globalProperties, IDictionary targetOutputs, string toolsVersion)
         {
