@@ -1,0 +1,18 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"> 
+	<ItemGroup>
+		<ListA Include='A1'>
+			<Metadata>Metadata1</Metadata>
+		</ListA>
+		<ListA Include='A2'>
+			<Metadata>Metadata2</Metadata>
+		</ListA>
+		<ListB Include='B1'>
+			<Metadata>Metadata3</Metadata>
+		</ListB>
+		<ListB Include='B2'/>
+	</ItemGroup>
+	
+	<Target Name="Main">
+		<Message Text="A={@(ListA).%(ListA.Metadata)} B={@(ListB).%(ListB.Metadata)}" />
+	</Target>
+</Project>
