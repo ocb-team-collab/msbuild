@@ -762,6 +762,13 @@ namespace Microsoft.Build.BackEnd
                     task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;
                     task.AssemblyFile = taskExecutionHost.LoadedTask.Assembly.AssemblyFile;
                     task.AssemblyName = taskExecutionHost.LoadedTask.Assembly.AssemblyName;
+
+                    if (host.TaskInstance is ITaskHybrid)
+                    {
+                        ITaskHybrid hybridTask = host.TaskInstance as ITaskHybrid;
+                        hybridTask.ExecuteStatic();
+                        GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket);
+                    }
                 }
 
                 return new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
