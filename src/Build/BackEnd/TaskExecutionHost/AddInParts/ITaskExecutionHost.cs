@@ -58,7 +58,7 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         bool LogTaskInputs { get; }
 
-        Dictionary<string, object> CalculatedParameters { get; }
+        Dictionary<string, StaticTarget.Task.Parameter> CalculatedParameters { get; }
 
         LoadedType LoadedTask { get; }
 

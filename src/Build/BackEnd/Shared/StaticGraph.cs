@@ -26,10 +26,113 @@ using TaskLoggingContext = Microsoft.Build.BackEnd.Logging.TaskLoggingContext;
 
 namespace Microsoft.Build.BackEnd
 {
+    [DataContract]
     public class StaticTarget
     {
+        [DataContract]
         public class Task
         {
+            [DataContract]
+            public class TaskItem
+            {
+                [DataMember]
+                public string ItemSpec;
+
+                [DataMember]
+                public Dictionary<string, string> Metadata;
+
+                public TaskItem(ITaskItem taskItem)
+                {
+                    ItemSpec = taskItem.ItemSpec;
+                    Metadata = taskItem.MetadataNames.OfType<string>()
+                        .Where(t => !FileUtilities.ItemSpecModifiers.IsItemSpecModifier(t))
+                        .ToDictionary(t => t, t => taskItem.GetMetadata(t));
+                }
+            }
+
+            public enum ParameterType
+            {
+                Primitive,
+                Primitives,
+                TaskItem,
+                TaskItems
+            }
+
+            [DataContract]
+            public class Primitive
+            {
+                [DataMember]
+                public string Value;
+
+                [DataMember]
+                public string Type;
+
+                public Primitive(string value, Type type)
+                {
+                    Value = value;
+                    Type = type.FullName;
+                }
+            }
+
+            [DataContract]
+            public class PrimitiveList
+            {
+                [DataMember]
+                public List<string> Values;
+
+                [DataMember]
+                public string Type;
+
+                public PrimitiveList(List<string> values, Type type)
+                {
+                    Values = values;
+                    Type = type.FullName;
+                }
+            }
+
+            [DataContract]
+            public class Parameter
+            {
+                [DataMember]
+                public ParameterType ParameterType;
+
+                [DataMember]
+                public Primitive Primitive;
+
+                [DataMember]
+                public TaskItem TaskItem;
+
+                [DataMember]
+                public PrimitiveList Primitives;
+
+                [DataMember]
+                public List<TaskItem> TaskItems;
+
+                public Parameter(Primitive primitive)
+                {
+                    ParameterType = ParameterType.Primitive;
+                    Primitive = primitive;
+                }
+
+                public Parameter(TaskItem value)
+                {
+                    ParameterType = ParameterType.TaskItem;
+                    TaskItem = value;
+                }
+
+                public Parameter(List<TaskItem> value)
+                {
+                    ParameterType = ParameterType.TaskItems;
+                    TaskItems = value;
+                }
+
+                public Parameter(PrimitiveList value)
+                {
+                    ParameterType = ParameterType.Primitives;
+                    Primitives = value;
+                }
+            }
+
             [DataMember]
             public string Name;
 
@@ -40,7 +143,7 @@ namespace Microsoft.Build.BackEnd
             public string AssemblyName;
 
             [DataMember]
-            public Dictionary<string, object> Parameters = new Dictionary<string, object>();
+            public Dictionary<string, Parameter> Parameters = new Dictionary<string, Parameter>();
         }
 
         [DataMember]
@@ -48,6 +151,7 @@ namespace Microsoft.Build.BackEnd
     }
 
 
+    [DataContract]
     public class StaticGraph
     {
         [DataMember]

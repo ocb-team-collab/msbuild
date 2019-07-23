@@ -1,0 +1,10 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <InputFiles Include="input.txt" />
+  </ItemGroup>
+  <Target Name="Build"
+  	Inputs="@(InputFiles->$(MSBuildProjectDirectory)\src\%(InputFiles.filename)%(extension))"
+  	Outputs="@(InputFiles->$(MSBuildProjectDirectory)\out\%(InputFiles.filename)%(extension))">
+    <Copy SourceFiles="@(InputFiles->$(MSBuildProjectDirectory)\src\%(InputFiles.filename)%(extension))" DestinationFolder="out" />
+  </Target>
+</Project>

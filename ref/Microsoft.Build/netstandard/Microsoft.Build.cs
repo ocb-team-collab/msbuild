@@ -2,17 +2,20 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 namespace Microsoft.Build.BackEnd
 {
+    [System.Runtime.Serialization.DataContractAttribute]
     public partial class StaticGraph
     {
         [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget> StaticTargets;
         public StaticGraph() { }
     }
+    [System.Runtime.Serialization.DataContractAttribute]
     public partial class StaticTarget
     {
         [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task> Tasks;
         public StaticTarget() { }
+        [System.Runtime.Serialization.DataContractAttribute]
         public partial class Task
         {
             [System.Runtime.Serialization.DataMemberAttribute]
@@ -22,8 +25,60 @@ namespace Microsoft.Build.BackEnd
             [System.Runtime.Serialization.DataMemberAttribute]
             public string Name;
             [System.Runtime.Serialization.DataMemberAttribute]
-            public System.Collections.Generic.Dictionary<string, object> Parameters;
+            public System.Collections.Generic.Dictionary<string, Microsoft.Build.BackEnd.StaticTarget.Task.Parameter> Parameters;
             public Task() { }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class Parameter
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.ParameterType ParameterType;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.Primitive Primitive;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.PrimitiveList Primitives;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem TaskItem;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem> TaskItems;
+                public Parameter(Microsoft.Build.BackEnd.StaticTarget.Task.Primitive primitive) { }
+                public Parameter(Microsoft.Build.BackEnd.StaticTarget.Task.PrimitiveList value) { }
+                public Parameter(Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem value) { }
+                public Parameter(System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem> value) { }
+            }
+            public enum ParameterType
+            {
+                Primitive = 0,
+                Primitives = 1,
+                TaskItem = 2,
+                TaskItems = 3,
+            }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class Primitive
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string Type;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string Value;
+                public Primitive(string value, System.Type type) { }
+            }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class PrimitiveList
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string Type;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public System.Collections.Generic.List<string> Values;
+                public PrimitiveList(System.Collections.Generic.List<string> values, System.Type type) { }
+            }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class TaskItem
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string ItemSpec;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public System.Collections.Generic.Dictionary<string, string> Metadata;
+                public TaskItem(Microsoft.Build.Framework.ITaskItem taskItem) { }
+            }
         }
     }
 }
