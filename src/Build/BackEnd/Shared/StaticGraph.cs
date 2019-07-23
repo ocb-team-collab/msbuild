@@ -156,5 +156,8 @@ namespace Microsoft.Build.BackEnd
     {
         [DataMember]
         public List<StaticTarget> StaticTargets = new List<StaticTarget>();
+
+        [DataMember]
+        public string ProjectPath;
     }
 }

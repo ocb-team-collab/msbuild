@@ -12,6 +12,7 @@ using Microsoft.Build.BackEnd;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Shared;
+using Microsoft.Build.Utilities;
 
 namespace Microsoft.Build.TaskLauncher
 {
@@ -78,7 +79,7 @@ namespace Microsoft.Build.TaskLauncher
             StringBuilder specContents = new StringBuilder();
             specContents.AppendLine("import {Cmd, Transformer} from \"Sdk.Transformers\";\n");
             specContents.AppendLine(
-                string.Format("const tool: Transformer.ToolDefinition = {{ exe: f`{0}`, dependsOnWindowsDirectories: true, prepareTempDirectory: true, runtimeDirectoryDependencies: [ Transformer.sealSourceDirectory(d`{1}`) ] }};\n",
+                string.Format("const tool: Transformer.ToolDefinition = {{ exe: f`{0}`, dependsOnWindowsDirectories: true, prepareTempDirectory: true, runtimeDirectoryDependencies: [ Transformer.sealSourceDirectory(d`{1}`, Transformer.SealSourceDirectoryOption.allDirectories) ] }};\n",
                     System.Reflection.Assembly.GetExecutingAssembly().Location,
                     Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)));
 
@@ -107,9 +108,9 @@ namespace Microsoft.Build.TaskLauncher
                         "target" + i,
                         NormalizeRawString(stdIn.ToString(), stdIn),
                         "target" + i,
-                        Directory.GetCurrentDirectory(),
+                        Path.GetDirectoryName(graph.ProjectPath),
                         Path.Combine(Directory.GetCurrentDirectory(), "target" + i + ".out"),
-                        $@"f`{Environment.GetEnvironmentVariable("ProgramData")}\Microsoft\VisualStudio\Setup\x86\Microsoft.VisualStudio.Setup.Configuration.Native.dll`"));
+                        $@"Transformer.sealSourceDirectory(d`{Environment.GetEnvironmentVariable("ProgramData")}\Microsoft`, Transformer.SealSourceDirectoryOption.allDirectories)"));
                 i++;
 
             }
@@ -225,12 +226,15 @@ namespace Microsoft.Build.TaskLauncher
 
                             break;
                         case StaticTarget.Task.ParameterType.Primitives:
-                            var values = parameter.Value.Primitives.Values.Select(stringValue => GetTypedValue(parameter.Value.Primitives.Type, stringValue));
+                            var values = parameter.Value.Primitives.Values.Select(stringValue => GetTypedValue(parameter.Value.Primitives.Type, stringValue)).ToArray();
                             TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, values);
                             break;
                         case StaticTarget.Task.ParameterType.TaskItem:
+                            TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, new TaskItem(parameter.Value.TaskItem.ItemSpec, parameter.Value.TaskItem.Metadata));
                             break;
                         case StaticTarget.Task.ParameterType.TaskItems:
+                            var taskItems = parameter.Value.TaskItems.Select(taskItem => new TaskItem(taskItem.ItemSpec, taskItem.Metadata)).ToArray();
+                            TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, taskItems);
                             break;
                     }
 

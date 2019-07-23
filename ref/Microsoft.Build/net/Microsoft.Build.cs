@@ -6,6 +6,8 @@ namespace Microsoft.Build.BackEnd
     public partial class StaticGraph
     {
         [System.Runtime.Serialization.DataMemberAttribute]
+        public string ProjectPath;
+        [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget> StaticTargets;
         public StaticGraph() { }
     }
