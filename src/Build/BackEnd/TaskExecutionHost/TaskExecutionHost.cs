@@ -119,7 +119,7 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         private List<TaskItem> _remotedTaskItems;
 
-        private Dictionary<string, object> _calculatedParameters = new Dictionary<string, object>();
+        private Dictionary<string, object> _calculatedParameters;
 
         public Dictionary<string, object> CalculatedParameters { get { return _calculatedParameters; } }
 
@@ -318,6 +318,8 @@ namespace Microsoft.Build.BackEnd
 
             TaskInstance.BuildEngine = _buildEngine;
             TaskInstance.HostObject = _taskHost;
+
+            _calculatedParameters = new Dictionary<string, object>();
             
             return true;
         }
