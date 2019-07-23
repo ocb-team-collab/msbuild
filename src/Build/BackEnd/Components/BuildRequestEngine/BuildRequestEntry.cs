@@ -168,6 +168,8 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         public BuildResult Result { get; private set; }
 
+        public bool IsStatic = true;
+
         /// <summary>
         /// Returns the request builder.
         /// </summary>
