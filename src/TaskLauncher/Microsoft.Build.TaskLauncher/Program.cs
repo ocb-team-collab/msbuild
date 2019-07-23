@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
@@ -215,7 +216,24 @@ namespace Microsoft.Build.TaskLauncher
                 foreach (var parameter in staticTask.Parameters)
                 {
                     var taskPropertyInfo = taskProperties.First(property => property.Name == parameter.Key);
-                    TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, parameter.Value);
+                    StaticTarget.Task.ParameterType parameterType = parameter.Value.ParameterType;
+                    switch (parameterType)
+                    {
+                        case StaticTarget.Task.ParameterType.Primitive:
+                            object value = GetTypedValue(parameter.Value.Primitive.Type, parameter.Value.Primitive.Value);
+                            TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, value);
+
+                            break;
+                        case StaticTarget.Task.ParameterType.Primitives:
+                            var values = parameter.Value.Primitives.Values.Select(stringValue => GetTypedValue(parameter.Value.Primitives.Type, stringValue));
+                            TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, values);
+                            break;
+                        case StaticTarget.Task.ParameterType.TaskItem:
+                            break;
+                        case StaticTarget.Task.ParameterType.TaskItems:
+                            break;
+                    }
+
                 }
 
 
@@ -228,6 +246,23 @@ namespace Microsoft.Build.TaskLauncher
             }
 
             return 0;
+        }
+
+        private static object GetTypedValue(string typeString, string stringValue)
+        {
+            Type primitiveType = Type.GetType(typeString);
+            if (primitiveType == typeof(bool) || primitiveType == typeof(bool[]))
+            {
+                return ConversionUtilities.ConvertStringToBool(stringValue);
+            }
+            else if (primitiveType == typeof(string) || primitiveType == typeof(string[]))
+            {
+                return stringValue;
+            }
+            else
+            {
+                return Convert.ChangeType(stringValue, primitiveType, CultureInfo.InvariantCulture);
+            }
         }
     }
 
