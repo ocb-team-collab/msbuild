@@ -170,7 +170,7 @@ namespace Microsoft.Build.Tasks
         protected override string CreateManifestName(string fileName, string linkFileName, string rootNamespace, string dependentUponFileName, System.IO.Stream binaryStream) { throw null; }
         protected override bool IsSourceFile(string fileName) { throw null; }
     }
-    public partial class Delete : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskHybrid
+    public partial class Delete : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskStaticSkip
     {
         public Delete() { }
         [Microsoft.Build.Framework.OutputAttribute]
