@@ -28,7 +28,7 @@ namespace Microsoft.Build.Tasks
     /// Given a list of assemblyFiles, determine the closure of all assemblyFiles that
     /// depend on those assemblyFiles including second and nth-order dependencies too.
     /// </summary>
-    public class ResolveAssemblyReference : TaskExtension
+    public class ResolveAssemblyReference : TaskExtension, ITaskStatic
     {
         /// <summary>
         /// key assembly used to trigger inclusion of facade references. 
@@ -46,11 +46,6 @@ namespace Microsoft.Build.Tasks
         /// <param name="targetFrameworkDirectory">TargetFramework directory to search for redist or subset list</param>
         /// <returns>String array of redist or subset lists</returns>
         private delegate string[] GetListPath(string targetFrameworkDirectory);
-
-        /// <summary>
-        /// Cache of system state information, used to optimize performance.
-        /// </summary>
-        private SystemState _cache = null;
 
         /// <summary>
         /// Construct
@@ -1837,33 +1832,6 @@ namespace Microsoft.Build.Tasks
         }
         #endregion
 
-        #region StateFile
-        /// <summary>
-        /// Reads the state file (if present) into the cache.
-        /// </summary>
-        private void ReadStateFile()
-        {
-            _cache = (SystemState)StateFileBase.DeserializeCache(_stateFile, Log, typeof(SystemState));
-
-            // Construct the cache if necessary.
-            if (_cache == null)
-            {
-                _cache = new SystemState();
-            }
-        }
-
-        /// <summary>
-        /// Write out the state file if a state name was supplied and the cache is dirty.
-        /// </summary>
-        private void WriteStateFile()
-        {
-            if (!string.IsNullOrEmpty(_stateFile) && _cache.IsDirty)
-            {
-                _cache.SerializeCache(_stateFile, Log);
-            }
-        }
-        #endregion
-
         #region App.config
         /// <summary>
         /// Read the app.config and get any assembly remappings from it.
@@ -2068,19 +2036,6 @@ namespace Microsoft.Build.Tasks
                             Log.LogWarningWithCodeFromResources("ResolveAssemblyReference.InvalidInstalledAssemblySubsetTablesFile", filename, SubsetListFinder.SubsetListFolder, e.Message);
                         }
                     }
-
-                    // Load any prior saved state.
-                    ReadStateFile();
-                    _cache.SetGetLastWriteTime(getLastWriteTime);
-                    _cache.SetInstalledAssemblyInformation(installedAssemblyTableInfo);
-
-                    // Cache delegates.
-                    getAssemblyName = _cache.CacheDelegate(getAssemblyName);
-                    getAssemblyMetadata = _cache.CacheDelegate(getAssemblyMetadata);
-                    fileExists = _cache.CacheDelegate(fileExists);
-                    directoryExists = _cache.CacheDelegate(directoryExists);
-                    getDirectories = _cache.CacheDelegate(getDirectories);
-                    getRuntimeVersion = _cache.CacheDelegate(getRuntimeVersion);
 
                     _projectTargetFramework = FrameworkVersionFromString(_projectTargetFrameworkAsString);
 
@@ -2322,14 +2277,6 @@ namespace Microsoft.Build.Tasks
 
                     this.DependsOnSystemRuntime = useSystemRuntime.ToString();
                     this.DependsOnNETStandard = useNetStandard.ToString();
-
-                    WriteStateFile();
-
-                    // Save the new state out and put into the file exists if it is actually on disk.
-                    if (_stateFile != null && fileExists(_stateFile))
-                    {
-                        _filesWritten.Add(new TaskItem(_stateFile));
-                    }
 
                     // Log the results.
                     success = LogResults(dependencyTable, idealAssemblyRemappings, idealAssemblyRemappingsIdentities, generalResolutionExceptions);

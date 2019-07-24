@@ -14,7 +14,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Returns the reference assembly paths to the various frameworks
     /// </summary>
-    public class GetReferenceAssemblyPaths : TaskExtension
+    public class GetReferenceAssemblyPaths : TaskExtension, ITaskStatic
     {
         #region Data
 #if FEATURE_GAC

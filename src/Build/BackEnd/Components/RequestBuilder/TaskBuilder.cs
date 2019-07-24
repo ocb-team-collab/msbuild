@@ -756,7 +756,7 @@ namespace Microsoft.Build.BackEnd
                     taskExecutionHost.Execute();
                     GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket);
                 }
-                else
+                else if (!(host.TaskInstance is ITaskStaticSkip))
                 {
                     task.Parameters = taskExecutionHost.CalculatedParameters;
                     task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;

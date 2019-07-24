@@ -314,6 +314,9 @@ namespace Microsoft.Build.Framework
         Microsoft.Build.Framework.ITaskHost HostObject { get; set; }
         bool Execute();
     }
+    public partial interface ITaskStaticSkip : Microsoft.Build.Framework.ITask
+    {
+    }
     public partial class LazyFormattedBuildEventArgs : Microsoft.Build.Framework.BuildEventArgs
     {
         protected LazyFormattedBuildEventArgs() { }

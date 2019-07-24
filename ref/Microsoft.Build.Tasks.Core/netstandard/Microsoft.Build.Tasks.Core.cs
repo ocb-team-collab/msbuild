@@ -2,7 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 namespace Microsoft.Build.Tasks
 {
-    public partial class AssignCulture : Microsoft.Build.Tasks.TaskExtension
+    public partial class AssignCulture : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public AssignCulture() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -93,7 +93,7 @@ namespace Microsoft.Build.Tasks
         public CommandLineBuilderExtension(bool quoteHyphensOnCommandLine, bool useNewLineSeparator) { }
         protected string GetQuotedText(string unquotedText) { throw null; }
     }
-    public partial class ConvertToAbsolutePath : Microsoft.Build.Tasks.TaskExtension
+    public partial class ConvertToAbsolutePath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public ConvertToAbsolutePath() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -258,7 +258,7 @@ namespace Microsoft.Build.Tasks
         public bool IsInsideConditionalBlock { get { throw null; } set { } }
         public string Name { get { throw null; } set { } }
     }
-    public partial class FindAppConfigFile : Microsoft.Build.Tasks.TaskExtension
+    public partial class FindAppConfigFile : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public FindAppConfigFile() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -285,7 +285,7 @@ namespace Microsoft.Build.Tasks
         public bool MatchFileNameOnly { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class FindUnderPath : Microsoft.Build.Tasks.TaskExtension
+    public partial class FindUnderPath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public FindUnderPath() { }
         public Microsoft.Build.Framework.ITaskItem[] Files { get { throw null; } set { } }
@@ -382,7 +382,7 @@ namespace Microsoft.Build.Tasks
         public string MetadataName { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class GetFrameworkPath : Microsoft.Build.Tasks.TaskExtension
+    public partial class GetFrameworkPath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public GetFrameworkPath() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -417,7 +417,7 @@ namespace Microsoft.Build.Tasks
         public string Path { get { throw null; } }
         public override bool Execute() { throw null; }
     }
-    public partial class GetReferenceAssemblyPaths : Microsoft.Build.Tasks.TaskExtension
+    public partial class GetReferenceAssemblyPaths : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public GetReferenceAssemblyPaths() { }
         public bool BypassFrameworkInstallChecks { get { throw null; } set { } }
@@ -443,7 +443,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] ItemsToHash { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class MakeDir : Microsoft.Build.Tasks.TaskExtension
+    public partial class MakeDir : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskStaticSkip
     {
         public MakeDir() { }
         [Microsoft.Build.Framework.RequiredAttribute]
@@ -499,7 +499,7 @@ namespace Microsoft.Build.Tasks
         public bool UseResultsCache { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class ReadLinesFromFile : Microsoft.Build.Tasks.TaskExtension
+    public partial class ReadLinesFromFile : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public ReadLinesFromFile() { }
         [Microsoft.Build.Framework.RequiredAttribute]
@@ -517,7 +517,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] RemovedDirectories { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class RemoveDuplicates : Microsoft.Build.Tasks.TaskExtension
+    public partial class RemoveDuplicates : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public RemoveDuplicates() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -527,7 +527,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] Inputs { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class ResolveAssemblyReference : Microsoft.Build.Tasks.TaskExtension
+    public partial class ResolveAssemblyReference : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public ResolveAssemblyReference() { }
         public string[] AllowedAssemblyExtensions { get { throw null; } set { } }

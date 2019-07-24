@@ -10,7 +10,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Returns the paths to the various frameworks versions.
     /// </summary>
-    public class GetFrameworkPath : TaskExtension
+    public class GetFrameworkPath : TaskExtension, ITaskStatic
     {
         static GetFrameworkPath()
         {
