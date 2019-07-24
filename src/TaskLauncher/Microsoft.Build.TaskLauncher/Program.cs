@@ -232,7 +232,7 @@ namespace Microsoft.Build.TaskLauncher
 	tool: tool,
 	arguments: [ Cmd.rawArgument(""run"") ],
 	consoleInput: ""{NormalizeRawString(stdIn.ToString(), stdIn)}"",
-	description: ""{target.Name + "_" + i}"",
+	description: ""{target.Name + "_" + NormalizeRawString(target.LocationString, new StringBuilder())}"",
 	workingDirectory: d`{Path.GetDirectoryName(graph.ProjectPath)}`,
 	consoleOutput: p`{Path.Combine(Directory.GetCurrentDirectory(), "target" + i + ".out")}`,
 	dependencies: [
@@ -427,24 +427,29 @@ namespace Microsoft.Build.TaskLauncher
             );
                 foreach (var parameter in staticTask.Parameters)
                 {
-                    var taskPropertyInfo = taskProperties.First(property => property.Name == parameter.Key);
+                    var taskPropertyInfo = taskProperties.FirstOrDefault(property => property.Name == parameter.Key);
+                    if (taskPropertyInfo == null)
+                    {
+                        Console.Error.WriteLine("Could not find property: \"" + parameter.Key + "\" for task + \"" + staticTask.Name + "\"");
+                        return 1;
+                    }
+
                     StaticTarget.Task.ParameterType parameterType = parameter.Value.ParameterType;
                     switch (parameterType)
                     {
                         case StaticTarget.Task.ParameterType.Primitive:
                             object value = GetTypedValue(parameter.Value.Primitive.Type, parameter.Value.Primitive.Value);
                             TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, value);
-
                             break;
                         case StaticTarget.Task.ParameterType.Primitives:
-                            var values = parameter.Value.Primitives.Values.Select(stringValue => GetTypedValue(parameter.Value.Primitives.Type, stringValue)).ToArray();
+                            var values = GetTypedArrayValue(parameter.Value.Primitives.Type, parameter.Value.Primitives.Values);
                             TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, values);
                             break;
                         case StaticTarget.Task.ParameterType.TaskItem:
                             TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, new TaskItem(parameter.Value.TaskItem.ItemSpec, parameter.Value.TaskItem.Metadata));
                             break;
                         case StaticTarget.Task.ParameterType.TaskItems:
-                            var taskItems = parameter.Value.TaskItems.Select(taskItem => new TaskItem(taskItem.ItemSpec, taskItem.Metadata)).ToArray();
+                            ITaskItem[] taskItems = parameter.Value.TaskItems.Select(taskItem => new TaskItem(taskItem.ItemSpec, taskItem.Metadata)).ToArray();
                             TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, taskItems);
                             break;
                     }
@@ -461,6 +466,23 @@ namespace Microsoft.Build.TaskLauncher
             }
 
             return 0;
+        }
+
+        private static object GetTypedArrayValue(string typeString, IEnumerable<string> stringValues)
+        {
+            Type primitiveType = Type.GetType(typeString);
+            if (primitiveType == typeof(bool[]))
+            {
+                return stringValues.Select(stringValue => ConversionUtilities.ConvertStringToBool(stringValue)).ToArray();
+            }
+            else if (primitiveType == typeof(string) || primitiveType == typeof(string[]))
+            {
+                return stringValues.ToArray();
+            }
+            else
+            {
+                return stringValues.Select(stringValue => Convert.ChangeType(stringValue, primitiveType, CultureInfo.InvariantCulture)).ToArray();
+            }
         }
 
         private static object GetTypedValue(string typeString, string stringValue)

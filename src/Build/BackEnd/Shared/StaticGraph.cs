@@ -145,7 +145,16 @@ namespace Microsoft.Build.BackEnd
         [DataMember]
         public List<long> OutputFileIds { get; set; }
 
-        public ElementLocation Location { get; set; }
+        private ElementLocation _location;
+
+        public ElementLocation Location
+        {
+            get { return _location; }
+            set { _location = value; LocationString = _location.LocationString; }
+        }
+
+        [DataMember]
+        public string LocationString { get; set; }
 
         public void RecordInput(long fileId)
         {

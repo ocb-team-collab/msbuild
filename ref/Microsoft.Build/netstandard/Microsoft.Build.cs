@@ -27,6 +27,8 @@ namespace Microsoft.Build.BackEnd
         public System.Collections.Generic.List<long> InputFileIds { get { throw null; } set { } }
         public Microsoft.Build.Construction.ElementLocation Location { get { throw null; } set { } }
         [System.Runtime.Serialization.DataMemberAttribute]
+        public string LocationString { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<long> OutputFileIds { get { throw null; } set { } }
         public void RecordInput(long fileId) { }
         public void RecordOutput(long fileId) { }
