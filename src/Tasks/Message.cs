@@ -9,7 +9,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Task that simply emits a message. Importance defaults to high if not specified.
     /// </summary>
-    public sealed class Message : TaskExtension
+    public sealed class Message : TaskExtension, ITaskHybrid
     {
         /// <summary>
         /// Text to log.
@@ -42,6 +42,11 @@ namespace Microsoft.Build.Tasks
         /// Indicates if this is a critical message
         /// </summary>
         public bool IsCritical { get; set; }
+
+        public bool ExecuteStatic()
+        {
+            return Execute();
+        }
 
         public override bool Execute()
         {
