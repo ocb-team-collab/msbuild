@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Reflection;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using Microsoft.Build.BackEnd;
@@ -217,6 +218,14 @@ namespace Microsoft.Build.TaskLauncher
                     }
                 }
 
+                foreach (var task in target.Tasks)
+                {
+                    if (!string.IsNullOrWhiteSpace(task.AssemblyFile))
+                    {
+                        inputs.Add($"f`{task.AssemblyFile}`");
+                    }
+                }
+
                 List<string> outputs = new List<string>();
                 foreach (var outputId in target.OutputFileIds ?? Enumerable.Empty<long>())
                 {
@@ -409,7 +418,47 @@ namespace Microsoft.Build.TaskLauncher
 
             foreach (StaticTarget.Task staticTask in target.Tasks)
             {
-                LoadedType loadedType = new LoadedType(Type.GetType(staticTask.Name), AssemblyLoadInfo.Create(assemblyFile: staticTask.AssemblyFile, assemblyName: staticTask.AssemblyName), null);
+                Type type;
+                if (staticTask.AssemblyFile != null)
+                {
+                    AssemblyName an = AssemblyName.GetAssemblyName(staticTask.AssemblyFile);
+                    if (an == null)
+                    {
+                        Console.WriteLine("Caouldn't get assembly name for assembly file: " + staticTask.AssemblyFile);
+                        return 1;
+                    }
+                    Assembly a = Assembly.Load(an);
+                    if (a == null)
+                    {
+                        Console.WriteLine("Couldn't loaded assembly for assembly: " + an.FullName + " from file: " + staticTask.AssemblyFile);
+                        return 1;
+                    }
+                    type = a.GetType(staticTask.Name.Split(',')[0]);
+                    if (type == null)
+                    {
+                        Console.WriteLine("Couldn't create type for string: " + staticTask.Name.Split(',')[0] + " assembly file: " + (staticTask.AssemblyFile ?? "null") + " and assembly name: " + (staticTask.AssemblyName ?? "null"));
+                        Console.WriteLine("Types in the assembly:\n" + string.Join(",\n", a.GetTypes().Select(availableType => availableType.FullName)));
+                        return 1;
+                    }
+                }
+                else
+                {
+                    type = Type.GetType(staticTask.Name);
+                    if (type == null)
+                    {
+                        Console.WriteLine("Couldn't create type for string: " + staticTask.Name + " assembly file: " + (staticTask.AssemblyFile ?? "null") + " and assembly name: " + (staticTask.AssemblyName ?? "null"));
+                        return 1;
+                    }
+                }
+
+                var assemblyLoadInfo = AssemblyLoadInfo.Create(assemblyFile: staticTask.AssemblyFile, assemblyName: staticTask.AssemblyName);
+                if (assemblyLoadInfo == null)
+                {
+                    Console.WriteLine("Couldn't create type for assembly file: " + (staticTask.AssemblyFile ?? "null") + " and name: " + (staticTask.AssemblyName ?? "null"));
+                    return 1;
+                }
+
+                LoadedType loadedType = new LoadedType(type, assemblyLoadInfo, null);
                 TaskPropertyInfo[] taskProperties = AssemblyTaskFactory.GetTaskParameters(loadedType);
 
                 ITask task = TaskLoader.CreateTask(loadedType, staticTask.Name, staticTask.AssemblyName, 0, 0, null
