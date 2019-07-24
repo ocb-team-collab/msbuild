@@ -24,6 +24,8 @@ namespace Microsoft.Build.BackEnd
         [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<long> InputFileIds { get { throw null; } set { } }
         [System.Runtime.Serialization.DataMemberAttribute]
+        public Microsoft.Build.Construction.ElementLocation Location { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<long> OutputFileIds { get { throw null; } set { } }
         public void RecordInput(long fileId) { }
         public void RecordOutput(long fileId) { }
@@ -102,15 +104,20 @@ namespace Microsoft.Build.BackEnd.Shared
         public static readonly Microsoft.Build.BackEnd.Shared.SimulatedFileSystem Instance;
         public System.Collections.Generic.IEnumerable<Microsoft.Build.BackEnd.Shared.StaticFile> KnownFiles { get { throw null; } }
         public long GetFileId(string filePath) { throw null; }
-        public long RecordOutput(long producingTargetId, Microsoft.Build.Framework.ITaskItem outputItem) { throw null; }
-        public long RecordOutput(long producingTargetId, string filePath) { throw null; }
+        public long RecordOutput(Microsoft.Build.BackEnd.StaticTarget producingTarget, Microsoft.Build.Framework.ITaskItem outputItem) { throw null; }
+        public long RecordOutput(Microsoft.Build.BackEnd.StaticTarget producingTarget, string filePath) { throw null; }
     }
+    [System.Runtime.Serialization.DataContractAttribute]
     public partial class StaticFile
     {
         public StaticFile() { }
+        [System.Runtime.Serialization.DataMemberAttribute]
         public long Id { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
         public string Path { get { throw null; } set { } }
-        public System.Nullable<long> ProducingTargetId { get { throw null; } set { } }
+        public Microsoft.Build.BackEnd.StaticTarget ProducingTarget { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Nullable<long> ProducingTargetId { get { throw null; } }
     }
 }
 namespace Microsoft.Build.Construction

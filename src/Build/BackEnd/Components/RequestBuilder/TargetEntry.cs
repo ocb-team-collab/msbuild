@@ -656,7 +656,7 @@ namespace Microsoft.Build.BackEnd
                                 {
                                     string unescapedOutput = EscapingUtilities.UnescapeAll(FileUtilities.FixFilePath(output.ItemSpec));
                                     string fullOutputPath = Path.Combine(requestEntry.RequestConfiguration.Project.Directory, unescapedOutput);
-                                    long fileId = SimulatedFileSystem.Instance.RecordOutput(staticTarget.Id, fullOutputPath);
+                                    long fileId = SimulatedFileSystem.Instance.RecordOutput(staticTarget, fullOutputPath);
                                     staticTarget.RecordOutput(fileId);
                                 }
 
@@ -844,7 +844,7 @@ namespace Microsoft.Build.BackEnd
             WorkUnitActionCode finalActionCode = WorkUnitActionCode.Continue;
             WorkUnitResult lastResult = new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
 
-            var staticTarget = new StaticTarget();
+            var staticTarget = new StaticTarget() { Location = _target.Location };
             try
             {
                 // Grab the task builder so if cancel is called it will have something to operate on.

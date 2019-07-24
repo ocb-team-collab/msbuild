@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Threading;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
@@ -22,21 +23,22 @@ namespace Microsoft.Build.BackEnd.Shared
 
         public IEnumerable<StaticFile> KnownFiles => _fileByIndex;
 
-        public long RecordOutput(long producingTargetId, ITaskItem outputItem)
+        public long RecordOutput(StaticTarget producingTarget, ITaskItem outputItem)
         {
-            return RecordOutput(producingTargetId, outputItem.ItemSpec);
+            return RecordOutput(producingTarget, outputItem.ItemSpec);
         }
 
-        public long RecordOutput(long producingTargetId, string filePath)
+        public long RecordOutput(StaticTarget producingTarget, string filePath)
         {
             var fileObject = GetFileObject(filePath);
 
-            if (fileObject.ProducingTargetId.HasValue && producingTargetId != fileObject.ProducingTargetId)
+            if (fileObject.ProducingTarget != null && fileObject.ProducingTarget.Id != producingTarget.Id)
             {
-                throw new ApplicationException($"Duplicate producer for {filePath}");
+
+                throw new ApplicationException($"Duplicate producer for {filePath}.  Produced by: " + fileObject.ProducingTarget.Location.LocationString + " and by " + producingTarget.Location.LocationString);
             }
 
-            fileObject.ProducingTargetId = producingTargetId;
+            fileObject.ProducingTarget = producingTarget;
 
             return fileObject.Id;
         }
@@ -63,15 +65,21 @@ namespace Microsoft.Build.BackEnd.Shared
         }
     }
 
+    [DataContract]
     public class StaticFile
     {
         private static long _nextId = -1;
 
+        [DataMember]
         public string Path { get; set; }
 
-        public long? ProducingTargetId { get; set; }
-
+        [DataMember]
         public long Id { get; set; }
+
+        public StaticTarget ProducingTarget { get; set; }
+
+        [DataMember]
+        public long? ProducingTargetId => ProducingTarget?.Id;
 
         public StaticFile()
         {
