@@ -190,7 +190,6 @@ namespace Microsoft.Build.TaskLauncher
             foreach (var target in graph.StaticTargets)
             {
                 StringBuilder stdIn = new StringBuilder();
-                Console.WriteLine("Working on target: " + i);
                 using (var stream = new MemoryStream())
                 {
                     ser.WriteObject(stream, target);
@@ -204,8 +203,6 @@ namespace Microsoft.Build.TaskLauncher
                         }
                     }
                 }
-
-                Console.WriteLine("Done with getting stdIn");
 
                 List<string> inputs = new List<string>()
                 {
