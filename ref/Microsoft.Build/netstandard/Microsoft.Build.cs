@@ -23,7 +23,6 @@ namespace Microsoft.Build.BackEnd
         public StaticTarget() { }
         [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<long> InputFileIds { get { throw null; } set { } }
-        [System.Runtime.Serialization.DataMemberAttribute]
         public Microsoft.Build.Construction.ElementLocation Location { get { throw null; } set { } }
         [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<long> OutputFileIds { get { throw null; } set { } }
