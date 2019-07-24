@@ -116,7 +116,7 @@ namespace Microsoft.Build.BackEnd.Shared
         public string Path { get { throw null; } set { } }
         public Microsoft.Build.BackEnd.StaticTarget ProducingTarget { get { throw null; } set { } }
         [System.Runtime.Serialization.DataMemberAttribute]
-        public System.Nullable<long> ProducingTargetId { get { throw null; } }
+        public System.Nullable<long> ProducingTargetId { get { throw null; } set { } }
     }
 }
 namespace Microsoft.Build.Construction

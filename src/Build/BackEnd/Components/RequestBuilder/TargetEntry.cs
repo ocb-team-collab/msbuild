@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Build.BackEnd.Shared;
@@ -439,8 +440,6 @@ namespace Microsoft.Build.BackEnd
                     parentTargetName = ParentEntry.Target.Name;
                 }
 
-                List<StaticTarget> staticTargetByBucketIndex = new List<StaticTarget>(numberOfBuckets);
-
                 for (int i = 0; i < numberOfBuckets; i++)
                 {
                     ItemBucket bucket = buckets[i];
@@ -469,7 +468,7 @@ namespace Microsoft.Build.BackEnd
 
                         // UNDONE: (Refactor) Refactor TargetUpToDateChecker to take a logging context, not a logging service.
                         TargetUpToDateChecker dependencyAnalyzer = new TargetUpToDateChecker(requestEntry.RequestConfiguration.Project, _target, targetLoggingContext.LoggingService, targetLoggingContext.BuildEventContext);
-                        DependencyAnalysisResult dependencyResult = dependencyAnalyzer.PerformDependencyAnalysis(bucket, out changedTargetInputs, out upToDateTargetInputs, out var staticInputs);
+                        DependencyAnalysisResult dependencyResult = dependencyAnalyzer.PerformDependencyAnalysis(bucket, out changedTargetInputs, out upToDateTargetInputs, out var staticInputs, out var staticOutputs);
 
                         switch (dependencyResult)
                         {
@@ -505,19 +504,22 @@ namespace Microsoft.Build.BackEnd
 
                                 // We either have some work to do or at least we need to infer outputs from inputs.
                                 bucketResult = await ProcessBucket(taskBuilder, targetLoggingContext, GetTaskExecutionMode(dependencyResult), lookupForInference, lookupForExecution);
-                                var staticTargetForBucket = bucketResult.GeneratedStaticTarget;
-                                staticTargets.Add(staticTargetForBucket);
-                                staticTargetByBucketIndex.Add(staticTargetForBucket);
 
-                                foreach (var inputPath in staticInputs)
+                                if (requestEntry.IsStatic)
                                 {
-                                    if (string.IsNullOrWhiteSpace(inputPath))
+                                    var staticTarget = bucketResult.GeneratedStaticTarget;
+                                    staticTargets.Add(staticTarget);
+                                    foreach (var inputPath in staticInputs.Where(path => !string.IsNullOrWhiteSpace(path)))
                                     {
-                                        continue;
+                                        long inputId = SimulatedFileSystem.Instance.GetFileId(inputPath);
+                                        staticTarget.RecordInput(inputId);
                                     }
 
-                                    long inputId = SimulatedFileSystem.Instance.GetFileId(inputPath);
-                                    staticTargetForBucket.RecordInput(inputId);
+                                    foreach (var outputPath in staticOutputs.Where(path => !string.IsNullOrWhiteSpace(path)))
+                                    {
+                                        long outputId = SimulatedFileSystem.Instance.RecordOutput(staticTarget, outputPath);
+                                        staticTarget.RecordOutput(outputId);
+                                    }
                                 }
 
                                 // Now aggregate the result with the existing known results.  There are four rules, assuming the target was not 
@@ -645,22 +647,10 @@ namespace Microsoft.Build.BackEnd
 
                         if (keepDupes)
                         {
-                            int i = 0;
                             foreach (ItemBucket bucket in batchingBuckets)
                             {
                                 IList<TaskItem> outputsForBucket = bucket.Expander.ExpandIntoTaskItemsLeaveEscaped(targetReturns, ExpanderOptions.ExpandAll, targetReturnsLocation);
                                 targetOutputItems.AddRange(outputsForBucket);
-
-                                var staticTarget = staticTargetByBucketIndex[i];
-                                foreach (TaskItem output in outputsForBucket)
-                                {
-                                    string unescapedOutput = EscapingUtilities.UnescapeAll(FileUtilities.FixFilePath(output.ItemSpec));
-                                    string fullOutputPath = Path.Combine(requestEntry.RequestConfiguration.Project.Directory, unescapedOutput);
-                                    long fileId = SimulatedFileSystem.Instance.RecordOutput(staticTarget, fullOutputPath);
-                                    staticTarget.RecordOutput(fileId);
-                                }
-
-                                i++;
                             }
                         }
                         else

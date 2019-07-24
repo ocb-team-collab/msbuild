@@ -69,6 +69,7 @@ namespace Microsoft.Build.BackEnd.Shared
     public class StaticFile
     {
         private static long _nextId = -1;
+        private StaticTarget _producingTarget;
 
         [DataMember]
         public string Path { get; set; }
@@ -76,10 +77,18 @@ namespace Microsoft.Build.BackEnd.Shared
         [DataMember]
         public long Id { get; set; }
 
-        public StaticTarget ProducingTarget { get; set; }
+        public StaticTarget ProducingTarget
+        {
+            get => _producingTarget;
+            set
+            {
+                _producingTarget = value;
+                ProducingTargetId = value?.Id;
+            }
+        }
 
         [DataMember]
-        public long? ProducingTargetId => ProducingTarget?.Id;
+        public long? ProducingTargetId { get; set; }
 
         public StaticFile()
         {

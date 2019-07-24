@@ -412,6 +412,17 @@ namespace Microsoft.Build.Shared
             return string.IsNullOrEmpty(path) || Path.DirectorySeparatorChar == '\\' ? path : path.Replace('\\', '/');//.Replace("//", "/");
         }
 
+        internal static string ItemSpecToFullPath(string itemSpec, string projectDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(itemSpec))
+            {
+                return itemSpec;
+            }
+
+            string fixedPath = EscapingUtilities.UnescapeAll(FileUtilities.FixFilePath(itemSpec)).TrimStart(Path.DirectorySeparatorChar);
+            return Path.Combine(projectDirectory, fixedPath);
+        }
+
         /// <summary>
         /// If on Unix, convert backslashes to slashes for strings that resemble paths.
         /// The heuristic is if something resembles paths (contains slashes) check if the

@@ -132,7 +132,8 @@ namespace Microsoft.Build.BackEnd
             ItemBucket bucket,
             out ItemDictionary<ProjectItemInstance> changedTargetInputs,
             out ItemDictionary<ProjectItemInstance> upToDateTargetInputs,
-            out IList<string> staticFileInputs
+            out IList<string> staticFileInputs,
+            out IList<string> staticFileOutputs
         )
         {
             // Clear any old dependency analysis logging details
@@ -149,6 +150,7 @@ namespace Microsoft.Build.BackEnd
             upToDateTargetInputs = null;
 
             staticFileInputs = null;
+            staticFileOutputs = null;
 
             if (BuildRequestEntry.GlobalIsStatic)
             {
@@ -178,11 +180,15 @@ namespace Microsoft.Build.BackEnd
 
                 staticFileInputs = new List<string>();
 
-                foreach (string input in inputs)
+                foreach (string input in inputs.Select(path => FileUtilities.ItemSpecToFullPath(path, _project.Directory)))
                 {
-                    string unescapedInput = EscapingUtilities.UnescapeAll(FileUtilities.FixFilePath(input));
-                    string unescapedInputFullPath = Path.Combine(_project.Directory, unescapedInput);
-                    staticFileInputs.Add(unescapedInputFullPath);
+                    staticFileInputs.Add(input);
+                }
+
+                staticFileOutputs = new List<string>();
+                foreach (string output in targetOutputItemSpecs.Select(path => FileUtilities.ItemSpecToFullPath(path, _project.Directory)))
+                {
+                    staticFileOutputs.Add(output);
                 }
 
                 return DependencyAnalysisResult.FullBuild;
