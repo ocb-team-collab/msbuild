@@ -414,7 +414,7 @@ namespace Microsoft.Build.Shared
 
         internal static string ItemSpecToFullPath(string itemSpec, string projectDirectory)
         {
-            if (itemSpec == null || itemSpec.Length == 0)
+            if (string.IsNullOrEmpty(itemSpec))
             {
                 return itemSpec;
             }
