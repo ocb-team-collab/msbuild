@@ -881,7 +881,7 @@ namespace Microsoft.Build.BackEnd
             StaticTarget staticTarget = null;
             if (staticTasks.Count > 0)
             {
-                staticTarget = new StaticTarget() { Location = _target.Location, Tasks = staticTasks, };
+                staticTarget = new StaticTarget() { Location = _target.Location, Tasks = staticTasks, Name = Name };
             }
 
             return new WorkUnitResult(aggregatedTaskResult, finalActionCode, lastResult.Exception)

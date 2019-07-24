@@ -137,6 +137,9 @@ namespace Microsoft.Build.BackEnd
         public long Id;
 
         [DataMember]
+        public string Name;
+
+        [DataMember]
         public List<long> InputFileIds { get; set; }
 
         [DataMember]
