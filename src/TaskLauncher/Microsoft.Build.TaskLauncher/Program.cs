@@ -224,14 +224,20 @@ namespace Microsoft.Build.TaskLauncher
                 }
 
                 specContents.AppendLine(
-                    string.Format("const {0} = Transformer.execute(\n{{\n\ttool: tool,\n\targuments: [ Cmd.rawArgument(\"run\") ],\n\tconsoleInput: \"{1}\",\n\tdescription: \"{2}\",\n\tworkingDirectory: d`{3}`,\n\tconsoleOutput: p`{4}`,\n\tdependencies: [\n{5}\n\t],\n\timplicitOutputs: [{6}]\n}});\n",
-                        "target" + i,
-                        NormalizeRawString(stdIn.ToString(), stdIn),
-                        NormalizeRawString(target.LocationString, new StringBuilder()),
-                        Path.GetDirectoryName(graph.ProjectPath),
-                        Path.Combine(Directory.GetCurrentDirectory(), "target" + i + ".out"),
-                        string.Join(",\n\t\t", inputs),
-                        string.Join(",\n\t\t", outputs)));
+                    $@"const {"target" + i} = Transformer.execute(
+{{
+	tool: tool,
+	arguments: [ Cmd.rawArgument(""run"") ],
+	consoleInput: ""{NormalizeRawString(stdIn.ToString(), stdIn)}"",
+	description: ""{target.Name + "_" + NormalizeRawString(target.LocationString, new StringBuilder())}"",
+	workingDirectory: d`{Path.GetDirectoryName(graph.ProjectPath)}`,
+	consoleOutput: p`{Path.Combine(Directory.GetCurrentDirectory(), "target" + i + ".out")}`,
+	dependencies: [
+{string.Join(",\n\t\t", inputs)}
+	],
+	implicitOutputs: [{string.Join(",\n\t\t", outputs)}]
+}});
+");
                 i++;
 
             }
