@@ -969,49 +969,49 @@ namespace Microsoft.Build.BackEnd
                 {
                     ErrorUtilities.ThrowInternalErrorUnreachable();
                 }
-
-                // If the task returned attempt to gather its outputs.  If gathering outputs fails set the taskResults
-                // to false
-                if (taskReturned)
-                {
-                    taskResult = GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket) && taskResult;
-                }
-
-                // If the taskResults are false look at ContinueOnError.  If ContinueOnError=false (default)
-                // mark the taskExecutedSuccessfully=false.  Otherwise let the task succeed but log a normal
-                // pri message that says this task is continuing because ContinueOnError=true
-                resultCode = taskResult ? WorkUnitResultCode.Success : WorkUnitResultCode.Failed;
-                actionCode = WorkUnitActionCode.Continue;
-
-                if (resultCode == WorkUnitResultCode.Failed)
-                {
-                    if (_continueOnError == ContinueOnError.ErrorAndStop)
-                    {
-                        actionCode = WorkUnitActionCode.Stop;
-                    }
-                    else
-                    {
-                        // This is the ErrorAndContinue or WarnAndContinue case...
-                        string settingString = "true";
-                        if (_taskNode.ContinueOnErrorLocation != null)
-                        {
-                            settingString = bucket.Expander.ExpandIntoStringAndUnescape(_taskNode.ContinueOnError, ExpanderOptions.ExpandAll, _taskNode.ContinueOnErrorLocation); // expand embedded item vectors after expanding properties and item metadata
-                        }
-
-                        taskLoggingContext.LogComment
-                        (
-                            MessageImportance.Normal,
-                            "TaskContinuedDueToContinueOnError",
-                            "ContinueOnError",
-                            _taskNode.Name,
-                            settingString
-                        );
-
-                        actionCode = WorkUnitActionCode.Continue;
-                    }
-                }
             }
 
+            // If the task returned attempt to gather its outputs.  If gathering outputs fails set the taskResults
+            // to false
+            if (taskReturned)
+            {
+                taskResult = GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket) && taskResult;
+            }
+
+            // If the taskResults are false look at ContinueOnError.  If ContinueOnError=false (default)
+            // mark the taskExecutedSuccessfully=false.  Otherwise let the task succeed but log a normal
+            // pri message that says this task is continuing because ContinueOnError=true
+            resultCode = taskResult ? WorkUnitResultCode.Success : WorkUnitResultCode.Failed;
+            actionCode = WorkUnitActionCode.Continue;
+
+            if (resultCode == WorkUnitResultCode.Failed)
+            {
+                if (_continueOnError == ContinueOnError.ErrorAndStop)
+                {
+                    actionCode = WorkUnitActionCode.Stop;
+                }
+                else
+                {
+                    // This is the ErrorAndContinue or WarnAndContinue case...
+                    string settingString = "true";
+                    if (_taskNode.ContinueOnErrorLocation != null)
+                    {
+                        settingString = bucket.Expander.ExpandIntoStringAndUnescape(_taskNode.ContinueOnError, ExpanderOptions.ExpandAll, _taskNode.ContinueOnErrorLocation); // expand embedded item vectors after expanding properties and item metadata
+                    }
+
+                    taskLoggingContext.LogComment
+                    (
+                        MessageImportance.Normal,
+                        "TaskContinuedDueToContinueOnError",
+                        "ContinueOnError",
+                        _taskNode.Name,
+                        settingString
+                    );
+
+                    actionCode = WorkUnitActionCode.Continue;
+                }
+            }
+            
             return new WorkUnitResult(resultCode, actionCode, null);
         }
 
