@@ -1,0 +1,3 @@
+<Project>
+<!-- Insulate tests from any settings in <repro root>\directory.build.targets -->
+</Project>
