@@ -6,6 +6,8 @@ namespace Microsoft.Build.BackEnd
     public partial class StaticGraph
     {
         [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<Microsoft.Build.BackEnd.Shared.StaticFile> Files;
+        [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget> StaticTargets;
         public StaticGraph() { }
     }
@@ -13,8 +15,16 @@ namespace Microsoft.Build.BackEnd
     public partial class StaticTarget
     {
         [System.Runtime.Serialization.DataMemberAttribute]
+        public long Id;
+        [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task> Tasks;
         public StaticTarget() { }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<long> InputFileIds { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<long> OutputFileIds { get { throw null; } set { } }
+        public void RecordInput(long fileId) { }
+        public void RecordOutput(long fileId) { }
         [System.Runtime.Serialization.DataContractAttribute]
         public partial class Task
         {
@@ -80,6 +90,25 @@ namespace Microsoft.Build.BackEnd
                 public TaskItem(Microsoft.Build.Framework.ITaskItem taskItem) { }
             }
         }
+    }
+}
+namespace Microsoft.Build.BackEnd.Shared
+{
+    public partial class SimulatedFileSystem
+    {
+        internal SimulatedFileSystem() { }
+        public static readonly Microsoft.Build.BackEnd.Shared.SimulatedFileSystem Instance;
+        public System.Collections.Generic.IEnumerable<Microsoft.Build.BackEnd.Shared.StaticFile> KnownFiles { get { throw null; } }
+        public long GetFileId(string filePath) { throw null; }
+        public long RecordOutput(long producingTargetId, Microsoft.Build.Framework.ITaskItem outputItem) { throw null; }
+        public long RecordOutput(long producingTargetId, string filePath) { throw null; }
+    }
+    public partial class StaticFile
+    {
+        public StaticFile() { }
+        public long Id { get { throw null; } set { } }
+        public string Path { get { throw null; } set { } }
+        public System.Nullable<long> ProducingTargetId { get { throw null; } set { } }
     }
 }
 namespace Microsoft.Build.Construction

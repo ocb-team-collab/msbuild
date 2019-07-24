@@ -5,8 +5,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Build.BackEnd.Shared;
 using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
@@ -412,7 +414,7 @@ namespace Microsoft.Build.BackEnd
             {
                 string beginTargetBuild = String.Format(CultureInfo.CurrentCulture, "Build Target {0} in Project {1} - Start", this.Name, projectFullPath);
                 DataCollection.CommentMarkProfile(8800, beginTargetBuild);
-#endif 
+#endif
 
             try
             {
@@ -436,6 +438,8 @@ namespace Microsoft.Build.BackEnd
                 {
                     parentTargetName = ParentEntry.Target.Name;
                 }
+
+                List<StaticTarget> staticTargetByBucketIndex = new List<StaticTarget>(numberOfBuckets);
 
                 for (int i = 0; i < numberOfBuckets; i++)
                 {
@@ -465,7 +469,7 @@ namespace Microsoft.Build.BackEnd
 
                         // UNDONE: (Refactor) Refactor TargetUpToDateChecker to take a logging context, not a logging service.
                         TargetUpToDateChecker dependencyAnalyzer = new TargetUpToDateChecker(requestEntry.RequestConfiguration.Project, _target, targetLoggingContext.LoggingService, targetLoggingContext.BuildEventContext);
-                        DependencyAnalysisResult dependencyResult = dependencyAnalyzer.PerformDependencyAnalysis(bucket, out changedTargetInputs, out upToDateTargetInputs);
+                        DependencyAnalysisResult dependencyResult = dependencyAnalyzer.PerformDependencyAnalysis(bucket, out changedTargetInputs, out upToDateTargetInputs, out var staticInputs);
 
                         switch (dependencyResult)
                         {
@@ -500,7 +504,21 @@ namespace Microsoft.Build.BackEnd
                                 }
 
                                 // We either have some work to do or at least we need to infer outputs from inputs.
-                                bucketResult = await ProcessBucket(taskBuilder, targetLoggingContext, GetTaskExecutionMode(dependencyResult), lookupForInference, lookupForExecution, staticTargets);
+                                bucketResult = await ProcessBucket(taskBuilder, targetLoggingContext, GetTaskExecutionMode(dependencyResult), lookupForInference, lookupForExecution);
+                                var staticTargetForBucket = bucketResult.GeneratedStaticTarget;
+                                staticTargets.Add(staticTargetForBucket);
+                                staticTargetByBucketIndex.Add(staticTargetForBucket);
+
+                                foreach (var inputPath in staticInputs)
+                                {
+                                    if (string.IsNullOrWhiteSpace(inputPath))
+                                    {
+                                        continue;
+                                    }
+
+                                    long inputId = SimulatedFileSystem.Instance.GetFileId(inputPath);
+                                    staticTargetForBucket.RecordInput(inputId);
+                                }
 
                                 // Now aggregate the result with the existing known results.  There are four rules, assuming the target was not 
                                 // skipped due to being up-to-date:
@@ -608,7 +626,7 @@ namespace Microsoft.Build.BackEnd
                     if (!String.IsNullOrEmpty(targetReturns))
                     {
                         // Determine if we should keep duplicates.
-                        bool keepDupes = ConditionEvaluator.EvaluateCondition
+                        bool keepDupes = this.RequestEntry.IsStatic || ConditionEvaluator.EvaluateCondition
                                  (
                                  _target.KeepDuplicateOutputs,
                                  ParserOptions.AllowPropertiesAndItemLists,
@@ -627,9 +645,22 @@ namespace Microsoft.Build.BackEnd
 
                         if (keepDupes)
                         {
+                            int i = 0;
                             foreach (ItemBucket bucket in batchingBuckets)
                             {
-                                targetOutputItems.AddRange(bucket.Expander.ExpandIntoTaskItemsLeaveEscaped(targetReturns, ExpanderOptions.ExpandAll, targetReturnsLocation));
+                                IList<TaskItem> outputsForBucket = bucket.Expander.ExpandIntoTaskItemsLeaveEscaped(targetReturns, ExpanderOptions.ExpandAll, targetReturnsLocation);
+                                targetOutputItems.AddRange(outputsForBucket);
+
+                                var staticTarget = staticTargetByBucketIndex[i];
+                                foreach (TaskItem output in outputsForBucket)
+                                {
+                                    string unescapedOutput = EscapingUtilities.UnescapeAll(FileUtilities.FixFilePath(output.ItemSpec));
+                                    string fullOutputPath = Path.Combine(requestEntry.RequestConfiguration.Project.Directory, unescapedOutput);
+                                    long fileId = SimulatedFileSystem.Instance.RecordOutput(staticTarget.Id, fullOutputPath);
+                                    staticTarget.RecordOutput(fileId);
+                                }
+
+                                i++;
                             }
                         }
                         else
@@ -807,19 +838,19 @@ namespace Microsoft.Build.BackEnd
         /// <returns>
         /// The result of the tasks, based on the last task which ran.
         /// </returns>
-        private async Task<WorkUnitResult> ProcessBucket(ITaskBuilder taskBuilder, TargetLoggingContext targetLoggingContext, TaskExecutionMode mode, Lookup lookupForInference, Lookup lookupForExecution, List<StaticTarget> staticTargets)
+        private async Task<WorkUnitResult> ProcessBucket(ITaskBuilder taskBuilder, TargetLoggingContext targetLoggingContext, TaskExecutionMode mode, Lookup lookupForInference, Lookup lookupForExecution)
         {
             WorkUnitResultCode aggregatedTaskResult = WorkUnitResultCode.Success;
             WorkUnitActionCode finalActionCode = WorkUnitActionCode.Continue;
             WorkUnitResult lastResult = new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
 
+            var staticTarget = new StaticTarget();
             try
             {
                 // Grab the task builder so if cancel is called it will have something to operate on.
                 _currentTaskBuilder = taskBuilder;
 
                 int currentTask = 0;
-                var staticTarget = new StaticTarget();
 
                 // Walk through all of the tasks and execute them in order.
                 for (; (currentTask < _target.Children.Count) && !_cancellationToken.IsCancellationRequested; ++currentTask)
@@ -845,8 +876,6 @@ namespace Microsoft.Build.BackEnd
                     }
                 }
 
-                staticTargets.Add(staticTarget);
-
                 if (_cancellationToken.IsCancellationRequested)
                 {
                     aggregatedTaskResult = WorkUnitResultCode.Canceled;
@@ -858,7 +887,10 @@ namespace Microsoft.Build.BackEnd
                 _currentTaskBuilder = null;
             }
 
-            return new WorkUnitResult(aggregatedTaskResult, finalActionCode, lastResult.Exception);
+            return new WorkUnitResult(aggregatedTaskResult, finalActionCode, lastResult.Exception)
+            {
+                GeneratedStaticTarget = staticTarget,
+            };
         }
 
         /// <summary>

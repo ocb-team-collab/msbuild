@@ -10,6 +10,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Build.BackEnd.Shared;
 using Microsoft.Build.Collections;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
@@ -148,6 +149,33 @@ namespace Microsoft.Build.BackEnd
 
         [DataMember]
         public List<Task> Tasks = new List<Task>();
+
+        [DataMember]
+        public long Id;
+
+        [DataMember]
+        public List<long> InputFileIds { get; set; }
+
+        [DataMember]
+        public List<long> OutputFileIds { get; set; }
+
+        public void RecordInput(long fileId)
+        {
+            if (InputFileIds == null) InputFileIds = new List<long>();
+            InputFileIds.Add(fileId);
+        }
+
+        public void RecordOutput(long fileId)
+        {
+            if (OutputFileIds == null) OutputFileIds = new List<long>();
+            OutputFileIds.Add(fileId);
+        }
+
+        private static long _nextTargetId;
+        public StaticTarget()
+        {
+            Id = Interlocked.Increment(ref _nextTargetId);
+        }
     }
 
 
@@ -156,5 +184,8 @@ namespace Microsoft.Build.BackEnd
     {
         [DataMember]
         public List<StaticTarget> StaticTargets = new List<StaticTarget>();
+
+        [DataMember]
+        public List<StaticFile> Files;
     }
 }
