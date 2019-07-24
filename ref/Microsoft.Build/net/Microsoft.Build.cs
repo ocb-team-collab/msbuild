@@ -19,6 +19,8 @@ namespace Microsoft.Build.BackEnd
         [System.Runtime.Serialization.DataMemberAttribute]
         public long Id;
         [System.Runtime.Serialization.DataMemberAttribute]
+        public string Name;
+        [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task> Tasks;
         public StaticTarget() { }
         [System.Runtime.Serialization.DataMemberAttribute]

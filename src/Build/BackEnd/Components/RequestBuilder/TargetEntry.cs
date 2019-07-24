@@ -505,7 +505,7 @@ namespace Microsoft.Build.BackEnd
                                 // We either have some work to do or at least we need to infer outputs from inputs.
                                 bucketResult = await ProcessBucket(taskBuilder, targetLoggingContext, GetTaskExecutionMode(dependencyResult), lookupForInference, lookupForExecution);
 
-                                if (requestEntry.IsStatic)
+                                if (requestEntry.IsStatic && bucketResult.GeneratedStaticTarget != null)
                                 {
                                     var staticTarget = bucketResult.GeneratedStaticTarget;
                                     staticTargets.Add(staticTarget);
@@ -834,7 +834,8 @@ namespace Microsoft.Build.BackEnd
             WorkUnitActionCode finalActionCode = WorkUnitActionCode.Continue;
             WorkUnitResult lastResult = new WorkUnitResult(WorkUnitResultCode.Success, WorkUnitActionCode.Continue, null);
 
-            var staticTarget = new StaticTarget() { Location = _target.Location };
+            List<StaticTarget.Task> staticTasks = new List<StaticTarget.Task>();
+
             try
             {
                 // Grab the task builder so if cancel is called it will have something to operate on.
@@ -848,7 +849,7 @@ namespace Microsoft.Build.BackEnd
                     ProjectTargetInstanceChild targetChildInstance = _target.Children[currentTask];
 
                     // Execute the task.
-                    lastResult = await taskBuilder.ExecuteTask(targetLoggingContext, _requestEntry, _targetBuilderCallback, targetChildInstance, mode, lookupForInference, lookupForExecution, _cancellationToken, staticTarget.Tasks);
+                    lastResult = await taskBuilder.ExecuteTask(targetLoggingContext, _requestEntry, _targetBuilderCallback, targetChildInstance, mode, lookupForInference, lookupForExecution, _cancellationToken, staticTasks);
 
                     if (lastResult.ResultCode == WorkUnitResultCode.Failed)
                     {
@@ -875,6 +876,12 @@ namespace Microsoft.Build.BackEnd
             finally
             {
                 _currentTaskBuilder = null;
+            }
+
+            StaticTarget staticTarget = null;
+            if (staticTasks.Count > 0)
+            {
+                staticTarget = new StaticTarget() { Location = _target.Location, Tasks = staticTasks, Name = Name };
             }
 
             return new WorkUnitResult(aggregatedTaskResult, finalActionCode, lastResult.Exception)
