@@ -8,7 +8,7 @@ namespace Microsoft.Build.BackEnd
         [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.Shared.StaticFile> Files;
         [System.Runtime.Serialization.DataMemberAttribute]
-        public string ProjectPath
+        public string ProjectPath;
         [System.Runtime.Serialization.DataMemberAttribute]
         public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget> StaticTargets;
         public StaticGraph() { }
