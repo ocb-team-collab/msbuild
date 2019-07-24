@@ -187,9 +187,10 @@ namespace Microsoft.Build.TaskLauncher
             var ser = new DataContractJsonSerializer(typeof(StaticTarget));
 
             int i = 0;
-            StringBuilder stdIn = new StringBuilder();
             foreach (var target in graph.StaticTargets)
             {
+                StringBuilder stdIn = new StringBuilder();
+                Console.WriteLine("Working on target: " + i);
                 using (var stream = new MemoryStream())
                 {
                     ser.WriteObject(stream, target);
@@ -204,12 +205,14 @@ namespace Microsoft.Build.TaskLauncher
                     }
                 }
 
+                Console.WriteLine("Done with getting stdIn");
+
                 List<string> inputs = new List<string>()
                 {
                     $"Transformer.sealSourceDirectory(d`{Environment.GetEnvironmentVariable("ProgramData")}`, Transformer.SealSourceDirectoryOption.allDirectories)"
                 };
 
-                foreach (var inputId in target.InputFileIds)
+                foreach (var inputId in target.InputFileIds ?? Enumerable.Empty<long>())
                 {
                     if (!graph.Files.First(file => file.Id == inputId).ProducingTargetId.HasValue)
                     {
@@ -218,7 +221,7 @@ namespace Microsoft.Build.TaskLauncher
                 }
 
                 List<string> outputs = new List<string>();
-                foreach (var outputId in target.OutputFileIds)
+                foreach (var outputId in target.OutputFileIds ?? Enumerable.Empty<long>())
                 {
                     outputs.Add($"p`{graph.Files[(int)outputId].Path}`");
                 }
@@ -259,6 +262,9 @@ namespace Microsoft.Build.TaskLauncher
             while (projFolder != null)
             {
                 inputs.Add($"f`{Path.Combine(projFolder.FullName, "Directory.Build.rsp")}`");
+                inputs.Add($"f`{Path.Combine(projFolder.FullName, ".editorconfig")}`");
+                inputs.Add($"f`{Path.Combine(projFolder.FullName, "Directory.Build.targets")}`");
+
                 projFolder = projFolder.Parent;
             }
 
