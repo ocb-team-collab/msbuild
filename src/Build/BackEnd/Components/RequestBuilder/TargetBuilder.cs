@@ -18,6 +18,8 @@ using BuildAbortedException = Microsoft.Build.Exceptions.BuildAbortedException;
 using System.Threading.Tasks;
 using Microsoft.Build.Framework;
 using System.IO;
+using System.Linq;
+using Microsoft.Build.BackEnd.Shared;
 
 namespace Microsoft.Build.BackEnd
 {
@@ -190,6 +192,7 @@ namespace Microsoft.Build.BackEnd
             {
                 using (var stream = new FileStream(_projectInstance.FullPath + ".graph.json", FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
                 {
+                    staticGraph.Files = SimulatedFileSystem.Instance.KnownFiles.ToList();
                     new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(StaticGraph)).WriteObject(stream, staticGraph);
                 }
             }

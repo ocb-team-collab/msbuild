@@ -1,0 +1,8 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Phrase>Hello World!</Phrase>
+  </PropertyGroup>
+  <Target Name="Build" Inputs="input.txt" Outputs="output.txt">
+    <Exec Command="cmd /c copy input.txt output.txt"/>  
+  </Target>
+</Project>

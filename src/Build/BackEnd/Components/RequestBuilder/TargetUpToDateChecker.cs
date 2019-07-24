@@ -5,7 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-
+using System.Linq;
+using Microsoft.Build.BackEnd.Shared;
 using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
@@ -130,7 +131,8 @@ namespace Microsoft.Build.BackEnd
         (
             ItemBucket bucket,
             out ItemDictionary<ProjectItemInstance> changedTargetInputs,
-            out ItemDictionary<ProjectItemInstance> upToDateTargetInputs
+            out ItemDictionary<ProjectItemInstance> upToDateTargetInputs,
+            out IList<string> staticFileInputs
         )
         {
             // Clear any old dependency analysis logging details
@@ -145,6 +147,46 @@ namespace Microsoft.Build.BackEnd
 
             changedTargetInputs = null;
             upToDateTargetInputs = null;
+
+            staticFileInputs = null;
+
+            if (BuildRequestEntry.GlobalIsStatic)
+            {
+                // In static mode, there's no such thing as a target being up to date
+
+                ItemVectorPartitionCollection itemVectorsInTargetInputs;
+                ItemVectorPartitionCollection itemVectorTransformsInTargetInputs;
+                Dictionary<string, string> discreteItemsInTargetInputs; // UNDONE: (Refactor) Change to HashSet
+
+                ItemVectorPartitionCollection itemVectorsInTargetOutputs;
+                Dictionary<string, string> discreteItemsInTargetOutputs; // UNDONE: (Refactor) Change to HashSet
+                List<string> targetOutputItemSpecs;
+
+                ParseTargetInputOutputSpecifications(bucket,
+                    out itemVectorsInTargetInputs,
+                    out itemVectorTransformsInTargetInputs,
+                    out discreteItemsInTargetInputs,
+                    out itemVectorsInTargetOutputs,
+                    out discreteItemsInTargetOutputs,
+                    out targetOutputItemSpecs);
+
+                // Need to add all inputs here. Not yet sure how to handle vectors
+
+                IEnumerable<string> inputs = GetItemSpecsFromItemVectors(itemVectorsInTargetInputs)
+                    .Concat(GetItemSpecsFromItemVectors(itemVectorTransformsInTargetInputs))
+                    .Concat(discreteItemsInTargetInputs.Values);
+
+                staticFileInputs = new List<string>();
+
+                foreach (string input in inputs)
+                {
+                    string unescapedInput = EscapingUtilities.UnescapeAll(FileUtilities.FixFilePath(input));
+                    string unescapedInputFullPath = Path.Combine(_project.Directory, unescapedInput);
+                    staticFileInputs.Add(unescapedInputFullPath);
+                }
+
+                return DependencyAnalysisResult.FullBuild;
+            }
 
             if (TargetOutputSpecification.Length == 0)
             {
