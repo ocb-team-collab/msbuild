@@ -187,5 +187,8 @@ namespace Microsoft.Build.BackEnd
 
         [DataMember]
         public List<StaticFile> Files;
+
+        [DataMember]
+        public string ProjectPath;
     }
 }

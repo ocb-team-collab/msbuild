@@ -12,6 +12,7 @@ using Microsoft.Build.BackEnd;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Shared;
+using Microsoft.Build.Utilities;
 
 namespace Microsoft.Build.TaskLauncher
 {
@@ -44,9 +45,62 @@ namespace Microsoft.Build.TaskLauncher
 
                 StaticGraph graph = ReadStaticGraph(args[1]);
                 PrintPips(graph, args[2]);
-                WriteConfigDsc(args[2]);
+
+                Mount srcMount = new Mount
+                {
+                    Name = "Src",
+                    Path = Path.GetDirectoryName(graph.ProjectPath),
+                    IsReadable = true,
+                    IsWritable = false,
+                    TrackSourceFileChanges = true
+                };
+
+                List<Mount> mounts = new List<Mount>() { TaskLauncherMount, ProgramDataMount, srcMount };
+
+                WriteConfigDsc(args[2], mounts);
                 WriteModuleConfigDsc(args[2]);
                 Console.WriteLine(@"%PKGDOMINO%\bxl.exe /c:" + args[2] + @"\config.dsc");
+                return 0;
+            }
+            else if (args[0].Equals("meta", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length != 4)
+                {
+                    Usage();
+                    return 1;
+                }
+
+                if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("pkgdomino")))
+                {
+                    Console.WriteLine("%PKGDOMINO% must be set to root of Domino folder");
+                    return 1;
+                }
+
+                Mount srcMount = new Mount
+                {
+                    Name = "Src",
+                    Path = Path.GetDirectoryName(args[1]),
+                    IsReadable = true,
+                    IsWritable = true,
+                    TrackSourceFileChanges = true
+                };
+
+                Mount msbuildMount = new Mount
+                {
+                    Name = "MsbuildSrc",
+                    Path = Path.GetDirectoryName(args[3]),
+                    IsReadable = true,
+                    IsWritable = false,
+                    TrackSourceFileChanges = true
+                };
+
+                List<Mount> mounts = new List<Mount>() { TaskLauncherMount, ProgramDataMount, msbuildMount, srcMount };
+                WriteConfigDsc(args[2], mounts);
+                WriteModuleConfigDsc(args[2]);
+                PrintMetabuildSpec(args[1], args[3], args[2]);
+
+                Console.WriteLine(@"%PKGDOMINO%\bxl.exe /c:" + args[2] + @"\config.dsc");
+                Console.WriteLine(System.Reflection.Assembly.GetExecutingAssembly().Location + @" print " + args[1] + ".graph.json " + Path.GetDirectoryName(args[1]));
                 return 0;
             }
             else
@@ -56,16 +110,45 @@ namespace Microsoft.Build.TaskLauncher
             }
         }
 
+        private static Mount TaskLauncherMount = new Mount
+        {
+            Name = "TaskLauncherSrc",
+            Path = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location),
+            IsReadable = true,
+            IsWritable = false,
+            TrackSourceFileChanges = true
+        };
+
+        private static Mount ProgramDataMount = new Mount
+        {
+            Name = "ProgramData",
+            Path = Environment.GetEnvironmentVariable("ProgramData"),
+            IsReadable = true,
+            IsWritable = false,
+            TrackSourceFileChanges = true
+        };
+
         private static void Usage()
         {
-            Console.WriteLine("Usage:\n\trun < targetJson\t\t\t\tRuns a target given its json description.\n\tprint graphJsonFile outputFolder\t\tPrints DominoScript into the output folder for a given graph json.");
+            List<string> lines = new List<string>()
+            {
+                "Usage:",
+                "\trun < targetJson\t\t\tRuns a target given its json description.",
+                "\tprint graphJsonFile outputFolder\tPrints DominoScript into the output folder for a given graph json.",
+                "\tmeta projFile outputFolder msbuildPath\t\tPrints DominoScript into the output folder to run metabuild for a particular proj file"
+            };
+
+            foreach (var line in lines)
+            {
+                Console.WriteLine(line);
+            }
         }
 
         private static StaticGraph ReadStaticGraph(string file)
         {
             StaticGraph graph;
             var ser = new DataContractJsonSerializer(typeof(StaticGraph));
-            using (var stream = new FileStream(file, FileMode.Open))
+            using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read))
             {
                 graph = (StaticGraph)ser.ReadObject(stream);
             }
@@ -78,7 +161,7 @@ namespace Microsoft.Build.TaskLauncher
             StringBuilder specContents = new StringBuilder();
             specContents.AppendLine("import {Cmd, Transformer} from \"Sdk.Transformers\";\n");
             specContents.AppendLine(
-                string.Format("const tool: Transformer.ToolDefinition = {{ exe: f`{0}`, dependsOnWindowsDirectories: true, prepareTempDirectory: true, runtimeDirectoryDependencies: [ Transformer.sealSourceDirectory(d`{1}`) ] }};\n",
+                string.Format("const tool: Transformer.ToolDefinition = {{ exe: f`{0}`, dependsOnWindowsDirectories: true, prepareTempDirectory: true, runtimeDirectoryDependencies: [ Transformer.sealSourceDirectory(d`{1}`, Transformer.SealSourceDirectoryOption.allDirectories) ] }};\n",
                     System.Reflection.Assembly.GetExecutingAssembly().Location,
                     Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)));
 
@@ -107,30 +190,108 @@ namespace Microsoft.Build.TaskLauncher
                         "target" + i,
                         NormalizeRawString(stdIn.ToString(), stdIn),
                         "target" + i,
-                        Directory.GetCurrentDirectory(),
+                        Path.GetDirectoryName(graph.ProjectPath),
                         Path.Combine(Directory.GetCurrentDirectory(), "target" + i + ".out"),
-                        $@"f`{Environment.GetEnvironmentVariable("ProgramData")}\Microsoft\VisualStudio\Setup\x86\Microsoft.VisualStudio.Setup.Configuration.Native.dll`"));
+                        $@"Transformer.sealSourceDirectory(d`{Environment.GetEnvironmentVariable("ProgramData")}\Microsoft`, Transformer.SealSourceDirectoryOption.allDirectories)"));
                 i++;
 
             }
 
             string specFile = Path.Combine(outputFolder, "spec.dsc");
             File.Delete(specFile);
-
             File.WriteAllText(specFile, specContents.ToString());
 
             return 0;
         }
 
-        private static void WriteConfigDsc(string outputFolder)
+        private static void PrintMetabuildSpec(string projFile, string msbuildPath, string outputFolder)
         {
-            string configDsc = string.Format("config({{\n\tmodules: [f`module.config.dsc` ],\n\tresolvers: [{{\n\t\tkind: \"SourceResolver\",\n\t\tpackages: [ f`{0}` ]\n}}],\n\tmounts: [ {{ name: a`src`, path: p`{1}`, trackSourceFileChanges: true, isWritable: false, isReadable: true }}, {{ name: a`ProgramData`, path: p`{2}`, trackSourceFileChanges: true, isWritable: false, isReadable: true }} ]\n}});",
-                $"{Environment.GetEnvironmentVariable("pkgdomino")}/sdk/sdk.transformers/package.config.dsc",
-                Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location),
-                Environment.GetEnvironmentVariable("ProgramData"));
+            projFile = Path.GetFullPath(projFile);
+            DirectoryInfo projFolder = Directory.GetParent(projFile);
+
+
+            List<string> inputs = new List<string>()
+            {
+                $"Transformer.sealSourceDirectory(d`{Path.GetDirectoryName(msbuildPath)}`, Transformer.SealSourceDirectoryOption.allDirectories)",
+                $"Transformer.sealSourceDirectory(d`{Environment.GetEnvironmentVariable("ProgramData")}`, Transformer.SealSourceDirectoryOption.allDirectories)",
+                $"f`{projFile}`"
+            };
+
+            while(projFolder != null)
+            {
+                inputs.Add($"f`{Path.Combine(projFolder.FullName, "Directory.Build.rsp")}`");
+                projFolder = projFolder.Parent;
+            }
+
+            List<string> outputs = new List<string>()
+            {
+                $"f`{projFile}.graph.json`"
+            };
+
+            List<(string, string)> envVars = new List<(string, string)>()
+            {
+                ("MSBUILDSTATIC", "1")
+            };
+
+            StringBuilder specContents = new StringBuilder();
+            specContents.AppendLine("import {Artifact, Cmd, Transformer} from \"Sdk.Transformers\";\n");
+            specContents.AppendLine(
+                string.Format("const tool: Transformer.ToolDefinition = {{ exe: f`{0}`, dependsOnWindowsDirectories: true, prepareTempDirectory: true, runtimeDirectoryDependencies: [ Transformer.sealSourceDirectory(d`{1}`, Transformer.SealSourceDirectoryOption.allDirectories) ] }};\n",
+                    msbuildPath,
+                    Path.GetDirectoryName(msbuildPath)));
+            specContents.AppendLine(
+                string.Format("const {0} = Transformer.execute(\n{{\n\ttool: tool,\n\targuments: [ Cmd.rawArgument(\"{1}\") ],\n\tenvironmentVariables: [{2}],\n\tdescription: \"{3}\",\n\tworkingDirectory: d`{4}`,\n\tconsoleOutput: p`{5}`,\n\tdependencies: [{6}],\n\timplicitOutputs: [{7}]\n}});\n",
+                    "msbuild0",
+                    NormalizeRawString(projFile, new StringBuilder()),
+                    string.Join(",\n", envVars.Select(envVar => $"\t{{ name: \"{envVar.Item1}\", value: \"{envVar.Item2}\" }}")),
+                    "Running static msbuild for: " + projFile,
+                    Path.GetDirectoryName(projFile),
+                    Path.Combine(Path.GetDirectoryName(projFile), "msbuild0.out"),
+                    string.Join("\n,\t", inputs),
+                    string.Join("\n,\t", outputs)));
+            string specFile = Path.Combine(outputFolder, "spec.dsc");
+            File.Delete(specFile);
+            File.WriteAllText(specFile, specContents.ToString());
+        }
+
+        private class Mount
+        {
+            public string Name { get; set; }
+
+            public string Path { get; set; }
+
+            public bool TrackSourceFileChanges { get; set; }
+
+            public bool IsWritable { get; set; }
+
+            public bool IsReadable { get; set; }
+
+        }
+
+        private static void WriteConfigDsc(string outputFolder, List<Mount> mounts)
+        {
+            StringBuilder configBuilder = new StringBuilder();
+            configBuilder.AppendLine("config({");
+            configBuilder.AppendLine("\tmodules: [ f`module.config.dsc` ],");
+            configBuilder.AppendLine("\tresolvers: [{");
+            configBuilder.AppendLine("\t\tkind: \"SourceResolver\",");
+            configBuilder.AppendLine($"\t\tpackages: [ f`{Environment.GetEnvironmentVariable("pkgdomino")}/sdk/sdk.transformers/package.config.dsc` ]");
+            configBuilder.AppendLine("\t}],");
+            configBuilder.AppendLine("\tmounts: [");
+            foreach (var mount in mounts)
+            {
+                string mountLine = string.Format("\t\t{{ name: a`{0}`, path: p`{1}`, trackSourceFileChanges: {2}, isWritable: {3}, isReadable: {4} }},",
+                    mount.Name,
+                    mount.Path,
+                    mount.TrackSourceFileChanges.ToString().ToLower(),
+                    mount.IsWritable.ToString().ToLower(),
+                    mount.IsReadable.ToString().ToLower());
+                configBuilder.AppendLine(mountLine);
+            }
+            configBuilder.AppendLine("\t]\n});");
             string configFile = Path.Combine(outputFolder, "config.dsc");
             File.Delete(configFile);
-            File.WriteAllText(configFile, configDsc);
+            File.WriteAllText(configFile, configBuilder.ToString());
 
         }
 
@@ -225,12 +386,15 @@ namespace Microsoft.Build.TaskLauncher
 
                             break;
                         case StaticTarget.Task.ParameterType.Primitives:
-                            var values = parameter.Value.Primitives.Values.Select(stringValue => GetTypedValue(parameter.Value.Primitives.Type, stringValue));
+                            var values = parameter.Value.Primitives.Values.Select(stringValue => GetTypedValue(parameter.Value.Primitives.Type, stringValue)).ToArray();
                             TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, values);
                             break;
                         case StaticTarget.Task.ParameterType.TaskItem:
+                            TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, new TaskItem(parameter.Value.TaskItem.ItemSpec, parameter.Value.TaskItem.Metadata));
                             break;
                         case StaticTarget.Task.ParameterType.TaskItems:
+                            var taskItems = parameter.Value.TaskItems.Select(taskItem => new TaskItem(taskItem.ItemSpec, taskItem.Metadata)).ToArray();
+                            TaskFactoryWrapper.SetPropertyValue(task, taskPropertyInfo, taskItems);
                             break;
                     }
 

@@ -167,6 +167,7 @@ namespace Microsoft.Build.BackEnd
             ITaskBuilder taskBuilder = _componentHost.GetComponent(BuildComponentType.TaskBuilder) as ITaskBuilder;
 
             var staticGraph = new StaticGraph();
+            staticGraph.ProjectPath = _projectInstance.FullPath;
             try
             {
                 await ProcessTargetStack(taskBuilder, staticGraph.StaticTargets);
