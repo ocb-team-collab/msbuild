@@ -76,7 +76,7 @@ namespace Microsoft.Build.TaskLauncher
             Mount srcMount = new Mount
             {
                 Name = "Src",
-                Path = Path.GetDirectoryName(args[1]),
+                Path = Path.GetPathRoot(Path.GetFullPath(args[1])),
                 IsReadable = true,
                 IsWritable = true,
                 TrackSourceFileChanges = true
@@ -105,16 +105,43 @@ namespace Microsoft.Build.TaskLauncher
             StaticGraph graph = ReadStaticGraph(args[1]);
             PrintPips(graph, args[2]);
 
-            Mount srcMount = new Mount
+            Mount everythingMount = new Mount
             {
-                Name = "Src",
-                Path = Path.GetDirectoryName(graph.ProjectPath),
+                Name = "Everything",
+                Path = Path.GetPathRoot(Path.GetFullPath(graph.ProjectPath)),
                 IsReadable = true,
                 IsWritable = true,
                 TrackSourceFileChanges = true
             };
 
-            List<Mount> mounts = new List<Mount>() { TaskLauncherMount, ProgramDataMount, srcMount };
+            Mount srcMount = new Mount
+            {
+                Name = "Src",
+                Path = Path.GetDirectoryName(graph.ProjectPath),
+                IsReadable = true,
+                IsWritable = false,
+                TrackSourceFileChanges = true
+            };
+
+            Mount objMount = new Mount
+            {
+                Name = "Obj",
+                Path = Path.Combine(Path.GetDirectoryName(graph.ProjectPath), "obj"),
+                IsReadable = true,
+                IsWritable = true,
+                TrackSourceFileChanges = true
+            };
+
+            Mount binMount = new Mount
+            {
+                Name = "Bin",
+                Path = Path.Combine(Path.GetDirectoryName(graph.ProjectPath), "bin"),
+                IsReadable = true,
+                IsWritable = true,
+                TrackSourceFileChanges = true
+            };
+
+            List<Mount> mounts = new List<Mount>() { everythingMount, TaskLauncherMount, ProgramDataMount, srcMount, objMount, binMount };
 
             WriteConfigDsc(args[2], mounts);
             WriteModuleConfigDsc(args[2]);
@@ -270,6 +297,8 @@ namespace Microsoft.Build.TaskLauncher
 
             List<string> inputs = new List<string>()
             {
+                $"f`{Path.Combine(Path.GetDirectoryName(projFile), "app.config")}`",
+                // $"Transformer.sealSourceDirectory(d`{Path.GetDirectoryName(projFile)}`, Transformer.SealSourceDirectoryOption.allDirectories)",
                 $"Transformer.sealSourceDirectory(d`{ProgramFilesx86Mount.Path}`, Transformer.SealSourceDirectoryOption.allDirectories)",
                 $"Transformer.sealSourceDirectory(d`{Path.GetDirectoryName(msbuildPath)}`, Transformer.SealSourceDirectoryOption.allDirectories)",
                 $"Transformer.sealSourceDirectory(d`{Environment.GetEnvironmentVariable("ProgramData")}`, Transformer.SealSourceDirectoryOption.allDirectories)",
@@ -279,6 +308,7 @@ namespace Microsoft.Build.TaskLauncher
             while (projFolder != null)
             {
                 inputs.Add($"f`{Path.Combine(projFolder.FullName, "Directory.Build.rsp")}`");
+                inputs.Add($"f`{Path.Combine(projFolder.FullName, "Directory.Build.props")}`");
                 inputs.Add($"f`{Path.Combine(projFolder.FullName, ".editorconfig")}`");
                 inputs.Add($"f`{Path.Combine(projFolder.FullName, "Directory.Build.targets")}`");
 
