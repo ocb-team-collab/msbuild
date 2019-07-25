@@ -212,9 +212,14 @@ namespace Microsoft.Build.TaskLauncher
 
                 foreach (var inputId in target.InputFileIds ?? Enumerable.Empty<long>())
                 {
-                    if (!graph.Files.First(file => file.Id == inputId).ProducingTargetId.HasValue)
+                    var staticFile = graph.Files.First(file => file.Id == inputId);
+                    if (!staticFile.ProducingTargetId.HasValue)
                     {
-                        inputs.Add($"f`{graph.Files[(int)inputId].Path}`");
+                        inputs.Add($"f`{staticFile.Path}`");
+                    }
+                    else
+                    {
+                        inputs.Add($"target{staticFile.ProducingTargetId}.getOutputFile(p`{staticFile.Path}`)");    
                     }
                 }
 
@@ -233,7 +238,7 @@ namespace Microsoft.Build.TaskLauncher
                 }
 
                 specContents.AppendLine(
-                    $@"const {"target" + i} = Transformer.execute(
+                    $@"const {"target" + target.Id} = Transformer.execute(
 {{
 	tool: tool,
 	arguments: [ Cmd.rawArgument(""run"") ],
@@ -504,11 +509,16 @@ namespace Microsoft.Build.TaskLauncher
 
 
                 task.BuildEngine = new SimpleBuildEngine();
-                if (!task.Execute())
+                try
                 {
+                    // MSBuild ignores this return value :(
+                    task.Execute();
+                }
+                catch (Exception e)
+                {
+                    Console.Error.WriteLine("TASK ERROR: " + e);
                     return 1;
                 }
-
             }
 
             return 0;
