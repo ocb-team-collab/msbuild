@@ -19,5 +19,5 @@ echo Creating ProductBuild
 IF ERRORLEVEL 1 exit /B %ERRORLEVEL%
 
 echo Executing ProductBuild
-%PKGDOMINO%\bxl.exe /c:tests\copy\config.dsc 
+%PKGDOMINO%\bxl.exe /c:%~dp0tests\%1\config.dsc 
 IF ERRORLEVEL 1 exit /B %ERRORLEVEL%

@@ -7,9 +7,9 @@
     <InputFiles Include="@(InputFilenames->'src\%(filename)%(extension)')" />
   </ItemGroup>
   <ItemGroup>
-    <OutputFiles Include="@(InputFiles->'out\%(filename)%(extension)')" />
+    <OutputFiles Include="@(InputFiles->'obj\%(filename)%(extension)')" />
   </ItemGroup>
   <Target Name="Build" Inputs="@(InputFiles)" Outputs="@(OutputFiles)">
-    <Copy SourceFiles="@(InputFiles)" DestinationFolder="out" />
+    <Copy SourceFiles="@(InputFiles)" DestinationFolder="obj" />
   </Target>
 </Project>
