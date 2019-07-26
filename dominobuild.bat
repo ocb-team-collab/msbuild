@@ -1,6 +1,9 @@
 @echo off
 IF "%1" == "" ((echo Please specify which test to run - e.g.: copy) & exit /B 1)
 
+mkdir %~dp0artifacts\bin\MSBuild\Debug\net472\current\ 2> nul
+copy %~dp0artifacts\bin\Microsoft.Build.Tasks\Debug\net472\Microsoft.Common.props %~dp0artifacts\bin\MSBuild\Debug\net472\current\Microsoft.common.props
+
 IF NOT EXIST %~dp0..\DominoStaticMsBuild mkdir %~dp0..\DominoStaticMsBuild
 
 set TargetProjFile=%~dp0tests\%1\project.proj
