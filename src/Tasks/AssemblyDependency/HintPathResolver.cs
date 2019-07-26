@@ -53,7 +53,9 @@ namespace Microsoft.Build.Tasks
         {
             if (!string.IsNullOrEmpty(hintPath))
             {
-                if (ResolveAsFile(FileUtilities.NormalizePath(hintPath), assemblyName, isPrimaryProjectReference, wantSpecificVersion, true, assembliesConsideredAndRejected))
+                // If this is static mode, assume that the hint path is valid. We can't confirm because the file might not exist yet
+                bool isMatch = GlobalEnvVars.GlobalIsStatic || ResolveAsFile(FileUtilities.NormalizePath(hintPath), assemblyName, isPrimaryProjectReference, wantSpecificVersion, true, assembliesConsideredAndRejected);
+                if (isMatch)
                 {
                     userRequestedSpecificFile = true;
                     foundPath = hintPath;

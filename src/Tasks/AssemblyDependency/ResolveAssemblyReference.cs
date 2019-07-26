@@ -2289,7 +2289,8 @@ namespace Microsoft.Build.Tasks
                         {
                             AssemblyNameExtension assemblyName = null;
 
-                            if (fileExists(item.ItemSpec) && !Reference.IsFrameworkFile(item.ItemSpec, _targetFrameworkDirectories))
+                            // Can't look at the binary in static mode; it might not exist
+                            if (!GlobalEnvVars.GlobalIsStatic && fileExists(item.ItemSpec) && !Reference.IsFrameworkFile(item.ItemSpec, _targetFrameworkDirectories))
                             {
                                 try
                                 {
