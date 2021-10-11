@@ -26,6 +26,15 @@ namespace Microsoft.Build.TaskLauncher
                 Usage();
                 return 0;
             }
+
+            if (Environment.GetEnvironmentVariable("MICROSOFT_BUILD_TASKLAUNCHER_DEBUG") == "1")
+            {
+                while(!Debugger.IsAttached)
+                {
+                    System.Threading.Thread.Sleep(100);
+                }
+            }
+
             if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
             {
                 return RunTarget();
