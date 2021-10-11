@@ -100,7 +100,7 @@ namespace Microsoft.Build.TaskLauncher
                 TrackSourceFileChanges = true
             };
 
-            List<Mount> mounts = new List<Mount>() { TaskLauncherMount, ProgramDataMount, ProgramFilesx86Mount, msbuildMount, srcMount };
+            List<Mount> mounts = new List<Mount>() { TaskLauncherMount, ProgramDataMount, BreadcrumbStoreMount, ProgramFilesx86Mount, msbuildMount, srcMount };
             WriteConfigDsc(args[2], mounts);
             WriteModuleConfigDsc(args[2]);
             PrintMetabuildSpec(args[1], args[3], args[2]);
@@ -150,7 +150,7 @@ namespace Microsoft.Build.TaskLauncher
                 TrackSourceFileChanges = true
             };
 
-            List<Mount> mounts = new List<Mount>() { everythingMount, TaskLauncherMount, ProgramDataMount, srcMount, objMount, binMount };
+            List<Mount> mounts = new List<Mount>() { everythingMount, TaskLauncherMount, ProgramDataMount, BreadcrumbStoreMount, srcMount, objMount, binMount };
 
             WriteConfigDsc(args[2], mounts);
             WriteModuleConfigDsc(args[2]);
@@ -173,6 +173,15 @@ namespace Microsoft.Build.TaskLauncher
             IsReadable = true,
             IsWritable = false,
             TrackSourceFileChanges = true
+        };
+
+        private static Mount BreadcrumbStoreMount = new Mount
+        {
+            Name = "BreadcrumbStore",
+            Path = Path.Combine(Environment.GetEnvironmentVariable("ProgramData"), "Microsoft", "NetFramework", "BreadcrumbStore"),
+            IsReadable = true,
+            IsWritable = false,
+            TrackSourceFileChanges = false
         };
 
         private static Mount ProgramFilesx86Mount = new Mount
@@ -273,6 +282,11 @@ namespace Microsoft.Build.TaskLauncher
                     outputs.Add($"p`{graph.Files[(int)outputId].Path}`");
                 }
 
+                var envVars = new List<(string, string)>()
+                {
+                    ("ProgramData", Environment.GetEnvironmentVariable("ProgramData"))
+                };
+
                 specContents.AppendLine(
                     $@"const {"target" + target.Id} = Transformer.execute(
 {{
@@ -281,6 +295,7 @@ namespace Microsoft.Build.TaskLauncher
 	consoleInput: ""{NormalizeRawString(stdIn.ToString(), stdIn)}"",
 	description: ""{target.Name + "_" + NormalizeRawString(target.LocationString, new StringBuilder())}"",
 	workingDirectory: d`{Path.GetDirectoryName(graph.ProjectPath)}`,
+    environmentVariables: [{string.Join(",\n", envVars.Select(envVar => $"\t{{ name: \"{envVar.Item1}\", value: \"{envVar.Item2}\" }}"))}],
 	consoleOutput: p`{Path.Combine(Directory.GetCurrentDirectory(), "target" + i + ".out")}`,
 	dependencies: [
 {string.Join(",\n\t\t", inputs)}
@@ -331,7 +346,8 @@ namespace Microsoft.Build.TaskLauncher
 
             List<(string, string)> envVars = new List<(string, string)>()
             {
-                ("MSBUILDSTATIC", "1")
+                ("MSBUILDSTATIC", "1"),
+                ("ProgramData", Environment.GetEnvironmentVariable("ProgramData"))
             };
 
             StringBuilder specContents = new StringBuilder();
