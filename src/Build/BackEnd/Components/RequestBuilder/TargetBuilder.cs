@@ -190,7 +190,7 @@ namespace Microsoft.Build.BackEnd
 
             if (entry.IsStatic)
             {
-                using (var stream = new FileStream(_projectInstance.FullPath + ".graph.json", FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
+                using (var stream = new FileStream(Environment.GetEnvironmentVariable("MSBUILDSTATIC_OUTPUT"), FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
                 {
                     staticGraph.Files = SimulatedFileSystem.Instance.KnownFiles.ToList();
                     new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(StaticGraph)).WriteObject(stream, staticGraph);
