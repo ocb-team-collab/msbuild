@@ -54,10 +54,8 @@ namespace Microsoft.Build.Utilities
     /// Base class used for tasks that spawn an executable. This class implements the ToolPath property which can be used to
     /// override the default path.
     /// </summary>
-    /// <remarks>
-    /// INTERNAL WARNING: DO NOT USE the Log property in this class! Log points to resources in the task assembly itself, and 
-    /// we want to use resources from Utilities. Use LogPrivate (for private Utilities resources) and LogShared (for shared MSBuild resources)
-    /// </remarks>
+    // INTERNAL WARNING: DO NOT USE the Log property in this class! Log points to resources in the task assembly itself, and 
+    // we want to use resources from Utilities. Use LogPrivate (for private Utilities resources) and LogShared (for shared MSBuild resources)
     public abstract class ToolTask : Task, ICancelableTask
     {
         private static readonly bool s_preserveTempFiles = string.Equals(Environment.GetEnvironmentVariable("MSBUILDPRESERVETOOLTEMPFILES"), "1", StringComparison.Ordinal);
@@ -183,6 +181,14 @@ namespace Microsoft.Build.Utilities
         /// </summary>
         /// <value>Path to tool.</value>
         public string ToolPath { set; get; }
+
+        /// <summary>
+        /// Whether or not to use UTF8 encoding for the cmd file and console window.
+        /// Values: Always, Never, Detect
+        /// If set to Detect, the current code page will be used unless it cannot represent 
+        /// the Command string. In that case, UTF-8 is used.
+        /// </summary>
+        public string UseUtf8Encoding { get; set; } = EncodingUtilities.UseUtf8Detect;
 
         /// <summary>
         /// Array of equals-separated pairs of environment
@@ -311,6 +317,11 @@ namespace Microsoft.Build.Utilities
         #endregion
 
         #region Overridable methods
+
+        /// <summary>
+        /// Overridable function called after <see cref="Process.Start()"/> in <see cref="ExecuteTool"/>
+        /// </summary>
+        protected virtual void ProcessStarted() { }
 
         /// <summary>
         /// Gets the fully qualified tool name. Should return ToolExe if ToolTask should search for the tool 
@@ -453,7 +464,7 @@ namespace Microsoft.Build.Utilities
                 pathToTool = Path.Combine(ToolPath, ToolExe);
             }
 
-            if (string.IsNullOrWhiteSpace(pathToTool) || ToolPath == null && !FileSystems.Default.FileExists(pathToTool))
+            if (string.IsNullOrWhiteSpace(pathToTool) || (ToolPath == null && !FileSystems.Default.FileExists(pathToTool)))
             {
                 // Otherwise, try to find the tool ourselves.
                 pathToTool = GenerateFullPathToTool();
@@ -602,7 +613,7 @@ namespace Microsoft.Build.Utilities
 
             // Generally we won't set a working directory, and it will use the current directory
             string workingDirectory = GetWorkingDirectory();
-            if (null != workingDirectory)
+            if (workingDirectory != null)
             {
                 startInfo.WorkingDirectory = workingDirectory;
             }
@@ -610,7 +621,7 @@ namespace Microsoft.Build.Utilities
             // Old style environment overrides
 #pragma warning disable 0618 // obsolete
             Dictionary<string, string> envOverrides = EnvironmentOverride;
-            if (null != envOverrides)
+            if (envOverrides != null)
             {
                 foreach (KeyValuePair<string, string> entry in envOverrides)
                 {
@@ -705,6 +716,9 @@ namespace Microsoft.Build.Utilities
                 {
                     proc.StandardInput.Dispose();
                 }
+
+                // Call user-provided hook for code that should execute immediately after the process starts
+                this.ProcessStarted();
 
                 // sign up for stderr callbacks
                 proc.BeginErrorReadLine();
@@ -943,7 +957,6 @@ namespace Microsoft.Build.Utilities
                         timeout = result;
                     }
                 }
-
                 proc.KillTree(timeout);
             }
         }
@@ -1299,7 +1312,7 @@ namespace Microsoft.Build.Utilities
                 {
                     string[] nameValuePair = entry.Split(s_equalsSplitter, 2);
 
-                    if (nameValuePair.Length == 1 || nameValuePair.Length == 2 && nameValuePair[0].Length == 0)
+                    if (nameValuePair.Length == 1 || (nameValuePair.Length == 2 && nameValuePair[0].Length == 0))
                     {
                         LogPrivate.LogErrorWithCodeFromResources("ToolTask.InvalidEnvironmentParameter", nameValuePair[0]);
                         return false;
@@ -1354,10 +1367,34 @@ namespace Microsoft.Build.Utilities
                         File.AppendAllText(_temporaryBatchFile, "#!/bin/sh\n"); // first line for UNIX is ANSI
                         // This is a hack..!
                         File.AppendAllText(_temporaryBatchFile, AdjustCommandsForOperatingSystem(commandLineCommands), EncodingUtilities.CurrentSystemOemEncoding);
+
+                        commandLineCommands = $"\"{_temporaryBatchFile}\"";
                     }
                     else
                     {
-                        File.AppendAllText(_temporaryBatchFile, commandLineCommands, EncodingUtilities.CurrentSystemOemEncoding);
+                        Encoding encoding;
+
+                        if (Traits.Instance.EscapeHatches.AvoidUnicodeWhenWritingToolTaskBatch)
+                        {
+                            encoding = EncodingUtilities.CurrentSystemOemEncoding;
+                        }
+                        else
+                        {
+                            encoding = EncodingUtilities.BatchFileEncoding(commandLineCommands + _temporaryBatchFile, UseUtf8Encoding);
+
+                            if (encoding.CodePage != EncodingUtilities.CurrentSystemOemEncoding.CodePage)
+                            {
+                                // cmd.exe reads the first line in the console CP, 
+                                // which for a new console (as here) is OEMCP
+                                // this string should ideally always be ASCII
+                                // and the same in any OEMCP.
+                                File.AppendAllText(_temporaryBatchFile,
+                                                   $@"%SystemRoot%\System32\chcp.com {encoding.CodePage}>nul{Environment.NewLine}",
+                                                   EncodingUtilities.CurrentSystemOemEncoding);
+                            }
+                        }
+
+                        File.AppendAllText(_temporaryBatchFile, commandLineCommands, encoding);
 
                         string batchFileForCommandLine = _temporaryBatchFile;
 
@@ -1421,7 +1458,7 @@ namespace Microsoft.Build.Utilities
                 // Old style environment overrides
 #pragma warning disable 0618 // obsolete
                 Dictionary<string, string> envOverrides = EnvironmentOverride;
-                if (null != envOverrides)
+                if (envOverrides != null)
                 {
                     foreach (KeyValuePair<string, string> entry in envOverrides)
                     {

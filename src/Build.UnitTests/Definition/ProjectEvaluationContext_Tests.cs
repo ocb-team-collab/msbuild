@@ -7,11 +7,12 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using Microsoft.Build.BackEnd.SdkResolution;
+using Microsoft.Build.Construction;
 using Microsoft.Build.Definition;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Evaluation.Context;
+using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
-using Microsoft.Build.Shared;
 using Microsoft.Build.Unittest;
 using Shouldly;
 using Xunit;
@@ -85,6 +86,49 @@ namespace Microsoft.Build.UnitTests.Definition
             }
         }
 
+        [Fact]
+        public void PassedInFileSystemShouldBeReusedInSharedContext()
+        {
+            var projectFiles = new[]
+            {
+                _env.CreateFile("1.proj", @"<Project> <PropertyGroup Condition=`Exists('1.file')`></PropertyGroup> </Project>".Cleanup()).Path,
+                _env.CreateFile("2.proj", @"<Project> <PropertyGroup Condition=`Exists('2.file')`></PropertyGroup> </Project>".Cleanup()).Path
+            };
+
+            var projectCollection = _env.CreateProjectCollection().Collection;
+            var fileSystem = new Helpers.LoggingFileSystem();
+            var evaluationContext = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared, fileSystem);
+
+            foreach (var projectFile in projectFiles)
+            {
+                Project.FromFile(
+                    projectFile,
+                    new ProjectOptions
+                    {
+                        ProjectCollection = projectCollection,
+                        EvaluationContext = evaluationContext
+                    }
+                );
+            }
+
+            fileSystem.ExistenceChecks.OrderBy(kvp => kvp.Key)
+                .ShouldBe(
+                    new Dictionary<string, int>
+                    {
+                        {Path.Combine(_env.DefaultTestDirectory.Path, "1.file"), 1},
+                        {Path.Combine(_env.DefaultTestDirectory.Path, "2.file"), 1}
+                    }.OrderBy(kvp => kvp.Key));
+
+            fileSystem.DirectoryEntryExistsCalls.ShouldBe(2);
+        }
+
+        [Fact]
+        public void IsolatedContextShouldNotSupportBeingPassedAFileSystem()
+        {
+            var fileSystem = new Helpers.LoggingFileSystem();
+            Should.Throw<ArgumentException>(() => EvaluationContext.Create(EvaluationContext.SharingPolicy.Isolated, fileSystem));
+        }
+
         [Theory]
         [InlineData(EvaluationContext.SharingPolicy.Shared)]
         [InlineData(EvaluationContext.SharingPolicy.Isolated)]
@@ -114,6 +158,45 @@ namespace Microsoft.Build.UnitTests.Definition
                 project.ReevaluateIfNecessary();
 
                 _resolver.ResolvedCalls["foo"].ShouldBe(2);
+            }
+            finally
+            {
+                EvaluationContext.TestOnlyHookOnCreate = null;
+            }
+        }
+
+        [Theory]
+        [InlineData(EvaluationContext.SharingPolicy.Shared)]
+        [InlineData(EvaluationContext.SharingPolicy.Isolated)]
+        public void ProjectInstanceShouldRespectSharingPolicy(EvaluationContext.SharingPolicy policy)
+        {
+            try
+            {
+                var seenContexts = new HashSet<EvaluationContext>();
+
+                EvaluationContext.TestOnlyHookOnCreate = c => seenContexts.Add(c);
+
+                var collection = _env.CreateProjectCollection().Collection;
+
+                var context = EvaluationContext.Create(policy);
+
+                const int numIterations = 10;
+                for (int i = 0; i < numIterations; i++)
+                {
+                    ProjectInstance.FromProjectRootElement(
+                        ProjectRootElement.Create(),
+                        new ProjectOptions
+                        {
+                            ProjectCollection = collection,
+                            EvaluationContext = context,
+                            LoadSettings = ProjectLoadSettings.IgnoreMissingImports
+                        });
+                }
+
+                int expectedNumContexts = policy == EvaluationContext.SharingPolicy.Shared ? 1 : numIterations;
+
+                seenContexts.Count.ShouldBe(expectedNumContexts);
+                seenContexts.ShouldAllBe(c => c.Policy == policy);
             }
             finally
             {
@@ -386,6 +469,14 @@ namespace Microsoft.Build.UnitTests.Definition
         [MemberData(nameof(ContextDisambiguatesRelativeGlobsData))]
         public void ContextDisambiguatesAFullyQualifiedGlobPointingInAnotherRelativeGlobsCone(EvaluationContext.SharingPolicy policy, string[][] expectedGlobExpansions)
         {
+            if (policy == EvaluationContext.SharingPolicy.Shared)
+            {
+                // This test case has a dependency on our glob expansion caching policy. If the evaluation context is reused
+                // between evaluations and files are added to the filesystem between evaluations, the cache may be returning
+                // stale results. Run only the Isolated variant.
+                return;
+            }
+
             var project1Directory = _env.DefaultTestDirectory.CreateDirectory("Project1");
             var project1GlobDirectory = project1Directory.CreateDirectory("Glob").CreateDirectory("1").Path;
 

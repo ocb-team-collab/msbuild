@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.2" xsi:schemaLocation="urn:oasis:names:tc:xliff:document:1.2 xliff-core-1.2-transitional.xsd">
-  <file datatype="xml" source-language="en" target-language="zh-HANT" original="../Strings.resx">
+  <file datatype="xml" source-language="en" target-language="zh-Hant" original="../Strings.resx">
     <body>
       <trans-unit id="AppConfig.BindingRedirectMissingOldVersion">
         <source>BindingRedirect is missing required field 'oldVersion'.</source>
@@ -161,6 +161,11 @@
         <target state="translated">MSB3021: 無法將檔案 "{0}" 複製到 "{1}"。{2}</target>
         <note>{StrBegin="MSB3021: "}</note>
       </trans-unit>
+      <trans-unit id="Copy.ErrorIfLinkFailsSetWithoutLinkOption">
+        <source>MSB3892: ErrorIfLinkFails requires UseHardlinksIfPossible or UseSymbolicLinksIfPossible to be set.</source>
+        <target state="translated">MSB3892: ErrorIfLinkFails 必須設定 UseHardlinksIfPossible 或 UseSymbolicLinksIfPossible。</target>
+        <note>{StrBegin="MSB3892: "} LOCALIZATION: Do not localize "ErrorIfLinkFails", "UseHardLinksIfPossible", or "UseSymbolicLinksIfPossible".</note>
+      </trans-unit>
       <trans-unit id="Copy.ExactlyOneTypeOfDestination">
         <source>MSB3022: Both "{0}" and "{1}" were specified as input parameters in the project file. Please choose one or the other.</source>
         <target state="translated">MSB3022: 在專案檔中已將 "{0}" 和 "{1}" 同時指定為輸入參數。請選擇使用其中一個。</target>
@@ -175,6 +180,11 @@
         <source>Creating hard link to copy "{0}" to "{1}".</source>
         <target state="translated">正在建立永久連結將 "{0}" 複製到 "{1}"。</target>
         <note>LOCALIZATION: {0} and {1} are paths.</note>
+      </trans-unit>
+      <trans-unit id="Copy.LinkFailed">
+        <source>MSB3893: Could not use a link to copy "{0}" to "{1}".</source>
+        <target state="translated">MSB3893: 無法使用連結將 "{0}" 複製到 "{1}"。</target>
+        <note>{StrBegin="MSB3893: "} LOCALIZATION: {0} and {1} are paths.</note>
       </trans-unit>
       <trans-unit id="Copy.RetryingAsFileCopy">
         <source>Could not use a link to copy "{0}" to "{1}". Copying the file instead. {2}</source>
@@ -499,6 +509,11 @@
         <target state="translated">全域屬性:</target>
         <note />
       </trans-unit>
+      <trans-unit id="General.StateFileAlreadyPresent">
+        <source>MSB3667: There is already a file at "{0}". If you are trying to create a precomputed cache, ensure that you are building a single project that depends on your assemblies rather than building your assemblies themselves. If you are running the ResolveAssemblyReference task normally, do not set the "AssemblyInformationCacheOutputPath" parameter of the ResolveAssemblyReference task.</source>
+        <target state="translated">MSB3667: "{0}" 上已有檔案。若要嘗試建立預先計算的快取，請務必建立一個需要使用組件的專案，而非建立組件本身。若是正常執行 ResolveAssemblyReference 工作，請勿為 ResolveAssemblyReference 工作設定 "AssemblyInformationCacheOutputPath" 參數。</target>
+        <note>{StrBegin="MSB3667: "}</note>
+      </trans-unit>
       <trans-unit id="General.UndefineProperties">
         <source>Removing Properties:</source>
         <target state="translated">正在移除屬性:</target>
@@ -721,7 +736,7 @@
       </trans-unit>
       <trans-unit id="GenerateBootstrapper.PackageHomeSiteMissing">
         <source>MSB3164: No 'HomeSite' attribute has been provided for '{0}', so the package will be published to the same location as the bootstrapper.</source>
-        <target state="translated">MSB3164: 未提供 '{0}' 的 'HomeSite' 屬性，因此套件將與啟動載入器發行到相同的位置。</target>
+        <target state="translated">MSB3164: 未提供 '{0}' 的 'HomeSite' 屬性，因此套件將與啟動載入器發佈到相同的位置。</target>
         <note>{StrBegin="MSB3164: "}</note>
       </trans-unit>
       <trans-unit id="GenerateBootstrapper.PackageValidation">
@@ -763,6 +778,31 @@
         <source>MSB3160: Xml Validation warning in file '{0}': {1}</source>
         <target state="translated">MSB3160: 檔案 '{0}' 中發生 XML 驗證警告: {1}</target>
         <note>{StrBegin="MSB3160: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.CopyError">
+        <source>MSB3961: An error occurred trying to copy '{0}' to '{1}': {2}</source>
+        <target state="translated">MSB3961: 嘗試將 '{0}' 複製到 '{1}' 時發生錯誤: {2}</target>
+        <note>{StrBegin="MSB3961: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.General">
+        <source>MSB3962: An error occurred generating a launcher: {0}</source>
+        <target state="translated">MSB3962: 產生啟動器時發生錯誤: {0}</target>
+        <note>{StrBegin="MSB3962: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.InvalidInput">
+        <source>MSB3963: Not enough data was provided to generate a launcher. Please provide a value for: 'EntryPoint'.</source>
+        <target state="translated">MSB3963: 提供的資料不足，無法產生啟動器。請提供 'EntryPoint' 的值。</target>
+        <note>{StrBegin="MSB3963: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.MissingLauncherExe">
+        <source>MSB3964: Could not find required file '{0}'.</source>
+        <target state="translated">MSB3964: 找不到必要的檔案 '{0}'。</target>
+        <note>{StrBegin="MSB3964: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.NoOutputPath">
+        <source>MSB3965: No output path specified in build settings.</source>
+        <target state="translated">MSB3965: 組建設定中未指定輸出路徑。</target>
+        <note>{StrBegin="MSB3965: "}</note>
       </trans-unit>
       <trans-unit id="GenerateManifest.AllowPartiallyTrustedCallers">
         <source>MSB3177: Reference '{0}' does not allow partially trusted callers.</source>
@@ -851,7 +891,7 @@
       </trans-unit>
       <trans-unit id="GenerateManifest.GreaterMinimumRequiredVersion">
         <source>MSB3176: Specified minimum required version is greater than the current publish version. Please specify a version less than or equal to the current publish version.</source>
-        <target state="translated">MSB3176: 指定的最低必要版本高於目前的發行版本。請指定低於或等於目前發行版本的版本。</target>
+        <target state="translated">MSB3176: 指定的最低必要版本高於目前的發佈版本。請指定低於或等於目前發佈版本的版本。</target>
         <note>{StrBegin="MSB3176: "}</note>
       </trans-unit>
       <trans-unit id="GenerateManifest.HostInBrowserInvalidFrameworkVersion">
@@ -969,6 +1009,11 @@
         <target state="translated">MSB3190: ClickOnce 不支援要求執行層級 '{0}'。</target>
         <note>{StrBegin="MSB3190: "}</note>
       </trans-unit>
+      <trans-unit id="GenerateResource.CoreSupportsLimitedScenarios">
+        <source>MSB3824: In order to build with .NET Core, resource inputs must be in .txt or .resx format.</source>
+        <target state="translated">MSB3824: 若要使用 .NET Core 建置，資源輸入必須採用 .txt 或 .resx 格式。</target>
+        <note>{StrBegin="MSB3824: "}</note>
+      </trans-unit>
       <trans-unit id="GenerateResource.InputDoesntExist">
         <source>Input file "{0}" does not exist.</source>
         <target state="translated">輸入檔 "{0}" 不存在。</target>
@@ -1001,12 +1046,12 @@
       </trans-unit>
       <trans-unit id="GenerateResource.PreserializedResourcesRequiresExtensions">
         <source>MSB3822: Non-string resources require the System.Resources.Extensions assembly at runtime, but it was not found in this project's references.</source>
-        <target state="new">MSB3822: Non-string resources require the System.Resources.Extensions assembly at runtime, but it was not found in this project's references.</target>
+        <target state="translated">MSB3822: 非字串資源在執行階段需要 System.Resources.Extensions 組件，但在這個專案的參考中找不到它。</target>
         <note>{StrBegin="MSB3822: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.PreserializedResourcesRequiresProperty">
         <source>MSB3823: Non-string resources require the property GenerateResourceUsePreserializedResources to be set to true.</source>
-        <target state="new">MSB3823: Non-string resources require the property GenerateResourceUsePreserializedResources to be set to true.</target>
+        <target state="translated">MSB3823: 非字串資源需要屬性 GenerateResourceUsePreserializedResources 設定為 true。</target>
         <note>{StrBegin="MSB3823: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.ResourceNotFound">
@@ -1025,9 +1070,9 @@
         <note>{StrBegin="MSB3554: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.CorruptOutput">
-        <source>MSB3555: Output file "{0}" is possibly corrupt.</source>
-        <target state="translated">MSB3555: 輸出檔 "{0}" 可能已經損毀。</target>
-        <note>{StrBegin="MSB3555: "}</note>
+        <source>Output file "{0}" is possibly corrupt and will be deleted and recreated.</source>
+        <target state="translated">輸出檔案 "{0}" 可能已損毀，檔案將會受到刪除並重新建立。</target>
+        <note />
       </trans-unit>
       <trans-unit id="GenerateResource.OnlyStringsSupported">
         <source>MSB3556: Only strings can be written to a .txt file, resource "{0}" is type {1}.</source>
@@ -1290,6 +1335,11 @@
         <source>Found the Microsoft Windows SDK installed at "{0}".</source>
         <target state="translated">找到安裝在 "{0}" 的 Microsoft Windows SDK。</target>
         <note />
+      </trans-unit>
+      <trans-unit id="GetReferenceAssemblyPaths.OutOfDateSDK">
+        <source>MSB3971: The reference assemblies for "{0}" were not found. You might be using an older .NET SDK to target .NET 5.0 or higher. Update Visual Studio and/or your .NET SDK.</source>
+        <target state="translated">MSB3971: 找不到 "{0}" 的參考組件。您可能使用了舊版 .NET SDK 來以 .NET 5.0 或更高版本為目標。請更新 Visual Studio 及 (或) 您的 .NET SDK。</target>
+        <note>{StrBegin="MSB3971: "}</note>
       </trans-unit>
       <trans-unit id="MakeDir.Comment">
         <source>Creating directory "{0}".</source>
@@ -1693,7 +1743,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoRedistAssembliesToGenerateExclusionList">
         <source>MSB3256: No assemblies were read in from the redist lists. A TargetFramework profile exclusion list could not be generated. </source>
-        <target state="translated">MSB3256: 未從可轉散發清單讀入任何組件。無法產生 TargetFramework 設定檔排除清單。 </target>
+        <target state="translated">MSB3256: 未從可轉散發套件清單讀入任何組件。無法產生 TargetFramework 設定檔排除清單。 </target>
         <note>{StrBegin="MSB3256: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.PrimaryReferenceOutsideOfFramework">
@@ -1713,7 +1763,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoProfilesFound">
         <source>MSB3260: Could not find any target framework profile redist files in the FullFrameworkFolders locations.</source>
-        <target state="translated">MSB3260: 在 FullFrameworkFolders 位置中找不到任何目標 Framework 設定檔的可轉散發檔。</target>
+        <target state="translated">MSB3260: 在 FullFrameworkFolders 位置中找不到任何目標 Framework 設定檔的可轉散發套件檔案。</target>
         <note>{StrBegin="MSB3260: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.FrameworkDirectoryOnProfiles">
@@ -1787,8 +1837,10 @@
         <note>{StrBegin="MSB3276: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.FoundConflicts">
-        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.  These reference conflicts are listed in the build log when log verbosity is set to detailed.</source>
-        <target state="translated">MSB3277: 在 "{0}" 的不同版本間發現衝突，但無法解決。當記錄詳細資訊設定為 [詳細] 時，這些參考衝突會列在組建記錄檔中。</target>
+        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.
+{1}</source>
+        <target state="translated">MSB3277: 不同版本的 "{0}" 之間發生無法解決的衝突。
+{1}</target>
         <note>{StrBegin="MSB3277: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.LogAttributeFormat">
@@ -1916,7 +1968,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.RemappedReference">
         <source>Due to a remapping entry in the currently targeted framework redist list, reference "{0}" was remapped to "{1}".</source>
-        <target state="translated">因為重新對應目前目標 Framework 可轉散發清單中的項目，所以將參考 "{0}" 重新對應到 "{1}"。</target>
+        <target state="translated">因為重新對應目前目標 Framework 可轉散發套件清單中的項目，所以將參考 "{0}" 重新對應到 "{1}"。</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.UnificationByFrameworkRetarget">
@@ -1976,7 +2028,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.TargetFrameworkRedistLogHeader">
         <source>Redist List File Paths:</source>
-        <target state="translated">可轉散發清單檔案路徑:</target>
+        <target state="translated">可轉散發套件清單檔案路徑:</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.TargetFrameworkExclusionListLogHeader">
@@ -1991,7 +2043,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoSubSetRedistListName">
         <source>The redist list file "{0}" has a null or empty Redist name in the FileList element. Make sure the Redist Name is not null or empty.</source>
-        <target state="translated">可轉散發清單檔 "{0}" 在 FileList 項目中的可轉散發名稱為 null 或空白。請確認可轉散發名稱不為 null 或空白。</target>
+        <target state="translated">可轉散發套件清單檔 "{0}" 在 FileList 項目中的 Redist 名稱為 null 或空白。請確認 Redist 名稱不為 null 或空白。</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveComReference.TreatingTlbOfActiveXAsNonEmbedded">
@@ -2221,7 +2273,7 @@
       </trans-unit>
       <trans-unit id="ResolveManifestFiles.PublishFileNotFound">
         <source>MSB3331: Unable to apply publish properties for item "{0}".</source>
-        <target state="translated">MSB3331: 無法為項目 "{0}" 套用發行屬性。</target>
+        <target state="translated">MSB3331: 無法為項目 "{0}" 套用發佈屬性。</target>
         <note>{StrBegin="MSB3331: "}</note>
       </trans-unit>
       <trans-unit id="ResolveNativeReference.Comment">
@@ -2277,6 +2329,11 @@
         <source>MSB3473: Path for "{0}" is invalid. {1}</source>
         <target state="translated">MSB3473: "{0}" 的路徑無效。{1}</target>
         <note>{StrBegin="MSB3473: "}</note>
+      </trans-unit>
+      <trans-unit id="SGen.TaskNotSupported">
+        <source>MSB3474: The task "{0}" is not supported on the .NET Core version of MSBuild. Use the Microsoft XML Serializer Generator package instead. See https://go.microsoft.com/fwlink/?linkid=858594 for more information.</source>
+        <target state="translated">MSB3474: MSBuild 的 .NET Core 版本不支援工作 "{0}"。請改用 Microsoft XML 序列化程式產生器套件。如需詳細資訊，請參閱 https://go.microsoft.com/fwlink/?linkid=858594。</target>
+        <note>{StrBegin="MSB3474: "}</note>
       </trans-unit>
       <trans-unit id="SignFile.CertNotInStore">
         <source>MSB3481: The signing certificate could not be located. Ensure that it is in the current user's personal store.</source>
@@ -2428,6 +2485,11 @@
         <target state="translated">並未從檔案 "{0}" 解壓縮到檔案 "{1}"，因為在專案中的 "{2}" 參數原先設定為 "{3}"，且檔案的大小與時間戳記相符。</target>
         <note />
       </trans-unit>
+      <trans-unit id="Unzip.DidNotUnzipBecauseOfFilter">
+        <source>Did not unzip file "{0}" because it didn't match the include filter or because it matched the exclude filter.</source>
+        <target state="translated">因為檔案 "{0}" 與包含篩選器不相符，或與排除篩選器相符，所以未將該檔案解壓縮。</target>
+        <note />
+      </trans-unit>
       <trans-unit id="Unzip.ErrorCouldNotCreateDestinationDirectory">
         <source>MSB3931: Failed to unzip to directory "{0}" because it could not be created.  {1}</source>
         <target state="translated">MSB3931: 因為無法建立目錄 "{0}"，所以無法解壓縮至該目錄。{1}</target>
@@ -2458,6 +2520,16 @@
         <target state="translated">MSB3932: 因為檔案不存在或無法存取，所以無法解壓縮檔案 "{0}"。</target>
         <note>{StrBegin="MSB3932: "}</note>
       </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternInvalidPath">
+        <source>MSB3937: Failed to parse pattern "{0}" because it contains an invalid path character.</source>
+        <target state="translated">MSB3937: 因為模式 "{0}" 包含無效的路徑字元，所以無法加以剖析。</target>
+        <note>{StrBegin="MSB3937: "}</note>
+      </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternPropertyReferences">
+        <source>MSB3938: Failed to parse pattern "{0}" because it contains a property reference which isn't supported.</source>
+        <target state="translated">MSB3938: 因為模式 "{0}" 包含不支援的屬性參考，所以無法加以剖析。</target>
+        <note>{StrBegin="MSB3938: "}</note>
+      </trans-unit>
       <trans-unit id="Unzip.FileComment">
         <source>Unzipping file "{0}" to "{1}".</source>
         <target state="translated">正在將檔案 "{0}" 解壓縮到 "{1}"。</target>
@@ -2482,6 +2554,31 @@
         <source>MSB3952: File hash mismatch. Expected {0} to have a {1} file hash of {2}, but it was {3}.</source>
         <target state="translated">MSB3952: 檔案雜湊不符。{0} 應要有 {1} 檔案雜湊 {2}，但其為 {3}。</target>
         <note>{StrBegin="MSB3952: "}</note>
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertToInferredType">
+        <source>Could not convert the value for parameter "{0}" to the inferred type "{1}". The value will be treated as a string. {2}</source>
+        <target state="translated">無法將參數 "{0}" 的值轉換為推斷的類型 "{1}"。 該值將被視為字串。{2}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertValue">
+        <source>MSB3716: The parameter value "{0}" could not be converted to "{1}". {2}</source>
+        <target state="translated">MSB3716: 無法將參數值 "{0}" 轉換為 "{1}"。{2}</target>
+        <note>{StrBegin="MSB3716: "}</note>
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotInferParameterType">
+        <source>Could not infer the type of parameter "{0}" because the attribute type is unknown. The value will be treated as a string.</source>
+        <target state="translated">由於屬性類型未知，因此無法推斷 "{0}" 的參數類型。該值將被視為字串。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.MultipleConstructorsFound">
+        <source>Multiple attribute constructors were found for type inferencing.</source>
+        <target state="translated">找到類型推斷的多屬性建構函式。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.ParameterTypeNotFound">
+        <source>MSB3715: The type "{0}" was not found.</source>
+        <target state="translated">MSB3715: 無法找到 "{0}" 類型。</target>
+        <note>{StrBegin="MSB3715: "}</note>
       </trans-unit>
       <trans-unit id="WriteLinesToFile.ErrorOrWarning">
         <source>MSB3491: Could not write lines to file "{0}". {1}</source>
@@ -2512,6 +2609,11 @@
         <source>MSB3762: No references were passed to the task. References to at least mscorlib and Windows.Foundation are required.</source>
         <target state="translated">MSB3762: 沒有參考傳遞至工作。需要至少 mscorlib 和 Windows.Foundation 的參考。</target>
         <note>{StrBegin="MSB3762: "}</note>
+      </trans-unit>
+      <trans-unit id="Xaml.DuplicatePropertyName">
+        <source>MSB3724: Unable to create Xaml task.  Duplicate property name '{0}'.</source>
+        <target state="translated">MSB3724: 無法建立 Xaml 工作。重複的屬性名稱 '{0}'。</target>
+        <note>{StrBegin="MSB3724: "}</note>
       </trans-unit>
       <trans-unit id="Xaml.TaskCreationFailed">
         <source>MSB3686: Unable to create Xaml task.  Compilation failed.  {0}</source>
@@ -2577,6 +2679,11 @@
         <source>MSB3701: Unable to load arguments for the XslTransformation task. {0}</source>
         <target state="translated">MSB3701: 無法載入 XslTransformation 工作的引數。{0}</target>
         <note>{StrBegin="MSB3701: "}</note>
+      </trans-unit>
+      <trans-unit id="XslTransform.PrecompiledXsltError">
+        <source>MSB3705: XslCompiledDllPath is not supported when building with .NET Core.</source>
+        <target state="translated">MSB3705: 在使用 .NET Core 建置時，不支援 XslCompiledDllPath。</target>
+        <note>{StrBegin="MSB3705: "}</note>
       </trans-unit>
       <trans-unit id="XslTransform.XsltArgumentsError">
         <source>MSB3702: Unable to process the XsltParameters argument for the XslTransformation task. {0}</source>
@@ -3000,7 +3107,7 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ExpandRedistFrom">
         <source>Looking for redist files under "{0}".</source>
-        <target state="translated">正在尋找 "{0}" 下的可轉散發檔案。</target>
+        <target state="translated">正在尋找 "{0}" 下的可轉散發套件檔案。</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.NotExpanding">
@@ -3015,17 +3122,17 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.AddingRedistFile">
         <source>Adding file "{0}" from redist folder with target path "{1}".</source>
-        <target state="translated">從目標路徑為 "{1}" 的可轉散發資料夾加入檔案 "{0}"。</target>
+        <target state="translated">從目標路徑為 "{1}" 的可轉散發套件資料夾加入檔案 "{0}"。</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictRedistSameSDK">
         <source>There was a conflict between two redist files going to the same target path "{0}" within the "{1}" SDK. Choosing "{2}" over "{3}" because it was resolved first.</source>
-        <target state="translated">兩個可轉散發檔案發生衝突，檔案即將移至 "{1}" SDK 內的相同目標路徑 "{0}"。將選擇 "{2}" 而不選擇 "{3}"，因為它先完成解析。</target>
+        <target state="translated">兩個可轉散發套件檔案發生衝突，檔案即將移至 "{1}" SDK 內的相同目標路徑 "{0}"。將選擇 "{2}" 而不選擇 "{3}"，因為它先完成解析。</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictRedistDifferentSDK">
         <source>There was a conflict between two files from the redist folder files going to the same target path "{0}" between the "{1}" and "{2}" SDKs. Choosing "{3}" over "{4}" because it was resolved first.</source>
-        <target state="translated">可轉散發資料夾中的兩個檔案發生衝突，檔案即將移至 "{1}" 與 "{2}" SDK 之間的相同目標路徑 "{0}"。將選擇 "{3}" 而不選擇 "{4}"，因為它先完成解析。</target>
+        <target state="translated">可轉散發套件資料夾中的兩個檔案發生衝突，檔案即將移至 "{1}" 與 "{2}" SDK 之間的相同目標路徑 "{0}"。將選擇 "{3}" 而不選擇 "{4}"，因為它先完成解析。</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictReferenceSameSDK">
@@ -3080,12 +3187,12 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.CannotHaveEmptyTargetConfiguration">
         <source>MSB3797: The targeted configuration for the resolved sdk reference "{0}" was empty. Cannot find reference or redist files without a targeted configuration.</source>
-        <target state="translated">MSB3797: 解析之 SDK 參考 "{0}" 的目標組態為空白。沒有目標組態就找不到參考檔案或可轉散發檔案。</target>
+        <target state="translated">MSB3797: 解析之 SDK 參考 "{0}" 的目標組態為空白。沒有目標組態就找不到參考檔案或可轉散發套件檔案。</target>
         <note>{StrBegin="MSB3797: "}</note>
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.CannotHaveEmptyTargetArchitecture">
         <source>MSB3798: The targeted architecture for the resolved sdk reference "{0}" was empty. Cannot find reference or redist files without a targeted architecture.</source>
-        <target state="translated">MSB3798: 解析之 SDK 參考 "{0}" 的目標架構為空白。沒有目標架構就找不到參考檔案或可轉散發檔案。</target>
+        <target state="translated">MSB3798: 解析之 SDK 參考 "{0}" 的目標架構為空白。沒有目標架構就找不到參考檔案或可轉散發套件檔案。</target>
         <note>{StrBegin="MSB3798: "}</note>
       </trans-unit>
       <trans-unit id="FindInvalidProjectReferences.WarnWhenVersionIsIncompatible">
@@ -3124,9 +3231,9 @@
         <note>{StrBegin="MSB3492: "}</note>
       </trans-unit>
       <trans-unit id="WriteLinesToFile.SkippingUnchangedFile">
-        <source>MSB3493: Skipping write to file "{0}" because content would not change.</source>
-        <target state="translated">MSB3493: 因為內容不會變更，所以會跳過寫入檔案 "{0}"。</target>
-        <note>{StrBegin="MSB3493: "}</note>
+        <source>Skipping write to file "{0}" because content would not change.</source>
+        <target state="translated">因為內容不會變更，所以正在跳過寫入檔案 "{0}" 的作業。</target>
+        <note />
       </trans-unit>
       <trans-unit id="Telemetry.IllegalEventDataString">
         <source>The property "{0}" in the telemetry event data property list "{1}" is malformed.  Please only pass in a semicolon-delimited list of constant string values separated by "=", e.g., "Property1=Value1;Property2=Value2".</source>

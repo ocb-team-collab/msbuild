@@ -11,11 +11,11 @@ using System.Collections.Generic;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Collections;
 using System.Collections;
-using Microsoft.Build.Evaluation;
 using Microsoft.Build.Unittest;
 using TaskItem = Microsoft.Build.Execution.ProjectItemInstance.TaskItem;
 using System.Threading.Tasks;
 using Xunit;
+using Shouldly;
 
 namespace Microsoft.Build.UnitTests.BackEnd
 {
@@ -634,6 +634,162 @@ namespace Microsoft.Build.UnitTests.BackEnd
         }
 #endif
 
+        /// <summary>
+        /// Verifies that tasks can get global properties.
+        /// </summary>
+        [Fact]
+        public void TasksCanGetGlobalProperties()
+        {
+            string projectFileContents = @"
+<Project>
+  <UsingTask TaskName='test' TaskFactory='RoslynCodeTaskFactory' AssemblyFile='$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll'>
+    <Task>
+      <Code><![CDATA[
+        var globalProperties = ((IBuildEngine6)BuildEngine).GetGlobalProperties();
+
+        Log.LogMessage(""Global properties:"");
+        foreach (var item in globalProperties)
+        {
+            Log.LogMessage($""{item.Key}: '{item.Value}'"");
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name='Build'>
+      <test/>
+  </Target>
+</Project>";
+
+            Dictionary<string, string> globalProperties = new Dictionary<string, string>
+            {
+                ["Property1"] = "Value_%",
+                ["Property2"] = "Value_$",
+                ["Property3"] = "Value_@",
+                ["Property4"] = "Value_'",
+                ["Property5"] = "Value_;",
+                ["Property6"] = "Value_?",
+                ["Property7"] = "Value_*",
+            };
+
+            MockLogger mockLogger = Helpers.BuildProjectWithNewOMExpectSuccess(projectFileContents, globalProperties);
+
+            foreach (var item in globalProperties)
+            {
+                mockLogger.AssertLogContains($"{item.Key}: '{item.Value}'");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that if the user specifies no global properties, tasks get back an empty collection.
+        /// </summary>
+        [Fact]
+        public void TasksGetNoGlobalPropertiesIfNoneSpecified()
+        {
+            string projectFileContents = @"
+<Project>
+  <UsingTask TaskName='test' TaskFactory='RoslynCodeTaskFactory' AssemblyFile='$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll'>
+    <Task>
+      <Code><![CDATA[
+        var globalProperties = ((IBuildEngine6)BuildEngine).GetGlobalProperties();
+
+        Log.LogMessage($""Global property count: {globalProperties.Count}"");
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name='Build'>
+      <test/>
+  </Target>
+</Project>";
+
+            MockLogger mockLogger = Helpers.BuildProjectWithNewOMExpectSuccess(projectFileContents);
+
+            mockLogger.AssertLogContains("Global property count: 0");
+        }
+
+        [Fact]
+        public void RequestCoresThrowsOnInvalidInput()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+            {
+                _taskHost.RequestCores(0);
+            });
+
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+            {
+                _taskHost.RequestCores(-1);
+            });
+        }
+
+        [Fact]
+        public void RequestCoresUsesImplicitCore()
+        {
+            // If the request callback has no cores to grant, we still get 1 for the implicit core.
+            _mockRequestCallback.CoresToGrant = 0;
+            _taskHost.RequestCores(3).ShouldBe(1);
+            _mockRequestCallback.LastRequestedCores.ShouldBe(2);
+            _mockRequestCallback.LastWaitForCores.ShouldBeFalse();
+        }
+
+        [Fact]
+        public void RequestCoresUsesCoresFromRequestCallback()
+        {
+            // The request callback has 1 core to grant, we should see it returned from RequestCores.
+            _mockRequestCallback.CoresToGrant = 1;
+            _taskHost.RequestCores(3).ShouldBe(2);
+            _mockRequestCallback.LastRequestedCores.ShouldBe(2);
+            _mockRequestCallback.LastWaitForCores.ShouldBeFalse();
+
+            // Since we've used the implicit core, the second call will return only what the request callback gives us and may block.
+            _mockRequestCallback.CoresToGrant = 1;
+            _taskHost.RequestCores(3).ShouldBe(1);
+            _mockRequestCallback.LastRequestedCores.ShouldBe(3);
+            _mockRequestCallback.LastWaitForCores.ShouldBeTrue();
+        }
+
+        [Fact]
+        public void ReleaseCoresThrowsOnInvalidInput()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+            {
+                _taskHost.ReleaseCores(0);
+            });
+
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+            {
+                _taskHost.ReleaseCores(-1);
+            });
+        }
+
+        [Fact]
+        public void ReleaseCoresReturnsCoresToRequestCallback()
+        {
+            _mockRequestCallback.CoresToGrant = 1;
+            _taskHost.RequestCores(3).ShouldBe(2);
+
+            // We return one of two granted cores, the call passes through to the request callback.
+            _taskHost.ReleaseCores(1);
+            _mockRequestCallback.LastCoresToRelease.ShouldBe(1);
+
+            // The implicit core is still allocated so a subsequent RequestCores call may block.
+            _taskHost.RequestCores(1);
+            _mockRequestCallback.LastWaitForCores.ShouldBeTrue();
+        }
+
+        [Fact]
+        public void ReleaseCoresReturnsImplicitCore()
+        {
+            _mockRequestCallback.CoresToGrant = 1;
+            _taskHost.RequestCores(3).ShouldBe(2);
+
+            // We return both granted cores, one of them is returned to the request callback.
+            _taskHost.ReleaseCores(2);
+            _mockRequestCallback.LastCoresToRelease.ShouldBe(1);
+
+            // The implicit core is not allocated anymore so a subsequent RequestCores call won't block.
+            _taskHost.RequestCores(1);
+            _mockRequestCallback.LastWaitForCores.ShouldBeFalse();
+        }
+
         #region Helper Classes
 
         /// <summary>
@@ -1062,11 +1218,11 @@ namespace Microsoft.Build.UnitTests.BackEnd
             /// </summary>
             public void Initialize(IEventSource eventSource)
             {
-                eventSource.ErrorRaised += new BuildErrorEventHandler(MyCustomErrorHandler);
-                eventSource.WarningRaised += new BuildWarningEventHandler(MyCustomWarningHandler);
-                eventSource.MessageRaised += new BuildMessageEventHandler(MyCustomMessageHandler);
-                eventSource.CustomEventRaised += new CustomBuildEventHandler(MyCustomBuildHandler);
-                eventSource.AnyEventRaised += new AnyEventHandler(EventSource_AnyEventRaised);
+                eventSource.ErrorRaised += MyCustomErrorHandler;
+                eventSource.WarningRaised += MyCustomWarningHandler;
+                eventSource.MessageRaised += MyCustomMessageHandler;
+                eventSource.CustomEventRaised += MyCustomBuildHandler;
+                eventSource.AnyEventRaised += EventSource_AnyEventRaised;
             }
 
             /// <summary>
@@ -1083,7 +1239,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             {
                 if (e.Message != null)
                 {
-                    Console.Out.WriteLine("AnyEvent:" + e.Message.ToString());
+                    Console.Out.WriteLine("AnyEvent:" + e.Message);
                 }
             }
 
@@ -1096,7 +1252,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
                 _lastError = e;
                 if (e.Message != null)
                 {
-                    Console.Out.WriteLine("CustomError:" + e.Message.ToString());
+                    Console.Out.WriteLine("CustomError:" + e.Message);
                 }
             }
 
@@ -1109,7 +1265,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
                 _lastWarning = e;
                 if (e.Message != null)
                 {
-                    Console.Out.WriteLine("CustomWarning:" + e.Message.ToString());
+                    Console.Out.WriteLine("CustomWarning:" + e.Message);
                 }
             }
 
@@ -1122,7 +1278,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
                 _lastMessage = e;
                 if (e.Message != null)
                 {
-                    Console.Out.WriteLine("CustomMessage:" + e.Message.ToString());
+                    Console.Out.WriteLine("CustomMessage:" + e.Message);
                 }
             }
 
@@ -1135,7 +1291,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
                 _lastCustom = e;
                 if (e.Message != null)
                 {
-                    Console.Out.WriteLine("CustomEvent:" + e.Message.ToString());
+                    Console.Out.WriteLine("CustomEvent:" + e.Message);
                 }
             }
         }
@@ -1149,6 +1305,26 @@ namespace Microsoft.Build.UnitTests.BackEnd
             /// BuildResults to return from the BuildProjects method.
             /// </summary>
             private BuildResult[] _buildResultsToReturn;
+
+            /// <summary>
+            /// The requestedCores argument passed to the last RequestCores call.
+            /// </summary>
+            public int LastRequestedCores { get; private set; }
+
+            /// <summary>
+            /// The waitForCores argument passed to the last RequestCores call.
+            /// </summary>
+            public bool LastWaitForCores { get; private set; }
+
+            /// <summary>
+            /// The value to be returned from the RequestCores call.
+            /// </summary>
+            public int CoresToGrant { get; set; }
+
+            /// <summary>
+            /// The coresToRelease argument passed to the last ReleaseCores call.
+            /// </summary>
+            public int LastCoresToRelease { get; private set; }
 
             /// <summary>
             /// Constructor which takes an array of build results to return from the BuildProjects method when it is called.
@@ -1176,6 +1352,11 @@ namespace Microsoft.Build.UnitTests.BackEnd
             /// Not Implemented
             /// </summary>
             public event BuildRequestBlockedDelegate OnBuildRequestBlocked;
+
+            /// <summary>
+            /// Not Implemented
+            /// </summary>
+            public event ResourceRequestDelegate OnResourceRequest;
 #pragma warning restore
 
             /// <summary>
@@ -1224,6 +1405,24 @@ namespace Microsoft.Build.UnitTests.BackEnd
             }
 
             /// <summary>
+            /// Mock
+            /// </summary>
+            public int RequestCores(object monitorLockObject, int requestedCores, bool waitForCores)
+            {
+                LastRequestedCores = requestedCores;
+                LastWaitForCores = waitForCores;
+                return CoresToGrant;
+            }
+
+            /// <summary>
+            /// Mock
+            /// </summary>
+            public void ReleaseCores(int coresToRelease)
+            {
+                LastCoresToRelease = coresToRelease;
+            }
+
+            /// <summary>
             /// Mock of the Block on target in progress.
             /// </summary>
             public Task BlockOnTargetInProgress(int blockingRequestId, string blockingTarget, BuildResult partialBuildResult)
@@ -1243,6 +1442,14 @@ namespace Microsoft.Build.UnitTests.BackEnd
             /// Not Implemented
             /// </summary>
             public void ContinueRequest()
+            {
+                throw new NotImplementedException();
+            }
+
+            /// <summary>
+            /// Not Implemented
+            /// </summary>
+            public void ContinueRequestWithResources(ResourceResponse response)
             {
                 throw new NotImplementedException();
             }

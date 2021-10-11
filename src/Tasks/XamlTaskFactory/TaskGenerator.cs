@@ -420,7 +420,7 @@ namespace Microsoft.Build.Tasks.Xaml
         }
 
         /// <summary>
-        /// Generates a method called "AddDefaultsToActiveSwitchList" that takes all of the properties that have 
+        /// Generates a method called "AddDefaultsToActiveSwitchList" that takes all of the properties that have
         /// default values and adds them to the active switch list
         /// </summary>
         private void GenerateDefaultSetProperties(CodeTypeDeclaration taskClass)
@@ -469,7 +469,7 @@ namespace Microsoft.Build.Tasks.Xaml
         }
 
         /// <summary>
-        /// Generates a method called "AddFallbacksToActiveSwitchList" that takes all of the properties that 
+        /// Generates a method called "AddFallbacksToActiveSwitchList" that takes all of the properties that
         /// are not set but have fallbacks and adds the fallbacks to the active list if they are set.
         /// </summary>
         private void GenerateFallbacks(CodeTypeDeclaration taskClass)
@@ -966,9 +966,8 @@ namespace Microsoft.Build.Tasks.Xaml
             if (Platform == null)
                 return true;
 
-            if (_relationsParser.SwitchRelationsList.ContainsKey(SwitchValue))
+            if (_relationsParser.SwitchRelationsList.TryGetValue(SwitchValue, out SwitchRelations rel))
             {
-                SwitchRelations rel = _relationsParser.SwitchRelationsList[SwitchValue];
                 if (rel.ExcludedPlatforms.Count > 0)
                 {
                     foreach (string excludedPlatform in rel.ExcludedPlatforms)
@@ -992,13 +991,12 @@ namespace Microsoft.Build.Tasks.Xaml
         }
 
         /// <summary>
-        /// This method generates overrides array 
+        /// This method generates overrides array
         /// </summary>
         private void GenerateOverrides(Property property, CodeMemberProperty propertyName)
         {
-            if (_relationsParser.SwitchRelationsList.ContainsKey(property.SwitchName))
+            if (_relationsParser.SwitchRelationsList.TryGetValue(property.SwitchName, out SwitchRelations rel))
             {
-                SwitchRelations rel = _relationsParser.SwitchRelationsList[property.SwitchName];
                 if (rel.Overrides.Count > 0)
                 {
                     foreach (string overrided in rel.Overrides)
@@ -1171,7 +1169,7 @@ namespace Microsoft.Build.Tasks.Xaml
                     if (switchRelations.Value.Requires.Count > 0)
                     {
                         var checkRequired = new CodeConditionStatement { Condition = null };
-                        
+
                         foreach (string required in switchRelations.Value.Requires)
                         {
                             if (checkRequired.Condition != null)

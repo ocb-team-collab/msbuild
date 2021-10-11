@@ -19,22 +19,21 @@
   <PropertyGroup Condition="$(TargetFramework.StartsWith('net4')) Or $(TargetFramework.StartsWith('net3'))">
     <DefineConstants>$(DefineConstants);FEATURE_64BIT_ENVIRONMENT_QUERY</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_APARTMENT_STATE</DefineConstants>
-    <DefineConstants>$(DefineConstants);FEATURE_APM</DefineConstants>
+    <DefineConstants Condition="'$(MonoBuild)' != 'true'">$(DefineConstants);FEATURE_APM</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_APPDOMAIN</DefineConstants>
     <FeatureAppDomain>true</FeatureAppDomain>
     <DefineConstants>$(DefineConstants);FEATURE_APPDOMAIN_UNHANDLED_EXCEPTION</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_ASPNET_COMPILER</DefineConstants>
-    <DefineConstants>$(DefineConstants);FEATURE_ASSEMBLY_LOADFROM</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_ASSEMBLY_LOCATION</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_ASSEMBLY_GETENTRYASSEMBLY</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_ASSEMBLYNAME_CLONE</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_TYPE_GETCONSTRUCTOR</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_COM_INTEROP</DefineConstants>
+    <DefineConstants Condition="'$(MonoBuild)' != 'true'">$(DefineConstants);FEATURE_COMPILED_XSL</DefineConstants>
     <DefineConstants Condition="'$(MonoBuild)' != 'true'">$(DefineConstants);FEATURE_COMPILE_IN_TESTS</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_CONSOLE_BUFFERWIDTH</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_CONSTRAINED_EXECUTION</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_CHARSET_AUTO</DefineConstants>
-    <DefineConstants>$(DefineConstants);FEATURE_CODEDOM</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_CODETASKFACTORY</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_CULTUREINFO_CONSOLE_FALLBACK</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_CULTUREINFO_GETCULTUREINFO</DefineConstants>
@@ -43,7 +42,6 @@
     <DefineConstants Condition="'$(MonoBuild)' != 'true' and '$(MachineIndependentBuild)' != 'true'">$(DefineConstants);FEATURE_ENCODING_DEFAULT</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_ENVIRONMENT_SYSTEMDIRECTORY</DefineConstants>
     <DefineConstants Condition="'$(MonoBuild)' != 'true'">$(DefineConstants);FEATURE_FILE_TRACKER</DefineConstants>
-    <DefineConstants>$(DefineConstants);FEATURE_FUSION_COMPAREASSEMBLYIDENTITY</DefineConstants>
     <DefineConstants Condition="'$(MachineIndependentBuild)' != 'true'">$(DefineConstants);FEATURE_GAC</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_GET_COMMANDLINE</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_HANDLE_SAFEWAITHANDLE</DefineConstants>
@@ -69,7 +67,7 @@
     <DefineConstants>$(DefineConstants);FEATURE_RESOURCE_EXPOSURE</DefineConstants>
     <!-- System.Resources.ResourceManager.GetResourceSet() method is currently only in full framework -->
     <DefineConstants>$(DefineConstants);FEATURE_RESOURCEMANAGER_GETRESOURCESET</DefineConstants>
-    <DefineConstants>$(DefineConstants);FEATURE_RESX_RESOURCE_READER</DefineConstants>
+    <DefineConstants>$(DefineConstants);FEATURE_RESXREADER_LIVEDESERIALIZATION</DefineConstants>
     <DefineConstants Condition="'$(MonoBuild)' != 'true'">$(DefineConstants);FEATURE_RTLMOVEMEMORY</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_RUN_EXE_IN_TESTS</DefineConstants>
     <DefineConstants Condition="'$(MonoBuild)' == 'true'">$(DefineConstants);USE_MSBUILD_DLL_EXTN</DefineConstants>
@@ -92,7 +90,6 @@
     <DefineConstants>$(DefineConstants);FEATURE_TYPE_GETINTERFACE</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_USERINTERACTIVE</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_USERDOMAINNAME</DefineConstants>
-    <DefineConstants>$(DefineConstants);FEATURE_VARIOUS_EXCEPTIONS</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_XAML_TYPES</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_XAMLTASKFACTORY</DefineConstants>
     <FeatureXamlTypes>true</FeatureXamlTypes>
@@ -102,7 +99,7 @@
     <DefineConstants>$(DefineConstants);FEATURE_DEBUGGER</DefineConstants>
     <DefineConstants Condition="'$(MachineIndependentBuild)' != 'true'">$(DefineConstants);FEATURE_WIN32_REGISTRY</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_WORKINGSET</DefineConstants>
-    <DefineConstants Condition="'$(MonoBuild)' != 'true' and '$(MachineIndependentBuild)' != 'true'">$(DefineConstants);FEATURE_VISUALSTUDIOSETUP</DefineConstants>
+    <DefineConstants Condition="'$(MonoBuild)' != 'true' and '$(MachineIndependentBuild)' != 'true' and '$(TargetFrameworkVersion)' != 'v3.5'">$(DefineConstants);FEATURE_VISUALSTUDIOSETUP</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_MSCOREE</DefineConstants>
   </PropertyGroup>
 
@@ -110,29 +107,29 @@
     <DefineConstants Condition="'$(MonoBuild)'=='true'">$(DefineConstants);MONO</DefineConstants>
 
     <!-- Useful for tests that need OS information as a constant -->
-    <DefineConstants Condition="'$(OsEnvironment)'=='windows'">$(DefineConstants);TEST_ISWINDOWS</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('windows'))">$(DefineConstants);TEST_ISWINDOWS</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="$(TargetFramework.StartsWith('netstandard')) or $(TargetFramework.StartsWith('netcore'))">
+  <PropertyGroup Condition="'$(MonoBuild)' != 'true' and ($([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'netcoreapp1.0')) or $(TargetFramework.StartsWith('netstandard')))">
     <NetCoreBuild>true</NetCoreBuild>
     <DefineConstants>$(DefineConstants);RUNTIME_TYPE_NETCORE</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(NetCoreBuild)'=='true'">
     <CompilerToolsDir>$([System.IO.Path]::Combine($(ToolPackagesDir)Microsoft.Net.Compilers, $(CompilerToolsVersion), "tools"))$([System.IO.Path]::DirectorySeparatorChar)</CompilerToolsDir>
+    <DefineConstants>$(DefineConstants);FEATURE_ASSEMBLYLOADCONTEXT</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_PROCESSSTARTINFO_ENVIRONMENT</DefineConstants>
     <DefineConstants>$(DefineConstants);FEATURE_RUNTIMEINFORMATION</DefineConstants>
     <DefineConstants>$(DefineConstants);USE_MSBUILD_DLL_EXTN</DefineConstants>
     <DefineConstants>$(DefineConstants);WORKAROUND_COREFX_19110</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp2.1'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp2.1' or '$(TargetFramework)' == 'net5.0'">
     <DefineConstants>$(DefineConstants);FEATURE_PIPEOPTIONS_CURRENTUSERONLY</DefineConstants>
     <DefineConstants Condition="'$(MachineIndependentBuild)' != 'true'">$(DefineConstants);FEATURE_NODE_REUSE</DefineConstants>
-    <DefineConstants>$(DefineConstants);FEATURE_SPAN</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(GenerateReferenceAssemblySources)' != 'true'">
+  <PropertyGroup Condition="'$(GenerateReferenceAssemblySource)' != 'true'">
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <DocumentationFile/>
   </PropertyGroup>

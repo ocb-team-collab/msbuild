@@ -9,7 +9,7 @@ If you notice the ordering, ResolveAssemblyReferences is happening before Compil
 
 ## Source Code
 You can browse Microsoft's MSBuild targets online at:
-http://source.roslyn.io/#MSBuildFiles/C/ProgramFiles(x86)/MSBuild/14.0/bin_/amd64/Microsoft.Common.CurrentVersion.targets,1820
+https://github.com/microsoft/msbuild/blob/a936b97e30679dcea4d99c362efa6f732c9d3587/src/Tasks/Microsoft.Common.CurrentVersion.targets#L1991-L2140
 This is where the RAR task is invoked in the targets file.
 
 The source code for RAR is at:
@@ -107,7 +107,7 @@ References can also have the `CopyLocal` metadata or not. If the reference has `
 If the CopyLocal metadata is missing entirely, it is assumed to be true by default. So RAR by default tries to copy dependencies to output unless it finds a reason not to. RAR is quite detailed about the reasons why it chose a particular reference to be CopyLocal or not.
 
 All possible reasons for CopyLocal decision are enumerated here:
-https://github.com/Microsoft/msbuild/blob/master/src/Tasks/AssemblyDependency/CopyLocalState.cs
+https://github.com/dotnet/msbuild/blob/main/src/Tasks/AssemblyDependency/CopyLocalState.cs
 It is useful to know these strings to be able to search for them in build logs.
 
 ## Private item metadata
@@ -118,7 +118,7 @@ An important part of determining CopyLocal is the Private metadata on all primar
  3. If none of the source assemblies specify `Private=true` and at least one specifies `Private=false`, `CopyLocal` is set to `False`
 
 Here's the source code:
-https://github.com/Microsoft/msbuild/blob/master/src/Tasks/AssemblyDependency/Reference.cs#L1243
+https://github.com/dotnet/msbuild/blob/main/src/Tasks/AssemblyDependency/Reference.cs#L1243
 
 ## Which reference set Private to false?
 

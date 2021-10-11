@@ -2,19 +2,16 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Build.Collections;
-using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Eventing;
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
@@ -51,7 +48,7 @@ namespace Microsoft.Build.BackEnd
 
     /// <summary>
     /// The TaskBuilder is one of two components related to building tasks, the other being the TaskExecutionHost.  The TaskBuilder is
-    /// responsible for all parts dealing with the XML/task declaration.  It determines if the task is intrinsic or extrinsic, 
+    /// responsible for all parts dealing with the XML/task declaration.  It determines if the task is intrinsic or extrinsic,
     /// looks up the task in the task registry, determines the task parameters and requests them to be set, and requests outputs
     /// when task execution has been completed.  It is not responsible for reflection over the task instance or anything which
     /// requires dealing with the task instance directly - those actions are handled by the TaskExecutionHost.
@@ -80,7 +77,7 @@ namespace Microsoft.Build.BackEnd
 
         /// <summary>
         /// The task instance for extrinsic tasks
-        /// </summary> 
+        /// </summary>
         private ProjectTaskInstance _taskNode;
 
         /// <summary>
@@ -90,7 +87,7 @@ namespace Microsoft.Build.BackEnd
 
         /// <summary>
         /// indicates whether to ignore task execution failures
-        /// </summary> 
+        /// </summary>
         private ContinueOnError _continueOnError;
 
         /// <summary>
@@ -138,7 +135,7 @@ namespace Microsoft.Build.BackEnd
         /// <param name="cancellationToken">The <see cref="CancellationToken"/> to use when executing the task.</param>
         /// <returns>The result of running the task batch.</returns>
         /// <remarks>
-        /// The ExecuteTask method takes a task as specified by XML and executes it.  This procedure is comprised 
+        /// The ExecuteTask method takes a task as specified by XML and executes it.  This procedure is comprised
         /// of the following steps:
         /// 1. Loading the Task from its containing assembly by looking it up in the task registry
         /// 2. Determining if the task is batched.  If it is, create the batches and execute each as if it were a non-batched task
@@ -208,10 +205,7 @@ namespace Microsoft.Build.BackEnd
                 _componentHost = null;
 
                 IDisposable disposable = _taskExecutionHost as IDisposable;
-                if (disposable != null)
-                {
-                    disposable.Dispose();
-                }
+                disposable?.Dispose();
 
                 _taskExecutionHost = null;
             }
@@ -245,7 +239,7 @@ namespace Microsoft.Build.BackEnd
 
             List<string> taskParameters = new List<string>(_taskNode.ParametersForBuild.Count + _taskNode.Outputs.Count);
 
-            foreach (KeyValuePair<string, Tuple<string, ElementLocation>> taskParameter in _taskNode.ParametersForBuild)
+            foreach (KeyValuePair<string, (string, ElementLocation)> taskParameter in _taskNode.ParametersForBuild)
             {
                 taskParameters.Add(taskParameter.Value.Item1);
             }
@@ -287,12 +281,12 @@ namespace Microsoft.Build.BackEnd
         }
 
         /// <summary>
-        /// Called to execute a task within a target. This method instantiates the task, sets its parameters, and executes it. 
+        /// Called to execute a task within a target. This method instantiates the task, sets its parameters, and executes it.
         /// </summary>
         /// <returns>true, if successful</returns>
         private async Task<WorkUnitResult> ExecuteTask(TaskExecutionMode mode, Lookup lookup, List<StaticTarget.Task> tasks)
         {
-            ErrorUtilities.VerifyThrowArgumentNull(lookup, "lookup");
+            ErrorUtilities.VerifyThrowArgumentNull(lookup, nameof(lookup));
 
             WorkUnitResult taskResult = new WorkUnitResult(WorkUnitResultCode.Failed, WorkUnitActionCode.Stop, null);
             TaskHost taskHost = null;
@@ -319,7 +313,7 @@ namespace Microsoft.Build.BackEnd
                 // Only create a hash table if there are more than one bucket as this is the only time a property can be overridden
                 if (buckets.Count > 1)
                 {
-                    lookupHash = lookupHash ?? new Dictionary<string, string>(MSBuildNameIgnoreCaseComparer.Default);
+                    lookupHash ??= new Dictionary<string, string>(MSBuildNameIgnoreCaseComparer.Default);
                 }
 
                 WorkUnitResult aggregateResult = new WorkUnitResult();
@@ -344,12 +338,7 @@ namespace Microsoft.Build.BackEnd
             {
                 _taskExecutionHost.CleanupForTask();
 
-#if FEATURE_APPDOMAIN
-                if (taskHost != null)
-                {
-                    taskHost.MarkAsInactive();
-                }
-#endif
+                taskHost?.MarkAsInactive();
 
                 // Now all task batches are done, apply all item adds to the outer 
                 // target batch; we do this even if the task wasn't found (in that case,
@@ -369,7 +358,7 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Execute a single bucket
         /// </summary>
-        /// <returns>true if execution succeeded</returns>        
+        /// <returns>true if execution succeeded</returns>
         private async Task<WorkUnitResult> ExecuteBucket(TaskHost taskHost, ItemBucket bucket, TaskExecutionMode howToExecuteTask, Dictionary<string, string> lookupHash, List<StaticTarget.Task> tasks)
         {
             // On Intrinsic tasks, we do not allow batchable params, therefore metadata is excluded.
@@ -391,9 +380,14 @@ namespace Microsoft.Build.BackEnd
             if (!condition)
             {
                 LogSkippedTask(bucket, howToExecuteTask);
-                taskResult = new WorkUnitResult(WorkUnitResultCode.Skipped, WorkUnitActionCode.Continue, null);
+                return new WorkUnitResult(WorkUnitResultCode.Skipped, WorkUnitActionCode.Continue, null);
+            }
 
-                return taskResult;
+            // Some tests do not provide an actual taskNode; checking if _taskNode == null prevents those tests from failing.
+            if (MSBuildEventSource.Log.IsEnabled())
+            {
+                TaskLoggingContext taskLoggingContext = _targetLoggingContext.LogTaskBatchStarted(_projectFullPath, _targetChildInstance);
+                MSBuildEventSource.Log.ExecuteTaskStart(_taskNode?.Name, taskLoggingContext.BuildEventContext.TaskId);
             }
 
             // If this is an Intrinsic task, it gets handled in a special fashion.
@@ -424,10 +418,12 @@ namespace Microsoft.Build.BackEnd
                     if (requirements != null)
                     {
                         TaskLoggingContext taskLoggingContext = _targetLoggingContext.LogTaskBatchStarted(_projectFullPath, _targetChildInstance);
+                        _buildRequestEntry.Request.CurrentTaskContext = taskLoggingContext.BuildEventContext;
+
                         try
                         {
                             if (
-                                ((requirements.Value & TaskRequirements.RequireSTAThread) == TaskRequirements.RequireSTAThread)
+                                (requirements.Value & TaskRequirements.RequireSTAThread) == TaskRequirements.RequireSTAThread
 #if FEATURE_APARTMENT_STATE
                                 && (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
 #endif
@@ -465,6 +461,8 @@ namespace Microsoft.Build.BackEnd
                         }
                         finally
                         {
+                            _buildRequestEntry.Request.CurrentTaskContext = null;
+
                             // Flag the completion of the task.
                             taskLoggingContext.LogTaskBatchFinished(_projectFullPath, taskResult.ResultCode == WorkUnitResultCode.Success || taskResult.ResultCode == WorkUnitResultCode.Skipped);
 
@@ -505,11 +503,18 @@ namespace Microsoft.Build.BackEnd
                 }
             }
 
+            // Some tests do not provide an actual taskNode; checking if _taskNode == null prevents those tests from failing.
+            if (MSBuildEventSource.Log.IsEnabled())
+            {
+                TaskLoggingContext taskLoggingContext = _targetLoggingContext.LogTaskBatchStarted(_projectFullPath, _targetChildInstance);
+                MSBuildEventSource.Log.ExecuteTaskStop(_taskNode?.Name, taskLoggingContext.BuildEventContext.TaskId);
+            }
+
             return taskResult;
         }
 
         /// <summary>
-        /// Returns the set of parameters that can contribute to a task's identity, and their values for this particular task.  
+        /// Returns the set of parameters that can contribute to a task's identity, and their values for this particular task.
         /// </summary>
         private IDictionary<string, string> GatherTaskIdentityParameters(Expander<ProjectPropertyInstance, ProjectItemInstance> expander)
         {
@@ -536,14 +541,13 @@ namespace Microsoft.Build.BackEnd
             return taskIdentityParameters;
         }
 
-
 #if FEATURE_APARTMENT_STATE
         /// <summary>
         /// Executes the task using an STA thread.
         /// </summary>
         /// <comment>
-        /// STA thread launching also being used in XMakeCommandLine\OutOfProcTaskAppDomainWrapperBase.cs, InstantiateAndExecuteTaskInSTAThread method.  
-        /// Any bug fixes made to this code, please ensure that you also fix that code.  
+        /// STA thread launching also being used in XMakeCommandLine\OutOfProcTaskAppDomainWrapperBase.cs, InstantiateAndExecuteTaskInSTAThread method.
+        /// Any bug fixes made to this code, please ensure that you also fix that code.
         /// </comment>
         [SuppressMessage("Microsoft.Design", "CA1031:DoNotCatchGeneralExceptionTypes", Justification = "Exception is caught and rethrown in the correct thread.")]
         private WorkUnitResult ExecuteTaskInSTAThread(ItemBucket bucket, TaskLoggingContext taskLoggingContext, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
@@ -588,10 +592,7 @@ namespace Microsoft.Build.BackEnd
                 taskRunnerFinished = null;
             }
 
-            if (exceptionFromExecution != null)
-            {
-                exceptionFromExecution.Throw();
-            }
+            exceptionFromExecution?.Throw();
 
             return taskResult;
         }
@@ -610,7 +611,7 @@ namespace Microsoft.Build.BackEnd
                     if (!_targetLoggingContext.LoggingService.OnlyLogCriticalEvents)
                     {
                         // Expand the expression for the Log.  Since we know the condition evaluated to false, leave unexpandable properties in the condition so as not to cause an error
-                        string expanded = bucket.Expander.ExpandIntoStringAndUnescape(_targetChildInstance.Condition, ExpanderOptions.ExpandAll | ExpanderOptions.LeavePropertiesUnexpandedOnError, _targetChildInstance.ConditionLocation);
+                        string expanded = bucket.Expander.ExpandIntoStringAndUnescape(_targetChildInstance.Condition, ExpanderOptions.ExpandAll | ExpanderOptions.LeavePropertiesUnexpandedOnError | ExpanderOptions.Truncate, _targetChildInstance.ConditionLocation);
 
                         // Whilst we are within the processing of the task, we haven't actually started executing it, so
                         // our skip task message needs to be in the context of the target. However any errors should be reported
@@ -784,12 +785,13 @@ namespace Microsoft.Build.BackEnd
 
             Type taskType = host.TaskInstance.GetType();
 
-            try
-            {
-                if (taskType == typeof(MSBuild))
+                try
                 {
-                    MSBuild msbuildTask = host.TaskInstance as MSBuild;
-                    ErrorUtilities.VerifyThrow(msbuildTask != null, "Unexpected MSBuild internal task.");
+                    if (taskType == typeof(MSBuild))
+                    {
+                        MSBuild msbuildTask = host.TaskInstance as MSBuild;
+
+                        ErrorUtilities.VerifyThrow(msbuildTask != null, "Unexpected MSBuild internal task.");
 
                     var undeclaredProjects = GetUndeclaredProjects(msbuildTask);
 
@@ -835,20 +837,15 @@ namespace Microsoft.Build.BackEnd
 #if FEATURE_FILE_TRACKER
                     using (FullTracking.Track(taskLoggingContext.TargetLoggingContext.Target.Name, _taskNode.Name, _buildRequestEntry.ProjectRootDirectory, _buildRequestEntry.RequestConfiguration.Project.PropertiesToBuildWith))
 #endif
-                    {
-                        taskResult = taskExecutionHost.Execute();
+                        {
+                            taskResult = taskExecutionHost.Execute();
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                if (ExceptionHandling.IsCriticalException(ex) || (Environment.GetEnvironmentVariable("MSBUILDDONOTCATCHTASKEXCEPTIONS") == "1"))
+                catch (Exception ex) when (!ExceptionHandling.IsCriticalException(ex) && Environment.GetEnvironmentVariable("MSBUILDDONOTCATCHTASKEXCEPTIONS") != "1")
                 {
-                    throw;
+                    taskException = ex;
                 }
-
-                taskException = ex;
-            }
 
             if (taskException == null)
             {
@@ -879,38 +876,36 @@ namespace Microsoft.Build.BackEnd
                     _continueOnError = ContinueOnError.ErrorAndStop;
                     InternalLoggerException ex = taskException as InternalLoggerException;
 
-                    // Rethrow wrapped in order to avoid losing the callstack
-                    throw new InternalLoggerException(taskException.Message, taskException, ex.BuildEventArgs, ex.ErrorCode, ex.HelpKeyword, ex.InitializationException);
-                }
-#if FEATURE_VARIOUS_EXCEPTIONS
-                else if (type == typeof(ThreadAbortException))
-                {
-                    Thread.ResetAbort();
-                    _continueOnError = ContinueOnError.ErrorAndStop;
+                        // Rethrow wrapped in order to avoid losing the callstack
+                        throw new InternalLoggerException(taskException.Message, taskException, ex.BuildEventArgs, ex.ErrorCode, ex.HelpKeyword, ex.InitializationException);
+                    }
+                    else if (type == typeof(ThreadAbortException))
+                    {
+                        Thread.ResetAbort();
+                        _continueOnError = ContinueOnError.ErrorAndStop;
 
-                    // Cannot rethrow wrapped as ThreadAbortException is sealed and has no appropriate constructor
-                    // Stack will be lost
-                    throw taskException;
-                }
-#endif
-                else if (type == typeof(BuildAbortedException))
-                {
-                    _continueOnError = ContinueOnError.ErrorAndStop;
+                        // Cannot rethrow wrapped as ThreadAbortException is sealed and has no appropriate constructor
+                        // Stack will be lost
+                        throw taskException;
+                    }
+                    else if (type == typeof(BuildAbortedException))
+                    {
+                        _continueOnError = ContinueOnError.ErrorAndStop;
 
-                    // Rethrow wrapped in order to avoid losing the callstack
-                    throw new BuildAbortedException(taskException.Message, ((BuildAbortedException)taskException));
-                }
-                else if (type == typeof(CircularDependencyException))
-                {
-                    _continueOnError = ContinueOnError.ErrorAndStop;
-                    ProjectErrorUtilities.ThrowInvalidProject(taskLoggingContext.Task.Location, "CircularDependency", taskLoggingContext.TargetLoggingContext.Target.Name);
-                }
-                else if (type == typeof(InvalidProjectFileException))
-                {
-                    // Just in case this came out of a task, make sure it's not
-                    // marked as having been logged.
-                    InvalidProjectFileException ipex = (InvalidProjectFileException)taskException;
-                    ipex.HasBeenLogged = false;
+                        // Rethrow wrapped in order to avoid losing the callstack
+                        throw new BuildAbortedException(taskException.Message, (BuildAbortedException)taskException);
+                    }
+                    else if (type == typeof(CircularDependencyException))
+                    {
+                        _continueOnError = ContinueOnError.ErrorAndStop;
+                        ProjectErrorUtilities.ThrowInvalidProject(taskLoggingContext.Task.Location, "CircularDependency", taskLoggingContext.TargetLoggingContext.Target.Name);
+                    }
+                    else if (type == typeof(InvalidProjectFileException))
+                    {
+                        // Just in case this came out of a task, make sure it's not
+                        // marked as having been logged.
+                        InvalidProjectFileException ipex = (InvalidProjectFileException)taskException;
+                        ipex.HasBeenLogged = false;
 
                     if (_continueOnError != ContinueOnError.ErrorAndStop)
                     {
@@ -971,12 +966,35 @@ namespace Microsoft.Build.BackEnd
                 }
             }
 
-            // If the task returned attempt to gather its outputs.  If gathering outputs fails set the taskResults
-            // to false
-            if (taskReturned)
-            {
-                taskResult = GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket) && taskResult;
-            }
+                // When a task fails it must log an error. If a task fails to do so,
+                // that is logged as an error. MSBuild tasks are an exception because
+                // errors are not logged directly from them, but the tasks spawned by them.
+                IBuildEngine be = host.TaskInstance.BuildEngine;
+                if (taskReturned && !taskResult && !taskLoggingContext.HasLoggedErrors && (be is TaskHost th ? th.BuildRequestsSucceeded : false) && (be is IBuildEngine7 be7 ? !be7.AllowFailureWithoutError : true))
+                {
+                    if (_continueOnError == ContinueOnError.WarnAndContinue)
+                    {
+                        taskLoggingContext.LogWarning(null,
+                            new BuildEventFileInfo(_targetChildInstance.Location),
+                            "TaskReturnedFalseButDidNotLogError",
+                            _taskNode.Name);
+
+                        taskLoggingContext.LogComment(MessageImportance.Normal, "ErrorConvertedIntoWarning");
+                    }
+                    else
+                    {
+                        taskLoggingContext.LogError(new BuildEventFileInfo(_targetChildInstance.Location),
+                            "TaskReturnedFalseButDidNotLogError",
+                            _taskNode.Name);
+                    }
+                }
+
+                // If the task returned attempt to gather its outputs.  If gathering outputs fails set the taskResults
+                // to false
+                if (taskReturned)
+                {
+                    taskResult = GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket) && taskResult;
+                }
 
             // If the taskResults are false look at ContinueOnError.  If ContinueOnError=false (default)
             // mark the taskExecutedSuccessfully=false.  Otherwise let the task succeed but log a normal
@@ -1191,7 +1209,7 @@ namespace Microsoft.Build.BackEnd
         {
             string taskParameterAttribute = _taskNode.GetParameter(taskParameterName);
 
-            if (null != taskParameterAttribute)
+            if (taskParameterAttribute != null)
             {
                 ProjectTaskOutputItemInstance taskItemInstance = taskOutputSpecification as ProjectTaskOutputItemInstance;
                 if (taskItemInstance != null)

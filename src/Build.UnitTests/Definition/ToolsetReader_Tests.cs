@@ -3,14 +3,11 @@
 
 using System;
 using System.Collections.Generic;
-#if FEATURE_SYSTEM_CONFIGURATION
 using System.Configuration;
-#endif
 using System.IO;
 
 using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
-using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Internal;
 using Microsoft.Build.Shared;
@@ -115,8 +112,8 @@ namespace Microsoft.Build.UnitTests.Definition
             ToolsetReader reader = GetStandardConfigurationReader();
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             string defaultToolsVersion = reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Null(msbuildOverrideTasksPath);
@@ -159,8 +156,8 @@ namespace Microsoft.Build.UnitTests.Definition
             ToolsetReader reader = GetStandardConfigurationReader();
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             string defaultToolsVersion = reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Equal("c:\\Cat", msbuildOverrideTasksPath);
@@ -202,8 +199,8 @@ namespace Microsoft.Build.UnitTests.Definition
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
             PropertyDictionary<ProjectPropertyInstance> pg = new PropertyDictionary<ProjectPropertyInstance>();
             pg.Set(ProjectPropertyInstance.Create("DotDotSlash", @".." + Path.DirectorySeparatorChar));
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), pg, true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             string expected1 = Path.GetFullPath(Path.Combine(BuildEnvironmentHelper.Instance.CurrentMSBuildToolsDirectory, "..", "foo"));
@@ -242,8 +239,8 @@ namespace Microsoft.Build.UnitTests.Definition
 
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             // Don't crash (consistent with invalid absolute path)
@@ -389,8 +386,8 @@ namespace Microsoft.Build.UnitTests.Definition
             ToolsetReader reader = GetStandardConfigurationReader();
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             string defaultToolsVersion = reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Null(defaultToolsVersion);
@@ -422,9 +419,10 @@ namespace Microsoft.Build.UnitTests.Definition
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
 
+
             // Should not throw
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
         }
 
@@ -445,9 +443,8 @@ namespace Microsoft.Build.UnitTests.Definition
             ToolsetReader reader = GetStandardConfigurationReader();
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             string defaultToolsVersion = reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Null(defaultToolsVersion);
@@ -471,9 +468,8 @@ namespace Microsoft.Build.UnitTests.Definition
             ToolsetReader reader = GetStandardConfigurationReader();
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             string defaultToolsVersion = reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Null(defaultToolsVersion);
@@ -498,9 +494,10 @@ namespace Microsoft.Build.UnitTests.Definition
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
 
+
             // Should not throw
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Empty(values);
@@ -531,9 +528,8 @@ namespace Microsoft.Build.UnitTests.Definition
             ToolsetReader reader = GetStandardConfigurationReader();
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             string defaultToolsVersion = reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Equal("2.0", defaultToolsVersion);
@@ -730,9 +726,10 @@ namespace Microsoft.Build.UnitTests.Definition
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
 
+
             //this should not throw ...
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
         }
 #endif
@@ -918,7 +915,7 @@ namespace Microsoft.Build.UnitTests.Definition
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
 
             string msbuildOverrideTasksPath;
-            string defaultOverrideToolsVersion = null;
+            string defaultOverrideToolsVersion;
             reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Empty(values);
@@ -948,7 +945,7 @@ namespace Microsoft.Build.UnitTests.Definition
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
 
             string msbuildOverrideTasksPath;
-            string defaultOverrideToolsVersion = null;
+            string defaultOverrideToolsVersion;
             reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Single(values);
@@ -980,8 +977,8 @@ namespace Microsoft.Build.UnitTests.Definition
             ToolsetReader reader = GetStandardConfigurationReader();
 
             Dictionary<string, Toolset> values = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
+            string msbuildOverrideTasksPath;
+            string defaultOverrideToolsVersion;
             string defaultToolsVersion = reader.ReadToolsets(values, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
 
             Assert.Equal("2>.0", defaultToolsVersion);

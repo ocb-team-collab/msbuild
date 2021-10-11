@@ -3,11 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Collections;
-using System.IO;
-using System.Globalization;
-using System.Diagnostics;
 
 using Microsoft.Build.Framework;
 using Microsoft.Build.Shared;
@@ -265,13 +261,13 @@ namespace Microsoft.Build.BackEnd.Logging
 
             if (Verbosity == LoggerVerbosity.Diagnostic && showItemAndPropertyList)
             {
-                if (null != e.Properties)
+                if (e.Properties != null)
                 {
                     var propertyList = ExtractPropertyList(e.Properties);
                     WriteProperties(propertyList);
                 }
 
-                if (null != e.Items)
+                if (e.Items != null)
                 {
                     SortedList itemList = ExtractItemList(e.Items);
                     WriteItems(itemList);
@@ -533,7 +529,7 @@ namespace Microsoft.Build.BackEnd.Logging
                     setColor(ConsoleColor.DarkGray);
                 }
 
-                string nonNullMessage = null;
+                string nonNullMessage;
 
                 // Include file information if present.
                 if (e.File != null)
@@ -543,7 +539,7 @@ namespace Microsoft.Build.BackEnd.Logging
                 else
                 {
                     // null messages are ok -- treat as blank line
-                    nonNullMessage = (e.Message == null) ? String.Empty : e.Message;
+                    nonNullMessage = e.Message ?? String.Empty;
                 }
 
                 WriteLinePretty(nonNullMessage);
@@ -575,24 +571,35 @@ namespace Microsoft.Build.BackEnd.Logging
 
         public override void StatusEventHandler(object sender, BuildStatusEventArgs e)
         {
-            if (showPerfSummary)
+            if (e is ProjectEvaluationStartedEventArgs projectEvaluationStarted)
             {
-                ProjectEvaluationStartedEventArgs projectEvaluationStarted = e as ProjectEvaluationStartedEventArgs;
-
-                if (projectEvaluationStarted != null)
+                if (showPerfSummary)
                 {
                     PerformanceCounter counter = GetPerformanceCounter(projectEvaluationStarted.ProjectFile, ref projectEvaluationPerformanceCounters);
                     counter.InScope = true;
-
-                    return;
                 }
-
-                ProjectEvaluationFinishedEventArgs projectEvaluationFinished = e as ProjectEvaluationFinishedEventArgs;
-
-                if (projectEvaluationFinished != null)
+            }
+            else if (e is ProjectEvaluationFinishedEventArgs projectEvaluationFinished)
+            {
+                if (showPerfSummary)
                 {
                     PerformanceCounter counter = GetPerformanceCounter(projectEvaluationFinished.ProjectFile, ref projectEvaluationPerformanceCounters);
                     counter.InScope = false;
+                }
+
+                if (Verbosity == LoggerVerbosity.Diagnostic && showItemAndPropertyList)
+                {
+                    if (projectEvaluationFinished.Properties != null)
+                    {
+                        var propertyList = ExtractPropertyList(projectEvaluationFinished.Properties);
+                        WriteProperties(propertyList);
+                    }
+
+                    if (projectEvaluationFinished.Items != null)
+                    {
+                        SortedList itemList = ExtractItemList(projectEvaluationFinished.Items);
+                        WriteItems(itemList);
+                    }
                 }
             }
         }
@@ -630,13 +637,13 @@ namespace Microsoft.Build.BackEnd.Logging
             {
                 setColor(ConsoleColor.Cyan);
 
-                this.VerifyStack((current != null), "Unexpected null project stack");
+                this.VerifyStack(current != null, "Unexpected null project stack");
 
                 WriteLinePretty(projectSeparatorLine);
 
                 if (previous == null)
                 {
-                    if ((targetNames == null) || (targetNames.Length == 0))
+                    if (string.IsNullOrEmpty(targetNames))
                     {
                         WriteLinePrettyFromResource(indentLevel, "ProjectStartedPrefixForTopLevelProjectWithDefaultTargets", current);
                     }
@@ -647,7 +654,7 @@ namespace Microsoft.Build.BackEnd.Logging
                 }
                 else
                 {
-                    if ((targetNames == null) || (targetNames.Length == 0))
+                    if (string.IsNullOrEmpty(targetNames))
                     {
                         WriteLinePrettyFromResource(indentLevel, "ProjectStartedPrefixForNestedProjectWithDefaultTargets", previous, current);
                     }
@@ -971,7 +978,7 @@ namespace Microsoft.Build.BackEnd.Logging
             /// </summary>
             internal bool IsEmpty()
             {
-                return (_frames.Count == 0);
+                return _frames.Count == 0;
             }
         }
         #endregion

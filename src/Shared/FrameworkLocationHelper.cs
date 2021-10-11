@@ -4,21 +4,11 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-#if FEATURE_SYSTEM_CONFIGURATION
-using System.Configuration;
-#endif
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
-
-using Microsoft.Build.Evaluation;
 using Microsoft.Win32;
 
-#if FEATURE_SYSTEM_CONFIGURATION
-using PropertyElement = Microsoft.Build.Evaluation.ToolsetElement.PropertyElement;
-#endif
-using System.Reflection;
-using System.Runtime.InteropServices;
 using Microsoft.Build.Shared.FileSystem;
 
 namespace Microsoft.Build.Shared
@@ -29,7 +19,7 @@ namespace Microsoft.Build.Shared
     internal enum DotNetFrameworkArchitecture
     {
         /// <summary>
-        /// Indicates the .NET Framework that is currently being run under.  
+        /// Indicates the .NET Framework that is currently being run under.
         /// </summary>
         Current = 0,
 
@@ -68,6 +58,7 @@ namespace Microsoft.Build.Shared
         internal static readonly Version dotNetFrameworkVersion47 = new Version(4, 7);
         internal static readonly Version dotNetFrameworkVersion471 = new Version(4, 7, 1);
         internal static readonly Version dotNetFrameworkVersion472 = new Version(4, 7, 2);
+        internal static readonly Version dotNetFrameworkVersion48 = new Version(4, 8);
 
         // visual studio versions.
         internal static readonly Version visualStudioVersion100 = new Version(10, 0);
@@ -75,9 +66,11 @@ namespace Microsoft.Build.Shared
         internal static readonly Version visualStudioVersion120 = new Version(12, 0);
         internal static readonly Version visualStudioVersion140 = new Version(14, 0);
         internal static readonly Version visualStudioVersion150 = new Version(15, 0);
+        internal static readonly Version visualStudioVersion160 = new Version(16, 0);
+        internal static readonly Version visualStudioVersion170 = new Version(17, 0);
 
         // keep this up-to-date; always point to the latest visual studio version.
-        internal static readonly Version visualStudioVersionLatest = visualStudioVersion150;
+        internal static readonly Version visualStudioVersionLatest = visualStudioVersion160;
 
         private const string dotNetFrameworkRegistryPath = "SOFTWARE\\Microsoft\\.NETFramework";
         private const string dotNetFrameworkSetupRegistryPath = "SOFTWARE\\Microsoft\\NET Framework Setup\\NDP";
@@ -219,6 +212,9 @@ namespace Microsoft.Build.Shared
 
             // v4.7.2
             CreateDotNetFrameworkSpecForV4(dotNetFrameworkVersion472, visualStudioVersion150),
+
+            // v4.8
+            CreateDotNetFrameworkSpecForV4(dotNetFrameworkVersion48, visualStudioVersion150),
         };
 
         /// <summary>
@@ -290,6 +286,26 @@ namespace Microsoft.Build.Shared
                 dotNetFrameworkVersion47,
                 dotNetFrameworkVersion471,
                 dotNetFrameworkVersion472,
+                dotNetFrameworkVersion48,
+            }),
+
+            // VS16
+            new VisualStudioSpec(visualStudioVersion160, "NETFXSDK\\{0}", "v10.0", "InstallationFolder", new []
+            {
+                dotNetFrameworkVersion11,
+                dotNetFrameworkVersion20,
+                dotNetFrameworkVersion35,
+                dotNetFrameworkVersion40,
+                dotNetFrameworkVersion45,
+                dotNetFrameworkVersion451,
+                dotNetFrameworkVersion452,
+                dotNetFrameworkVersion46,
+                dotNetFrameworkVersion461,
+                dotNetFrameworkVersion462,
+                dotNetFrameworkVersion47,
+                dotNetFrameworkVersion471,
+                dotNetFrameworkVersion472,
+                dotNetFrameworkVersion48,
             }),
         };
 
@@ -303,27 +319,39 @@ namespace Microsoft.Build.Shared
         /// The rules are maintained in a 2-dimensions array. Each row defines a rule. The first column
         /// defines the trigger condition. The second column defines the fallback .net and VS versions.
         /// </remarks>
-        private static readonly Tuple<Version, Version>[,] s_explicitFallbackRulesForPathToDotNetFrameworkSdkTools =
+        private static readonly (Version, Version)[,] s_explicitFallbackRulesForPathToDotNetFrameworkSdkTools =
         {
             // VS12
-            { Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion120), Tuple.Create(dotNetFrameworkVersion45, visualStudioVersion120) },
-            { Tuple.Create(dotNetFrameworkVersion452, visualStudioVersion120), Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion120) },
+            { (dotNetFrameworkVersion451, visualStudioVersion120), (dotNetFrameworkVersion45, visualStudioVersion120) },
+            { (dotNetFrameworkVersion452, visualStudioVersion120), (dotNetFrameworkVersion451, visualStudioVersion120) },
 
             // VS14
-            { Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion140), Tuple.Create(dotNetFrameworkVersion45, visualStudioVersion140) },
-            { Tuple.Create(dotNetFrameworkVersion452, visualStudioVersion140), Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion140) },
-            { Tuple.Create(dotNetFrameworkVersion46, visualStudioVersion140), Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion140) },
-            { Tuple.Create(dotNetFrameworkVersion461, visualStudioVersion140), Tuple.Create(dotNetFrameworkVersion46, visualStudioVersion140) },
+            { (dotNetFrameworkVersion451, visualStudioVersion140), (dotNetFrameworkVersion45, visualStudioVersion140) },
+            { (dotNetFrameworkVersion452, visualStudioVersion140), (dotNetFrameworkVersion451, visualStudioVersion140) },
+            { (dotNetFrameworkVersion46, visualStudioVersion140), (dotNetFrameworkVersion451, visualStudioVersion140) },
+            { (dotNetFrameworkVersion461, visualStudioVersion140), (dotNetFrameworkVersion46, visualStudioVersion140) },
 
             // VS15
-            { Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion45, visualStudioVersion150) },
-            { Tuple.Create(dotNetFrameworkVersion452, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion150) },
-            { Tuple.Create(dotNetFrameworkVersion46, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion451, visualStudioVersion150) },
-            { Tuple.Create(dotNetFrameworkVersion461, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion46, visualStudioVersion150) },
-            { Tuple.Create(dotNetFrameworkVersion462, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion461, visualStudioVersion150) },
-            { Tuple.Create(dotNetFrameworkVersion47, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion462, visualStudioVersion150) },
-            { Tuple.Create(dotNetFrameworkVersion471, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion47, visualStudioVersion150) },
-            { Tuple.Create(dotNetFrameworkVersion472, visualStudioVersion150), Tuple.Create(dotNetFrameworkVersion471, visualStudioVersion150) },
+            { (dotNetFrameworkVersion451, visualStudioVersion150), (dotNetFrameworkVersion45, visualStudioVersion150) },
+            { (dotNetFrameworkVersion452, visualStudioVersion150), (dotNetFrameworkVersion451, visualStudioVersion150) },
+            { (dotNetFrameworkVersion46, visualStudioVersion150), (dotNetFrameworkVersion451, visualStudioVersion150) },
+            { (dotNetFrameworkVersion461, visualStudioVersion150), (dotNetFrameworkVersion46, visualStudioVersion150) },
+            { (dotNetFrameworkVersion462, visualStudioVersion150), (dotNetFrameworkVersion461, visualStudioVersion150) },
+            { (dotNetFrameworkVersion47, visualStudioVersion150), (dotNetFrameworkVersion462, visualStudioVersion150) },
+            { (dotNetFrameworkVersion471, visualStudioVersion150), (dotNetFrameworkVersion47, visualStudioVersion150) },
+            { (dotNetFrameworkVersion472, visualStudioVersion150), (dotNetFrameworkVersion471, visualStudioVersion150) },
+            { (dotNetFrameworkVersion48, visualStudioVersion150), (dotNetFrameworkVersion472, visualStudioVersion150) },
+
+            // VS16
+            { (dotNetFrameworkVersion451, visualStudioVersion160), (dotNetFrameworkVersion45, visualStudioVersion160) },
+            { (dotNetFrameworkVersion452, visualStudioVersion160), (dotNetFrameworkVersion451, visualStudioVersion160) },
+            { (dotNetFrameworkVersion46, visualStudioVersion160), (dotNetFrameworkVersion451, visualStudioVersion160) },
+            { (dotNetFrameworkVersion461, visualStudioVersion160), (dotNetFrameworkVersion46, visualStudioVersion160) },
+            { (dotNetFrameworkVersion462, visualStudioVersion160), (dotNetFrameworkVersion461, visualStudioVersion160) },
+            { (dotNetFrameworkVersion47, visualStudioVersion160), (dotNetFrameworkVersion462, visualStudioVersion160) },
+            { (dotNetFrameworkVersion471, visualStudioVersion160), (dotNetFrameworkVersion47, visualStudioVersion160) },
+            { (dotNetFrameworkVersion472, visualStudioVersion160), (dotNetFrameworkVersion471, visualStudioVersion160) },
+            { (dotNetFrameworkVersion48, visualStudioVersion160), (dotNetFrameworkVersion472, visualStudioVersion160) },
        };
 #endif // FEATURE_WIN32_REGISTRY
 
@@ -422,13 +450,13 @@ namespace Microsoft.Build.Shared
 
         /// <summary>
         /// Because there is no longer a strong 1:1 mapping between FX versions and SDK
-        /// versions, if we're unable to locate the desired SDK version, we will try to 
+        /// versions, if we're unable to locate the desired SDK version, we will try to
         /// use whichever SDK version is installed by looking at the key pointing to the
         /// "latest" version.
         ///
-        /// This isn't ideal, but it will allow our tasks to function on any of several 
+        /// This isn't ideal, but it will allow our tasks to function on any of several
         /// related SDKs even if they don't have exactly the same versions.
-        /// 
+        ///
         /// NOTE:  This returns the path to the root of the fallback SDK
         /// </summary>
         private static string FallbackDotNetFrameworkSdkInstallPath
@@ -470,15 +498,15 @@ namespace Microsoft.Build.Shared
 
         /// <summary>
         /// Because there is no longer a strong 1:1 mapping between FX versions and SDK
-        /// versions, if we're unable to locate the desired SDK version, we will try to 
+        /// versions, if we're unable to locate the desired SDK version, we will try to
         /// use whichever SDK version is installed by looking at the key pointing to the
         /// "latest" version.
         ///
-        /// This isn't ideal, but it will allow our tasks to function on any of several 
+        /// This isn't ideal, but it will allow our tasks to function on any of several
         /// related SDKs even if they don't have exactly the same versions.
-        /// 
+        ///
         /// NOTE:  This explicitly returns the path to the 3.5 tools (bin) under the fallback
-        /// SDK, to match the data we're pulling from the registry now.  
+        /// SDK, to match the data we're pulling from the registry now.
         /// </summary>
         private static string PathToV35ToolsInFallbackDotNetFrameworkSdk
         {
@@ -501,8 +529,7 @@ namespace Microsoft.Build.Shared
                             // Path.Combine leaves no trailing slash, so if we had one before, be sure to add it back in
                             if (endsWithASlash)
                             {
-                                s_pathToV35ToolsInFallbackDotNetFrameworkSdk = s_pathToV35ToolsInFallbackDotNetFrameworkSdk
-                                                                             + Path.DirectorySeparatorChar;
+                                s_pathToV35ToolsInFallbackDotNetFrameworkSdk += Path.DirectorySeparatorChar;
                             }
                         }
                         else
@@ -518,15 +545,15 @@ namespace Microsoft.Build.Shared
 
         /// <summary>
         /// Because there is no longer a strong 1:1 mapping between FX versions and SDK
-        /// versions, if we're unable to locate the desired SDK version, we will try to 
+        /// versions, if we're unable to locate the desired SDK version, we will try to
         /// use whichever SDK version is installed by looking at the key pointing to the
         /// "latest" version.
         ///
-        /// This isn't ideal, but it will allow our tasks to function on any of several 
+        /// This isn't ideal, but it will allow our tasks to function on any of several
         /// related SDKs even if they don't have exactly the same versions.
-        /// 
-        /// NOTE:  This explicitly returns the path to the 4.X tools (bin\NetFX 4.0 Tools) 
-        /// under the fallback SDK, to match the data we're pulling from the registry now.  
+        ///
+        /// NOTE:  This explicitly returns the path to the 4.X tools (bin\NetFX 4.0 Tools)
+        /// under the fallback SDK, to match the data we're pulling from the registry now.
         /// </summary>
         private static string PathToV4ToolsInFallbackDotNetFrameworkSdk
         {
@@ -547,7 +574,7 @@ namespace Microsoft.Build.Shared
                             // Path.Combine leaves no trailing slash, so if we had one before, be sure to add it back in
                             if (endsWithASlash)
                             {
-                                s_pathToV4ToolsInFallbackDotNetFrameworkSdk = s_pathToV4ToolsInFallbackDotNetFrameworkSdk + "\\";
+                                s_pathToV4ToolsInFallbackDotNetFrameworkSdk += "\\";
                             }
                         }
                         else
@@ -680,7 +707,7 @@ namespace Microsoft.Build.Shared
                 if (NativeMethodsShared.IsWindows)
                 {
                     // If the registry entry is 1 then the framework is installed. Go ahead and find the directory. If it is not 1 then the framework is not installed, return null.
-                    return String.Compare("1", FindRegistryValueUnderKey(registryEntryToCheckInstall, registryValueToCheckInstall), StringComparison.OrdinalIgnoreCase) == 0;
+                    return String.Equals("1", FindRegistryValueUnderKey(registryEntryToCheckInstall, registryValueToCheckInstall), StringComparison.OrdinalIgnoreCase);
                 }
                 // False for non-windows since there is nothing in the registry
                 else
@@ -760,7 +787,7 @@ namespace Microsoft.Build.Shared
             else if (indexOfFramework64 == -1 && architecture == DotNetFrameworkArchitecture.Bitness64)
             {
                 // need to add 64 -- since this is a heuristic, we assume that we just need to append.  
-                baseLocation = baseLocation + "64";
+                baseLocation += "64";
             }
             // we don't need to do anything if it's DotNetFrameworkArchitecture.Current.  
 
@@ -844,7 +871,7 @@ namespace Microsoft.Build.Shared
                 return Path.Combine(NativeMethodsShared.FrameworkBasePath, "xbuild");
             }
 
-            string programFilesX64 = null;
+            string programFilesX64;
             if (string.Equals(programFiles, programFiles32))
             {
                 // either we're in a 32-bit window, or we're on a 32-bit machine.  
@@ -863,7 +890,7 @@ namespace Microsoft.Build.Shared
         }
 
         /// <summary>
-        /// Generate the path to the program files reference assembly location by taking in the program files special folder and then 
+        /// Generate the path to the program files reference assembly location by taking in the program files special folder and then
         /// using that path to generate the path to the reference assemblies location.
         /// </summary>
         internal static string GenerateProgramFilesReferenceAssemblyRoot()
@@ -886,15 +913,15 @@ namespace Microsoft.Build.Shared
         }
 
         /// <summary>
-        /// Given a ToolsVersion, find the path to the build tools folder for that ToolsVersion. 
+        /// Given a ToolsVersion, find the path to the build tools folder for that ToolsVersion.
         /// </summary>
         /// <param name="toolsVersion">The ToolsVersion to look up</param>
         /// <param name="architecture">Target build tools architecture.</param>
-        /// <returns>The path to the build tools folder for that ToolsVersion, if it exists, or 
+        /// <returns>The path to the build tools folder for that ToolsVersion, if it exists, or
         /// null otherwise</returns>
         internal static string GeneratePathToBuildToolsForToolsVersion(string toolsVersion, DotNetFrameworkArchitecture architecture)
         {
-            if (string.Compare(toolsVersion, MSBuildConstants.CurrentToolsVersion, StringComparison.Ordinal) == 0)
+            if (string.Equals(toolsVersion, MSBuildConstants.CurrentToolsVersion, StringComparison.Ordinal))
             {
                 return GetPathToBuildToolsFromEnvironment(architecture);
             }
@@ -910,7 +937,7 @@ namespace Microsoft.Build.Shared
         }
 
         /// <summary>
-        /// Take the parts of the Target framework moniker and formulate the reference assembly path based on the the following pattern:
+        /// Take the parts of the Target framework moniker and formulate the reference assembly path based on the following pattern:
         /// For a framework and version:
         ///     $(TargetFrameworkRootPath)\$(TargetFrameworkIdentifier)\$(TargetFrameworkVersion)
         /// For a subtype:
@@ -939,8 +966,7 @@ namespace Microsoft.Build.Shared
                     path = Path.Combine(path, frameworkName.Profile);
                 }
 
-                path = Path.GetFullPath(path);
-                return path;
+                return Path.GetFullPath(path);
             }
             catch (Exception e) when (ExceptionHandling.IsIoRelatedException(e))
             {
@@ -972,7 +998,7 @@ namespace Microsoft.Build.Shared
                 DirectoryInfo fixedPathInfo = new DirectoryInfo(path);
                 for (int i = 0; i < numberOfLevelsToRemove; i++)
                 {
-                    if (fixedPathInfo != null && fixedPathInfo.Parent != null)
+                    if (fixedPathInfo?.Parent != null)
                     {
                         fixedPathInfo = fixedPathInfo.Parent;
                     }
@@ -985,7 +1011,7 @@ namespace Microsoft.Build.Shared
 
                 if (fixedPath != null && endedWithASlash)
                 {
-                    fixedPath = fixedPath + Path.DirectorySeparatorChar;
+                    fixedPath += Path.DirectorySeparatorChar;
                 }
             }
 
@@ -993,24 +1019,21 @@ namespace Microsoft.Build.Shared
         }
 
         /// <summary>
-        /// Look up the path to the build tools directory for the requested ToolsVersion in the .exe.config file of this executable 
+        /// Look up the path to the build tools directory for the requested ToolsVersion in the .exe.config file of this executable
         /// </summary>
         private static string GetPathToBuildToolsFromEnvironment(DotNetFrameworkArchitecture architecture)
         {
-            switch (architecture)
+            return architecture switch
             {
-                case DotNetFrameworkArchitecture.Bitness64:
-                    return BuildEnvironmentHelper.Instance.MSBuildToolsDirectory64;
-                case DotNetFrameworkArchitecture.Bitness32:
-                    return BuildEnvironmentHelper.Instance.MSBuildToolsDirectory32;
-                default:
-                    return BuildEnvironmentHelper.Instance.CurrentMSBuildToolsDirectory;
-            }
+                DotNetFrameworkArchitecture.Bitness64 => BuildEnvironmentHelper.Instance.MSBuildToolsDirectory64,
+                DotNetFrameworkArchitecture.Bitness32 => BuildEnvironmentHelper.Instance.MSBuildToolsDirectory32,
+                _ => BuildEnvironmentHelper.Instance.CurrentMSBuildToolsDirectory,
+            };
         }
 
 #if FEATURE_WIN32_REGISTRY
         /// <summary>
-        /// Look up the path to the build tools directory in the registry for the requested ToolsVersion and requested architecture  
+        /// Look up the path to the build tools directory in the registry for the requested ToolsVersion and requested architecture
         /// </summary>
         private static string GetPathToBuildToolsFromRegistry(string toolsVersion, DotNetFrameworkArchitecture architecture)
         {
@@ -1077,14 +1100,14 @@ namespace Microsoft.Build.Shared
 
         private static VisualStudioSpec GetVisualStudioSpec(Version version)
         {
-            ErrorUtilities.VerifyThrowArgument(s_visualStudioSpecDict.ContainsKey(version), "FrameworkLocationHelper.UnsupportedVisualStudioVersion", version);
-            return s_visualStudioSpecDict[version];
+            ErrorUtilities.VerifyThrowArgument(s_visualStudioSpecDict.TryGetValue(version, out VisualStudioSpec spec), "FrameworkLocationHelper.UnsupportedVisualStudioVersion", version);
+            return spec;
         }
 
         private static DotNetFrameworkSpec GetDotNetFrameworkSpec(Version version)
         {
-            ErrorUtilities.VerifyThrowArgument(s_dotNetFrameworkSpecDict.ContainsKey(version), "FrameworkLocationHelper.UnsupportedFrameworkVersion", version);
-            return s_dotNetFrameworkSpecDict[version];
+            ErrorUtilities.VerifyThrowArgument(s_dotNetFrameworkSpecDict.TryGetValue(version, out DotNetFrameworkSpec spec), "FrameworkLocationHelper.UnsupportedFrameworkVersion", version);
+            return spec;
         }
 
         /// <summary>
@@ -1177,6 +1200,10 @@ namespace Microsoft.Build.Shared
             {
                 string sdkVersionFolder = "4.6"; // Default for back-compat
 
+                if (dotNetSdkVersion == dotNetFrameworkVersion48)
+                {
+                    sdkVersionFolder = "4.8";
+                }
                 if (dotNetSdkVersion == dotNetFrameworkVersion472)
                 {
                     sdkVersionFolder = "4.7.2";
@@ -1655,8 +1682,7 @@ namespace Microsoft.Build.Shared
             public override string GetPathToDotNetFrameworkSdk(VisualStudioSpec visualStudioSpec)
             {
                 string pathToBinRoot = this.GetPathToDotNetFrameworkSdkTools(visualStudioSpec);
-                pathToBinRoot = RemoveDirectories(pathToBinRoot, 1);
-                return pathToBinRoot;
+                return RemoveDirectories(pathToBinRoot, 1);
             }
 
             /// <summary>

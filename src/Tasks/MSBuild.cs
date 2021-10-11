@@ -199,7 +199,7 @@ namespace Microsoft.Build.Tasks
             }
 
             // We have been asked to unescape all escaped characters before processing
-            if (TargetAndPropertyListSeparators != null && TargetAndPropertyListSeparators.Length > 0)
+            if (TargetAndPropertyListSeparators?.Length > 0)
             {
                 ExpandAllTargetsAndProperties();
             }
@@ -611,10 +611,8 @@ namespace Microsoft.Build.Tasks
 
                         foreach (string targetName in nonNullTargetList)
                         {
-                            if (targetOutputsPerProject[i].ContainsKey(targetName))
+                            if (targetOutputsPerProject[i].TryGetValue(targetName, out ITaskItem[] outputItemsFromTarget))
                             {
-                                ITaskItem[] outputItemsFromTarget = targetOutputsPerProject[i][targetName];
-
                                 foreach (ITaskItem outputItemFromTarget in outputItemsFromTarget)
                                 {
                                     // No need to rebase if the calling project is the same as the callee project 

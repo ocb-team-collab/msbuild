@@ -196,6 +196,11 @@
         <target state="new">MSB3021: Unable to copy file "{0}" to "{1}". {2}</target>
         <note>{StrBegin="MSB3021: "}</note>
       </trans-unit>
+      <trans-unit id="Copy.ErrorIfLinkFailsSetWithoutLinkOption">
+        <source>MSB3892: ErrorIfLinkFails requires UseHardlinksIfPossible or UseSymbolicLinksIfPossible to be set.</source>
+        <target state="new">MSB3892: ErrorIfLinkFails requires UseHardlinksIfPossible or UseSymbolicLinksIfPossible to be set.</target>
+        <note>{StrBegin="MSB3892: "} LOCALIZATION: Do not localize "ErrorIfLinkFails", "UseHardLinksIfPossible", or "UseSymbolicLinksIfPossible".</note>
+      </trans-unit>
       <trans-unit id="Copy.ExactlyOneTypeOfDestination">
         <source>MSB3022: Both "{0}" and "{1}" were specified as input parameters in the project file. Please choose one or the other.</source>
         <target state="new">MSB3022: Both "{0}" and "{1}" were specified as input parameters in the project file. Please choose one or the other.</target>
@@ -210,6 +215,11 @@
         <source>Creating hard link to copy "{0}" to "{1}".</source>
         <target state="new">Creating hard link to copy "{0}" to "{1}".</target>
         <note>LOCALIZATION: {0} and {1} are paths.</note>
+      </trans-unit>
+      <trans-unit id="Copy.LinkFailed">
+        <source>MSB3893: Could not use a link to copy "{0}" to "{1}".</source>
+        <target state="new">MSB3893: Could not use a link to copy "{0}" to "{1}".</target>
+        <note>{StrBegin="MSB3893: "} LOCALIZATION: {0} and {1} are paths.</note>
       </trans-unit>
       <trans-unit id="Copy.RetryingAsFileCopy">
         <source>Could not use a link to copy "{0}" to "{1}". Copying the file instead. {2}</source>
@@ -544,6 +554,11 @@
         <target state="new">Global Properties:</target>
         <note />
       </trans-unit>
+      <trans-unit id="General.StateFileAlreadyPresent">
+        <source>MSB3667: There is already a file at "{0}". If you are trying to create a precomputed cache, ensure that you are building a single project that depends on your assemblies rather than building your assemblies themselves. If you are running the ResolveAssemblyReference task normally, do not set the "AssemblyInformationCacheOutputPath" parameter of the ResolveAssemblyReference task.</source>
+        <target state="new">MSB3667: There is already a file at "{0}". If you are trying to create a precomputed cache, ensure that you are building a single project that depends on your assemblies rather than building your assemblies themselves. If you are running the ResolveAssemblyReference task normally, do not set the "AssemblyInformationCacheOutputPath" parameter of the ResolveAssemblyReference task.</target>
+        <note>{StrBegin="MSB3667: "}</note>
+      </trans-unit>
       <trans-unit id="General.UndefineProperties">
         <source>Removing Properties:</source>
         <target state="new">Removing Properties:</target>
@@ -809,6 +824,31 @@
         <target state="new">MSB3160: Xml Validation warning in file '{0}': {1}</target>
         <note>{StrBegin="MSB3160: "}</note>
       </trans-unit>
+      <trans-unit id="GenerateLauncher.CopyError">
+        <source>MSB3961: An error occurred trying to copy '{0}' to '{1}': {2}</source>
+        <target state="new">MSB3961: An error occurred trying to copy '{0}' to '{1}': {2}</target>
+        <note>{StrBegin="MSB3961: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.General">
+        <source>MSB3962: An error occurred generating a launcher: {0}</source>
+        <target state="new">MSB3962: An error occurred generating a launcher: {0}</target>
+        <note>{StrBegin="MSB3962: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.InvalidInput">
+        <source>MSB3963: Not enough data was provided to generate a launcher. Please provide a value for: 'EntryPoint'.</source>
+        <target state="new">MSB3963: Not enough data was provided to generate a launcher. Please provide a value for: 'EntryPoint'.</target>
+        <note>{StrBegin="MSB3963: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.MissingLauncherExe">
+        <source>MSB3964: Could not find required file '{0}'.</source>
+        <target state="new">MSB3964: Could not find required file '{0}'.</target>
+        <note>{StrBegin="MSB3964: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.NoOutputPath">
+        <source>MSB3965: No output path specified in build settings.</source>
+        <target state="new">MSB3965: No output path specified in build settings.</target>
+        <note>{StrBegin="MSB3965: "}</note>
+      </trans-unit>
       <trans-unit id="GenerateManifest.AllowPartiallyTrustedCallers">
         <source>MSB3177: Reference '{0}' does not allow partially trusted callers.</source>
         <target state="new">MSB3177: Reference '{0}' does not allow partially trusted callers.</target>
@@ -1014,6 +1054,11 @@
         <target state="new">MSB3190: ClickOnce does not support the request execution level '{0}'.</target>
         <note>{StrBegin="MSB3190: "}</note>
       </trans-unit>
+      <trans-unit id="GenerateResource.CoreSupportsLimitedScenarios">
+        <source>MSB3824: In order to build with .NET Core, resource inputs must be in .txt or .resx format.</source>
+        <target state="new">MSB3824: In order to build with .NET Core, resource inputs must be in .txt or .resx format.</target>
+        <note>{StrBegin="MSB3824: "}</note>
+      </trans-unit>
       <trans-unit id="GenerateResource.InputDoesntExist">
         <source>Input file "{0}" does not exist.</source>
         <target state="new">Input file "{0}" does not exist.</target>
@@ -1070,9 +1115,9 @@
         <note>{StrBegin="MSB3554: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.CorruptOutput">
-        <source>MSB3555: Output file "{0}" is possibly corrupt.</source>
-        <target state="new">MSB3555: Output file "{0}" is possibly corrupt.</target>
-        <note>{StrBegin="MSB3555: "}</note>
+        <source>Output file "{0}" is possibly corrupt and will be deleted and recreated.</source>
+        <target state="new">Output file "{0}" is possibly corrupt and will be deleted and recreated.</target>
+        <note />
       </trans-unit>
       <trans-unit id="GenerateResource.OnlyStringsSupported">
         <source>MSB3556: Only strings can be written to a .txt file, resource "{0}" is type {1}.</source>
@@ -1335,6 +1380,11 @@
         <source>Found the Microsoft Windows SDK installed at "{0}".</source>
         <target state="new">Found the Microsoft Windows SDK installed at "{0}".</target>
         <note />
+      </trans-unit>
+      <trans-unit id="GetReferenceAssemblyPaths.OutOfDateSDK">
+        <source>MSB3971: The reference assemblies for "{0}" were not found. You might be using an older .NET SDK to target .NET 5.0 or higher. Update Visual Studio and/or your .NET SDK.</source>
+        <target state="new">MSB3971: The reference assemblies for "{0}" were not found. You might be using an older .NET SDK to target .NET 5.0 or higher. Update Visual Studio and/or your .NET SDK.</target>
+        <note>{StrBegin="MSB3971: "}</note>
       </trans-unit>
       <trans-unit id="MakeDir.Comment">
         <source>Creating directory "{0}".</source>
@@ -1832,8 +1882,10 @@
         <note>{StrBegin="MSB3276: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.FoundConflicts">
-        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.  These reference conflicts are listed in the build log when log verbosity is set to detailed.</source>
-        <target state="new">MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.  These reference conflicts are listed in the build log when log verbosity is set to detailed.</target>
+        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.
+{1}</source>
+        <target state="new">MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.
+{1}</target>
         <note>{StrBegin="MSB3277: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.LogAttributeFormat">
@@ -2328,6 +2380,11 @@
         <target state="new">MSB3473: Path for "{0}" is invalid. {1}</target>
         <note>{StrBegin="MSB3473: "}</note>
       </trans-unit>
+      <trans-unit id="SGen.TaskNotSupported">
+        <source>MSB3474: The task "{0}" is not supported on the .NET Core version of MSBuild. Use the Microsoft XML Serializer Generator package instead. See https://go.microsoft.com/fwlink/?linkid=858594 for more information.</source>
+        <target state="new">MSB3474: The task "{0}" is not supported on the .NET Core version of MSBuild. Use the Microsoft XML Serializer Generator package instead. See https://go.microsoft.com/fwlink/?linkid=858594 for more information.</target>
+        <note>{StrBegin="MSB3474: "}</note>
+      </trans-unit>
       <trans-unit id="SignFile.CertNotInStore">
         <source>MSB3481: The signing certificate could not be located. Ensure that it is in the current user's personal store.</source>
         <target state="new">MSB3481: The signing certificate could not be located. Ensure that it is in the current user's personal store.</target>
@@ -2478,6 +2535,11 @@
         <target state="new">Did not unzip from file "{0}" to file "{1}" because the "{2}" parameter was set to "{3}" in the project and the files' sizes and timestamps match.</target>
         <note />
       </trans-unit>
+      <trans-unit id="Unzip.DidNotUnzipBecauseOfFilter">
+        <source>Did not unzip file "{0}" because it didn't match the include filter or because it matched the exclude filter.</source>
+        <target state="new">Did not unzip file "{0}" because it didn't match the include filter or because it matched the exclude filter.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="Unzip.ErrorCouldNotCreateDestinationDirectory">
         <source>MSB3931: Failed to unzip to directory "{0}" because it could not be created.  {1}</source>
         <target state="new">MSB3931: Failed to unzip to directory "{0}" because it could not be created.  {1}</target>
@@ -2508,6 +2570,16 @@
         <target state="new">MSB3932: Failed to unzip file "{0}" because the file does not exist or is inaccessible.</target>
         <note>{StrBegin="MSB3932: "}</note>
       </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternInvalidPath">
+        <source>MSB3937: Failed to parse pattern "{0}" because it contains an invalid path character.</source>
+        <target state="new">MSB3937: Failed to parse pattern "{0}" because it contains an invalid path character.</target>
+        <note>{StrBegin="MSB3937: "}</note>
+      </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternPropertyReferences">
+        <source>MSB3938: Failed to parse pattern "{0}" because it contains a property reference which isn't supported.</source>
+        <target state="new">MSB3938: Failed to parse pattern "{0}" because it contains a property reference which isn't supported.</target>
+        <note>{StrBegin="MSB3938: "}</note>
+      </trans-unit>
       <trans-unit id="Unzip.FileComment">
         <source>Unzipping file "{0}" to "{1}".</source>
         <target state="new">Unzipping file "{0}" to "{1}".</target>
@@ -2533,6 +2605,31 @@
         <target state="new">MSB3952: File hash mismatch. Expected {0} to have a {1} file hash of {2}, but it was {3}.</target>
         <note>{StrBegin="MSB3952: "}</note>
       </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertToInferredType">
+        <source>Could not convert the value for parameter "{0}" to the inferred type "{1}". The value will be treated as a string. {2}</source>
+        <target state="new">Could not convert the value for parameter "{0}" to the inferred type "{1}". The value will be treated as a string. {2}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertValue">
+        <source>MSB3716: The parameter value "{0}" could not be converted to "{1}". {2}</source>
+        <target state="new">MSB3716: The parameter value "{0}" could not be converted to "{1}". {2}</target>
+        <note>{StrBegin="MSB3716: "}</note>
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotInferParameterType">
+        <source>Could not infer the type of parameter "{0}" because the attribute type is unknown. The value will be treated as a string.</source>
+        <target state="new">Could not infer the type of parameter "{0}" because the attribute type is unknown. The value will be treated as a string.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.MultipleConstructorsFound">
+        <source>Multiple attribute constructors were found for type inferencing.</source>
+        <target state="new">Multiple attribute constructors were found for type inferencing.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.ParameterTypeNotFound">
+        <source>MSB3715: The type "{0}" was not found.</source>
+        <target state="new">MSB3715: The type "{0}" was not found.</target>
+        <note>{StrBegin="MSB3715: "}</note>
+      </trans-unit>
       <trans-unit id="WriteLinesToFile.ErrorOrWarning">
         <source>MSB3491: Could not write lines to file "{0}". {1}</source>
         <target state="new">MSB3491: Could not write lines to file "{0}". {1}</target>
@@ -2544,9 +2641,9 @@
         <note>{StrBegin="MSB3492: "}</note>
       </trans-unit>
       <trans-unit id="WriteLinesToFile.SkippingUnchangedFile">
-        <source>MSB3493: Skipping write to file "{0}" because content would not change.</source>
-        <target state="new">MSB3493: Skipping write to file "{0}" because content would not change.</target>
-        <note>{StrBegin="MSB3493: "}</note>
+        <source>Skipping write to file "{0}" because content would not change.</source>
+        <target state="new">Skipping write to file "{0}" because content would not change.</target>
+        <note />
       </trans-unit>
       <trans-unit id="GetReferenceAssemblyPaths.InvalidTargetFrameworkMoniker">
         <source>MSB3642: The Target Framework Moniker "{0}" is invalid. "{1}"</source>
@@ -2572,6 +2669,11 @@
         <source>MSB3762: No references were passed to the task. References to at least mscorlib and Windows.Foundation are required.</source>
         <target state="new">MSB3762: No references were passed to the task. References to at least mscorlib and Windows.Foundation are required.</target>
         <note>{StrBegin="MSB3762: "}</note>
+      </trans-unit>
+      <trans-unit id="Xaml.DuplicatePropertyName">
+        <source>MSB3724: Unable to create Xaml task.  Duplicate property name '{0}'.</source>
+        <target state="new">MSB3724: Unable to create Xaml task.  Duplicate property name '{0}'.</target>
+        <note>{StrBegin="MSB3724: "}</note>
       </trans-unit>
       <trans-unit id="Xaml.TaskCreationFailed">
         <source>MSB3686: Unable to create Xaml task.  Compilation failed.  {0}</source>
@@ -2637,6 +2739,11 @@
         <source>MSB3701: Unable to load arguments for the XslTransformation task. {0}</source>
         <target state="new">MSB3701: Unable to load arguments for the XslTransformation task. {0}</target>
         <note>{StrBegin="MSB3701: "}</note>
+      </trans-unit>
+      <trans-unit id="XslTransform.PrecompiledXsltError">
+        <source>MSB3705: XslCompiledDllPath is not supported when building with .NET Core.</source>
+        <target state="new">MSB3705: XslCompiledDllPath is not supported when building with .NET Core.</target>
+        <note>{StrBegin="MSB3705: "}</note>
       </trans-unit>
       <trans-unit id="XslTransform.XsltArgumentsError">
         <source>MSB3702: Unable to process the XsltParameters argument for the XslTransformation task. {0}</source>

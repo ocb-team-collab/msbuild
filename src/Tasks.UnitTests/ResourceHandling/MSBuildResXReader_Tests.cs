@@ -1,12 +1,9 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Build.Tasks.ResourceHandling;
 using Microsoft.Build.Tasks.UnitTests.ResourceHandling;
 using Microsoft.Build.UnitTests;
@@ -76,15 +73,35 @@ namespace Microsoft.Build.Tasks.UnitTests.GenerateResource
         }
 
         [Fact]
-        public void LoadsStringFromFileRefAsString()
+        public void ResXNullRefProducesNullLiveObject()
+        {
+            var resxWithNullRef = MSBuildResXReader.GetResourcesFromString(
+                ResXHelper.SurroundWithBoilerplate(
+@"  <assembly alias=""System.Windows.Forms"" name=""System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"" />
+  <data name=""$this.AccessibleDescription"" type=""System.Resources.ResXNullRef, System.Windows.Forms, Version=1.0.5000.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"">
+    <value />
+  </data>"));
+
+            resxWithNullRef.ShouldHaveSingleItem();
+
+            resxWithNullRef[0].Name.ShouldBe("$this.AccessibleDescription");
+
+            resxWithNullRef[0].ShouldBeOfType<LiveObjectResource>()
+                .Value.ShouldBeNull();
+        }
+
+        [Theory]
+        [InlineData("System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+        [InlineData("System.String, mscorlib, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+        public void LoadsStringFromFileRefAsString(string stringType)
         {
             File.Exists(Path.Combine("ResourceHandling", "TextFile1.txt")).ShouldBeTrue("Test deployment is missing None files");
 
             var resxWithLinkedString = MSBuildResXReader.GetResourcesFromString(
                 ResXHelper.SurroundWithBoilerplate(
-@"  <assembly alias=""System.Windows.Forms"" name=""System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"" />
+$@"  <assembly alias=""System.Windows.Forms"" name=""System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"" />
   <data name=""TextFile1"" type=""System.Resources.ResXFileRef, System.Windows.Forms"">
-    <value>ResourceHandling\TextFile1.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
+    <value>ResourceHandling\TextFile1.txt;{stringType};utf-8</value>
   </data>"));
 
             AssertSingleStringResource(resxWithLinkedString, "TextFile1", "Contents of TextFile1");
@@ -158,7 +175,7 @@ namespace Microsoft.Build.Tasks.UnitTests.GenerateResource
 
             var resource = (TypeConverterByteArrayResource)resxWithEmbeddedBitmap[0];
             resource.Name.ShouldBe("pictureBox1.Image");
-            resource.TypeName.ShouldBe("System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
+            resource.TypeAssemblyQualifiedName.ShouldBe("System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
         }
 
         [Fact]
@@ -176,7 +193,7 @@ namespace Microsoft.Build.Tasks.UnitTests.GenerateResource
 
             var resource = (TypeConverterStringResource)resxWithEmbeddedBitmap[0];
             resource.Name.ShouldBe("color");
-            resource.TypeName.ShouldBe("System.Drawing.Color, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
+            resource.TypeAssemblyQualifiedName.ShouldBe("System.Drawing.Color, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
             resource.StringRepresentation.ShouldBe("Blue");
         }
 
@@ -200,7 +217,7 @@ namespace Microsoft.Build.Tasks.UnitTests.GenerateResource
 
             var resource = (TypeConverterStringResource)resxWithEmbeddedBitmap[0];
             resource.Name.ShouldBe("Color1");
-            resource.TypeName.ShouldBe("System.Drawing.Color, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
+            resource.TypeAssemblyQualifiedName.ShouldBe("System.Drawing.Color, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
             resource.StringRepresentation.ShouldBe("Blue");
         }
 
@@ -220,7 +237,40 @@ $@"  <data name='Image1' type='System.Resources.ResXFileRef, System.Windows.Form
 
             var resource = (FileStreamResource)resxWithLinkedBitmap[0];
             resource.Name.ShouldBe("Image1");
-            resource.TypeName.ShouldBe("System.Drawing.Bitmap, System.Drawing, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
+            resource.TypeAssemblyQualifiedName.ShouldBe("System.Drawing.Bitmap, System.Drawing, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
+        }
+
+        [Theory]
+        [InlineData("System.IO.MemoryStream, mscorlib, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+        [InlineData("System.IO.MemoryStream, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+        public void ResXFileRefToMemoryStream(string typeNameInResx)
+        {
+            using var env = TestEnvironment.Create(_output);
+
+            var baseDir = env.CreateFolder(createFolder: true);
+            var resourceHandlingFolder = baseDir.CreateDirectory("ResourceHandling");
+
+            var linkedTextFile = resourceHandlingFolder.CreateFile("FileToBeIncluded.txt");
+
+            File.WriteAllText(linkedTextFile.Path,
+                  "Test data");
+
+            var resources = MSBuildResXReader.GetResourcesFromString(
+                ResXHelper.SurroundWithBoilerplate(
+$@"  <data name='Image1' type='System.Resources.ResXFileRef, System.Windows.Forms'>
+    <value>{linkedTextFile.Path};{typeNameInResx}</value>
+  </data>
+"));
+
+            var resource = resources.ShouldHaveSingleItem()
+                .ShouldBeOfType<LiveObjectResource>();
+            resource.Name.ShouldBe("Image1");
+
+            byte[] bytes = new byte[4];
+            resource.Value
+                .ShouldBeOfType<MemoryStream>()
+                .Read(bytes, 0, 4);
+            bytes.ShouldBe(new byte[] { 84, 101, 115, 116 }, "Expected the bytes of 'Test' to start the stream");
         }
 
         [Fact]
@@ -236,7 +286,7 @@ $@"  <data name='Image1' type='System.Resources.ResXFileRef, System.Windows.Form
 
             var resource = (TypeConverterStringResource)resxWithEmbeddedBitmap[0];
             resource.Name.ShouldBe("Color1");
-            resource.TypeName.ShouldBe("System.Drawing.Color, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
+            resource.TypeAssemblyQualifiedName.ShouldBe("System.Drawing.Color, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a");
             resource.StringRepresentation.ShouldBe("Blue");
         }
 

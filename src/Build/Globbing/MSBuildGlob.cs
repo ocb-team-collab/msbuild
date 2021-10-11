@@ -5,7 +5,9 @@
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
+using Microsoft.Build.Collections;
 using Microsoft.Build.Shared;
+using Microsoft.NET.StringTools;
 
 namespace Microsoft.Build.Globbing
 {
@@ -18,7 +20,7 @@ namespace Microsoft.Build.Globbing
     /// </summary>
     public class MSBuildGlob : IMSBuildGlob
     {
-        private struct GlobState
+        private readonly struct GlobState
         {
             public string GlobRoot { get; }
             public string FileSpec { get; }
@@ -26,11 +28,10 @@ namespace Microsoft.Build.Globbing
             public string FixedDirectoryPart { get; }
             public string WildcardDirectoryPart { get; }
             public string FilenamePart { get; }
-            public string MatchFileExpression { get; }
             public bool NeedsRecursion { get; }
             public Regex Regex { get; }
 
-            public GlobState(string globRoot, string fileSpec, bool isLegal, string fixedDirectoryPart, string wildcardDirectoryPart, string filenamePart, string matchFileExpression, bool needsRecursion, Regex regex)
+            public GlobState(string globRoot, string fileSpec, bool isLegal, string fixedDirectoryPart, string wildcardDirectoryPart, string filenamePart, bool needsRecursion, Regex regex)
             {
                 GlobRoot = globRoot;
                 FileSpec = fileSpec;
@@ -38,17 +39,20 @@ namespace Microsoft.Build.Globbing
                 FixedDirectoryPart = fixedDirectoryPart;
                 WildcardDirectoryPart = wildcardDirectoryPart;
                 FilenamePart = filenamePart;
-                MatchFileExpression = matchFileExpression;
                 NeedsRecursion = needsRecursion;
                 Regex = regex;
             }
         }
+
+        // Cache of Regex objects that we have created and are still alive.
+        private static WeakValueDictionary<string, Regex> s_regexCache = new WeakValueDictionary<string, Regex>();
 
         private readonly Lazy<GlobState> _state;
 
         internal string TestOnlyGlobRoot => _state.Value.GlobRoot;
         internal string TestOnlyFileSpec => _state.Value.FileSpec;
         internal bool TestOnlyNeedsRecursion => _state.Value.NeedsRecursion;
+        internal Regex TestOnlyRegex => _state.Value.Regex;
 
         /// <summary>
         ///     The fixed directory part.
@@ -111,23 +115,20 @@ namespace Microsoft.Build.Globbing
         {
             ErrorUtilities.VerifyThrowArgumentNull(stringToMatch, nameof(stringToMatch));
 
-            if (FileUtilities.PathIsInvalid(stringToMatch) ||
-                !IsLegal)
+            if (FileUtilities.PathIsInvalid(stringToMatch) || !IsLegal)
             {
                 return MatchInfoResult.Empty;
             }
 
-            var normalizedInput = NormalizeMatchInput(stringToMatch);
+            string normalizedInput = NormalizeMatchInput(stringToMatch);
 
-            bool isMatch;
-            string fixedDirectoryPart, wildcardDirectoryPart, filenamePart;
             FileMatcher.GetRegexMatchInfo(
                 normalizedInput,
                 _state.Value.Regex,
-                out isMatch,
-                out fixedDirectoryPart,
-                out wildcardDirectoryPart,
-                out filenamePart);
+                out bool isMatch,
+                out string fixedDirectoryPart,
+                out string wildcardDirectoryPart,
+                out string filenamePart);
 
             return new MatchInfoResult(isMatch, fixedDirectoryPart, wildcardDirectoryPart, filenamePart);
         }
@@ -139,9 +140,9 @@ namespace Microsoft.Build.Globbing
 
             // Degenerate case when the string to match is empty.
             // Ensure trailing slash because the fixed directory part has a trailing slash.
-            if (stringToMatch == string.Empty)
+            if (string.IsNullOrEmpty(stringToMatch))
             {
-                normalizedInput = normalizedInput + Path.DirectorySeparatorChar;
+                normalizedInput += Path.DirectorySeparatorChar;
             }
 
             return normalizedInput;
@@ -166,44 +167,54 @@ namespace Microsoft.Build.Globbing
             ErrorUtilities.VerifyThrowArgumentNull(fileSpec, nameof(fileSpec));
             ErrorUtilities.VerifyThrowArgumentInvalidPath(globRoot, nameof(globRoot));
 
-            if (globRoot == string.Empty)
+            if (string.IsNullOrEmpty(globRoot))
             {
                 globRoot = Directory.GetCurrentDirectory();
             }
 
-            globRoot = FileUtilities.NormalizePath(globRoot).WithTrailingSlash();
+            globRoot = Strings.WeakIntern(FileUtilities.NormalizePath(globRoot).WithTrailingSlash());
 
             var lazyState = new Lazy<GlobState>(() =>
             {
-                string fixedDirectoryPart = null;
-                string wildcardDirectoryPart = null;
-                string filenamePart = null;
-
-                string matchFileExpression;
-                bool needsRecursion;
-                bool isLegalFileSpec;
-
                 FileMatcher.Default.GetFileSpecInfo(
                     fileSpec,
-                    out fixedDirectoryPart,
-                    out wildcardDirectoryPart,
-                    out filenamePart,
-                    out matchFileExpression,
-                    out needsRecursion,
-                    out isLegalFileSpec,
+                    out string fixedDirectoryPart,
+                    out string wildcardDirectoryPart,
+                    out string filenamePart,
+                    out bool needsRecursion,
+                    out bool isLegalFileSpec,
                     (fixedDirPart, wildcardDirPart, filePart) =>
                     {
                         var normalizedFixedPart = NormalizeTheFixedDirectoryPartAgainstTheGlobRoot(fixedDirPart, globRoot);
 
-                        return Tuple.Create(normalizedFixedPart, wildcardDirPart, filePart);
+                        return (normalizedFixedPart, wildcardDirPart, filePart);
                     });
 
-                // compile the regex since it's expected to be used multiple times
-                var regex = isLegalFileSpec
-                    ? new Regex(matchFileExpression, FileMatcher.DefaultRegexOptions | RegexOptions.Compiled)
-                    : null;
+                Regex regex = null;
+                if (isLegalFileSpec)
+                {
+                    string matchFileExpression = FileMatcher.RegularExpressionFromFileSpec(fixedDirectoryPart, wildcardDirectoryPart, filenamePart);
 
-                return new GlobState(globRoot, fileSpec, isLegalFileSpec, fixedDirectoryPart, wildcardDirectoryPart, filenamePart, matchFileExpression, needsRecursion, regex);
+                    lock (s_regexCache)
+                    {
+                        s_regexCache.TryGetValue(matchFileExpression, out regex);
+                    }
+
+                    if (regex == null)
+                    {
+                        // compile the regex since it's expected to be used multiple times
+                        Regex newRegex = new Regex(matchFileExpression, FileMatcher.DefaultRegexOptions | RegexOptions.Compiled);
+                        lock (s_regexCache)
+                        {
+                            if (!s_regexCache.TryGetValue(matchFileExpression, out regex))
+                            {
+                                s_regexCache[matchFileExpression] = newRegex;
+                            }
+                        }
+                        regex ??= newRegex;
+                    }
+                }
+                return new GlobState(globRoot, fileSpec, isLegalFileSpec, fixedDirectoryPart, wildcardDirectoryPart, filenamePart, needsRecursion, regex);
             },
             true);
 
@@ -216,9 +227,7 @@ namespace Microsoft.Build.Globbing
             // concatenate the glob parent to the fixed dir part
             var parentedFixedPart = Path.Combine(globRoot, fixedDirPart);
             var normalizedFixedPart = FileUtilities.GetFullPathNoThrow(parentedFixedPart);
-            normalizedFixedPart = normalizedFixedPart.WithTrailingSlash();
-
-            return normalizedFixedPart;
+            return normalizedFixedPart.WithTrailingSlash();
         }
 
         /// <summary>

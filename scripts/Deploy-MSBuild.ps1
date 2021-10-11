@@ -3,18 +3,35 @@ Param(
   [Parameter(Mandatory = $true)]
   [string] $destination,
   [ValidateSet('Debug','Release')]
-  [string] $configuration = "Debug"
+  [string] $configuration = "Debug",
+  [ValidateSet('Core','Desktop')]
+  [string] $runtime = "Desktop"
 )
 
+Set-StrictMode -Version "Latest"
+$ErrorActionPreference = "Stop"
+
 function Copy-WithBackup ($origin) {
-    $destinationPath = Join-Path -Path $destination -ChildPath (Split-Path $origin -leaf)
+    $directoryPart = Join-Path -Path $destination $origin.IntermediaryDirectories 
+    $destinationPath = Join-Path -Path $directoryPart (Split-Path $origin.SourceFile -leaf)
 
     if (Test-Path $destinationPath -PathType Leaf) {
         # Back up previous copy of the file
         Copy-Item $destinationPath $BackupFolder -ErrorAction Stop
     }
 
-    Copy-Item $origin $destinationPath -ErrorAction Stop
+    if (!(Test-Path $directoryPart)) {
+        [system.io.directory]::CreateDirectory($directoryPart)
+    }
+
+    Copy-Item $origin.SourceFile $destinationPath -ErrorAction Stop
+
+    echo "Copied $($origin.SourceFile) to $destinationPath"
+}
+
+function FileToCopy([string] $sourceFileRelativeToRepoRoot, [string] $intermediaryDirectories)
+{
+    return [PSCustomObject]@{"SourceFile"=$([IO.Path]::Combine($PSScriptRoot, "..", $sourceFileRelativeToRepoRoot)); "IntermediaryDirectories"=$intermediaryDirectories}
 }
 
 # TODO: find destination in PATH if not specified
@@ -28,19 +45,72 @@ $BackupFolder = New-Item (Join-Path $destination -ChildPath "Backup-$(Get-Date -
 Write-Verbose "Copying $configuration MSBuild to $destination"
 Write-Host "Existing MSBuild assemblies backed up to $BackupFolder"
 
+if ($runtime -eq "Desktop") {
+    $targetFramework = "net472"
+} else {
+    $targetFramework = "net5.0"
+}
+
+$bootstrapBinDirectory = "artifacts\bin\MSBuild.Bootstrap\$configuration\$targetFramework"
+
 $filesToCopyToBin = @(
-    "artifacts\bin\MSBuild.Bootstrap\$configuration\net472\MSBuild.exe"
-    "artifacts\bin\MSBuild.Bootstrap\$configuration\net472\Microsoft.Build.dll"
-    "artifacts\bin\Microsoft.Build.Conversion\$configuration\net472\Microsoft.Build.Conversion.Core.dll"
-    "artifacts\bin\Microsoft.Build.Engine\$configuration\net472\Microsoft.Build.Engine.dll"
-    "artifacts\bin\MSBuild.Bootstrap\$configuration\net472\Microsoft.Build.Framework.dll"
-    "artifacts\bin\MSBuild.Bootstrap\$configuration\net472\Microsoft.Build.Tasks.Core.dll"
-    "artifacts\bin\MSBuild.Bootstrap\$configuration\net472\Microsoft.Build.Utilities.Core.dll"
-    "artifacts\bin\MSBuildTaskHost\$configuration\net35\MSBuildTaskHost.exe"
-    "artifacts\bin\MSBuildTaskHost\$configuration\net35\MSBuildTaskHost.pdb")
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Build.dll"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Build.Framework.dll"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Build.Tasks.Core.dll"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Build.Utilities.Core.dll"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.NET.StringTools.dll"
+
+    FileToCopy "$bootstrapBinDirectory\en\Microsoft.Build.resources.dll" "en"
+    FileToCopy "$bootstrapBinDirectory\en\Microsoft.Build.Tasks.Core.resources.dll" "en"
+    FileToCopy "$bootstrapBinDirectory\en\Microsoft.Build.Utilities.Core.resources.dll" "en"
+    FileToCopy "$bootstrapBinDirectory\en\MSBuild.resources.dll" "en"
+
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Common.CrossTargeting.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Common.CurrentVersion.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Common.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.CSharp.CrossTargeting.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.CSharp.CurrentVersion.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.CSharp.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Managed.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Managed.Before.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.Managed.After.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.NET.props"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.NETFramework.CurrentVersion.props"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.NETFramework.CurrentVersion.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.NETFramework.props"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.NETFramework.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.VisualBasic.CrossTargeting.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.VisualBasic.CurrentVersion.targets"
+    FileToCopy "$bootstrapBinDirectory\Microsoft.VisualBasic.targets"
+)
+
+if ($runtime -eq "Desktop") {
+    $runtimeSpecificFiles = @(
+        FileToCopy "$bootstrapBinDirectory\MSBuild.exe"
+        FileToCopy "artifacts\bin\Microsoft.Build.Conversion\$configuration\$targetFramework\Microsoft.Build.Conversion.Core.dll"
+        FileToCopy "artifacts\bin\Microsoft.Build.Engine\$configuration\$targetFramework\Microsoft.Build.Engine.dll"
+
+        FileToCopy "artifacts\bin\MSBuildTaskHost\$configuration\net35\MSBuildTaskHost.exe"
+        FileToCopy "artifacts\bin\MSBuildTaskHost\$configuration\net35\MSBuildTaskHost.pdb"
+
+        FileToCopy "$bootstrapBinDirectory\Microsoft.Data.Entity.targets"
+        FileToCopy "$bootstrapBinDirectory\Microsoft.ServiceModel.targets"
+        FileToCopy "$bootstrapBinDirectory\Microsoft.WinFx.targets"
+        FileToCopy "$bootstrapBinDirectory\Microsoft.WorkflowBuildExtensions.targets"
+        FileToCopy "$bootstrapBinDirectory\Microsoft.Xaml.targets"
+        FileToCopy "$bootstrapBinDirectory\Workflow.targets"
+        FileToCopy "$bootstrapBinDirectory\Workflow.VisualBasic.targets"
+    )
+} else {
+    $runtimeSpecificFiles = @(
+        FileToCopy "$bootstrapBinDirectory\MSBuild.dll"
+    )
+}
+
+$filesToCopyToBin += $runtimeSpecificFiles
 
 foreach ($file in $filesToCopyToBin) {
-    Copy-WithBackup $([IO.Path]::Combine($PSScriptRoot, "..", $file))
+    Copy-WithBackup $file
 }
 
 Write-Host -ForegroundColor Green "Copy succeeded"

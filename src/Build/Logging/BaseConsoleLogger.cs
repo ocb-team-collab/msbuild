@@ -64,7 +64,7 @@ namespace Microsoft.Build.BackEnd.Logging
 
         /// <summary>
         /// Gets or sets the number of MSBuild processes participating in the build. If greater than 1,
-        /// include the node ID 
+        /// include the node ID
         /// </summary>
         public int NumberOfProcessors { get; set; } = 1;
 
@@ -113,7 +113,7 @@ namespace Microsoft.Build.BackEnd.Logging
         }
 
         /// <summary>
-        /// An implementation of IComparer useful for comparing the keys 
+        /// An implementation of IComparer useful for comparing the keys
         /// on DictionaryEntry's
         /// </summary>
         /// <remarks>Uses CurrentCulture for display purposes</remarks>
@@ -126,7 +126,7 @@ namespace Microsoft.Build.BackEnd.Logging
         }
 
         /// <summary>
-        /// An implementation of IComparer useful for comparing the ItemSpecs 
+        /// An implementation of IComparer useful for comparing the ItemSpecs
         /// on ITaskItem's
         /// </summary>
         /// <remarks>Uses CurrentCulture for display purposes</remarks>
@@ -208,7 +208,7 @@ namespace Microsoft.Build.BackEnd.Logging
         }
 
         /// <summary>
-        /// Writes to the log, using the default indentation. Does not 
+        /// Writes to the log, using the default indentation. Does not
         /// terminate with a newline.
         /// </summary>
         internal void WritePretty(string formattedString)
@@ -271,12 +271,12 @@ namespace Microsoft.Build.BackEnd.Logging
         }
 
         /// <summary>
-        /// Writes to the log, using the specified indentation. Does not 
+        /// Writes to the log, using the specified indentation. Does not
         /// terminate with a newline.
         /// </summary>
         internal void WritePretty(int indentLevel, string formattedString)
         {
-            StringBuilder result = new StringBuilder(indentLevel * tabWidth + formattedString.Length);
+            StringBuilder result = new StringBuilder((indentLevel * tabWidth) + formattedString.Length);
             result.Append(' ', indentLevel * tabWidth).Append(formattedString);
             WriteHandler(result.ToString());
         }
@@ -481,7 +481,7 @@ namespace Microsoft.Build.BackEnd.Logging
         /// <summary>
         /// Writes out the list of property names and their values.
         /// This could be done at any time during the build to show the latest
-        /// property values, using the cached reference to the list from the 
+        /// property values, using the cached reference to the list from the
         /// appropriate ProjectStarted event.
         /// </summary>
         /// <param name="properties">List of properties</param>
@@ -520,17 +520,16 @@ namespace Microsoft.Build.BackEnd.Logging
         }
 
         /// <summary>
-        /// Generate a list which contains the properties referenced by the properties 
+        /// Generate a list which contains the properties referenced by the properties
         /// enumerable object
         /// </summary>
         internal List<DictionaryEntry> ExtractPropertyList(IEnumerable properties)
         {
             // Gather a sorted list of all the properties.
             var list = new List<DictionaryEntry>(properties.FastCountOrZero());
-            foreach (DictionaryEntry prop in properties)
-            {
-                list.Add(prop);
-            }
+
+            Internal.Utilities.EnumerateProperties(properties, kvp => list.Add(new DictionaryEntry(kvp.Key, kvp.Value)));
+
             list.Sort(new DictionaryEntryKeyComparer());
             return list;
         }
@@ -552,7 +551,7 @@ namespace Microsoft.Build.BackEnd.Logging
                     setColor(ConsoleColor.Gray);
                     WritePretty(String.Format(CultureInfo.CurrentCulture, "{0,-30} = ", entry.Key));
                     setColor(ConsoleColor.DarkGray);
-                    WriteLinePretty((entry.Value));
+                    WriteLinePretty(entry.Value);
                 }
             }
 
@@ -578,7 +577,7 @@ namespace Microsoft.Build.BackEnd.Logging
         /// <summary>
         /// Writes out the list of item specs and their metadata.
         /// This could be done at any time during the build to show the latest
-        /// items, using the cached reference to the list from the 
+        /// items, using the cached reference to the list from the
         /// appropriate ProjectStarted event.
         /// </summary>
         internal void WriteItems(SortedList itemTypes)
@@ -620,18 +619,19 @@ namespace Microsoft.Build.BackEnd.Logging
             // Use a SortedList instead of an ArrayList (because we need to lookup fast)
             // and instead of a Hashtable (because we need to sort it)
             SortedList itemTypes = new SortedList(CaseInsensitiveComparer.Default);
-            foreach (DictionaryEntry item in items)
+
+            Internal.Utilities.EnumerateItems(items, item =>
             {
-                // Create a new list for this itemtype, if we haven't already
-                if (itemTypes[(string)item.Key] == null)
+                string key = (string)item.Key;
+                var bucket = itemTypes[key] as ArrayList;
+                if (bucket == null)
                 {
-                    itemTypes[(string)item.Key] = new ArrayList();
+                    bucket = new ArrayList();
+                    itemTypes[key] = bucket;
                 }
 
-                // Add the item to the list for its itemtype
-                ArrayList itemsOfAType = (ArrayList)itemTypes[(string)item.Key];
-                itemsOfAType.Add(item.Value);
-            }
+                bucket.Add(item.Value);
+            });
 
             return itemTypes;
         }
@@ -677,7 +677,6 @@ namespace Microsoft.Build.BackEnd.Logging
             }
             resetColor();
         }
-
 
         /// <summary>
         /// Returns a performance counter for a given scope (either task name or target name)
@@ -837,13 +836,13 @@ namespace Microsoft.Build.BackEnd.Logging
             }
 
             /// <summary>
-            /// Returns an IComparer that will put performance counters 
+            /// Returns an IComparer that will put performance counters
             /// in descending order by elapsed time.
             /// </summary>
             internal static IComparer DescendingByElapsedTimeComparer => new DescendingByElapsedTime();
 
             /// <summary>
-            /// Private IComparer class for sorting performance counters 
+            /// Private IComparer class for sorting performance counters
             /// in descending order by elapsed time.
             /// </summary>
             internal class DescendingByElapsedTime : IComparer
@@ -909,13 +908,13 @@ namespace Microsoft.Build.BackEnd.Logging
         /// <param name="eventSource">Available events.</param>
         public virtual void Initialize(IEventSource eventSource)
         {
-            ParseParameters();
-
             // Always show perf summary for diagnostic verbosity.
             if (IsVerbosityAtLeast(LoggerVerbosity.Diagnostic))
             {
                 this.showPerfSummary = true;
             }
+
+            ParseParameters();
 
             showTargetOutputs = !String.IsNullOrEmpty(Environment.GetEnvironmentVariable("MSBUILDTARGETOUTPUTLOGGING"));
 
@@ -969,12 +968,15 @@ namespace Microsoft.Build.BackEnd.Logging
         /// </summary>
         internal virtual bool ApplyParameter(string parameterName, string parameterValue)
         {
-            ErrorUtilities.VerifyThrowArgumentNull(parameterName, "parameterName");
+            ErrorUtilities.VerifyThrowArgumentNull(parameterName, nameof(parameterName));
 
             switch (parameterName.ToUpperInvariant())
             {
                 case "PERFORMANCESUMMARY":
                     showPerfSummary = true;
+                    return true;
+                case "NOPERFORMANCESUMMARY":
+                    showPerfSummary = false;
                     return true;
                 case "NOSUMMARY":
                     ShowSummary = false;
@@ -1007,16 +1009,11 @@ namespace Microsoft.Build.BackEnd.Logging
                         }
                         else
                         {
-                            switch (parameterValue.ToUpperInvariant())
+                            showProjectFile = (parameterValue.ToUpperInvariant()) switch
                             {
-                                case "TRUE":
-                                    showProjectFile = true;
-                                    break;
-
-                                default:
-                                    showProjectFile = false;
-                                    break;
-                            }
+                                "TRUE" => true,
+                                _ => false,
+                            };
                         }
                     }
 
@@ -1180,7 +1177,6 @@ namespace Microsoft.Build.BackEnd.Logging
 
         internal bool runningWithCharacterFileType = false;
 
-
         #region Per-build Members
 
         /// <summary>
@@ -1219,7 +1215,7 @@ namespace Microsoft.Build.BackEnd.Logging
         internal Dictionary<string, PerformanceCounter> taskPerformanceCounters;
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         internal Dictionary<string, PerformanceCounter> projectEvaluationPerformanceCounters;
 

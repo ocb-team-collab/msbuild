@@ -32,19 +32,27 @@
         <note />
       </trans-unit>
       <trans-unit id="CacheMissesNotAllowedInIsolatedGraphBuilds">
-        <source>MSB4252: Project "{0}" has a reference to "{1}" ({2} target(s)) but the build result for the reference is not in the engine cache. In isolated builds this could mean one of the following:
-    - the reference was not explicitly specified as a ProjectReference item in "{0}"
-    - the reference was not included in the provided input caches
-    - the reference was called with a target which is not specified in the ProjectReferenceTargets item in "{0}"
+        <source>MSB4252: Project "{0}" with global properties
+    ({1})
+    is building project "{2}" with global properties
+    ({3})
+    with the ({4}) target(s) but the build result for the built project is not in the engine cache. In isolated builds this could mean one of the following:
+    - the reference was called with a target which is not specified in the ProjectReferenceTargets item in project "{0}"
+    - the reference was called with global properties that do not match the static graph inferred nodes
+    - the reference was not explicitly specified as a ProjectReference item in project "{0}"
     </source>
-        <target state="translated">MSB4252: Le projet "{0}" a une référence à "{1}" ({2} cible(s)) mais le résultat de la build pour la référence ne se trouve pas dans le cache du moteur. Dans les builds isolées, cela peut avoir l'une des significations suivantes :
-    - la référence n'a pas été explicitement spécifiée en tant qu'élément ProjectReference dans "{0}"
-    - la référence n'a pas été incluse dans les caches d'entrée fournis
-    - la référence a été appelée avec une cible qui n'est pas spécifiée dans l'élément ProjectReferenceTargets dans "{0}"
+        <target state="translated">MSB4252: le projet "{0}" avec des propriétés globales
+    ({1})
+    génère le projet "{2}" avec des propriétés globales
+    ({3})
+    avec la ou les cibles ({4}) mais le résultat de build du projet généré ne se trouve pas dans le cache du moteur. Dans les builds isolées, cela peut avoir l'une des significations suivantes :
+    - la référence a été appelée avec une cible qui n'est pas spécifiée dans l'élément ProjectReferenceTargets dans le projet "{0}"
+    - la référence a été appelée avec des propriétés globales qui ne correspondent pas aux nœuds inférés du graphe statique
+    - la référence n'a pas été explicitement spécifiée en tant qu'élément ProjectReference dans le projet "{0}"
     </target>
         <note>
       {StrBegin="MSB4252:"}
-      LOCALIZATION: Do not localize the following words: ProjectReference.
+      LOCALIZATION: Do not localize the following words: ProjectReference, ProjectReferenceTargets
     </note>
       </trans-unit>
       <trans-unit id="CannotExpandItemMetadata">
@@ -54,6 +62,22 @@
     %(RootDir) to an item-spec that's not a valid path would result in this error.
     LOCALIZATION: "{1}" is a localized message explaining the problem.</note>
       </trans-unit>
+      <trans-unit id="ChangeWave_InvalidFormat">
+        <source>MSB4271: Environment variable MSBuildDisableFeaturesFromVersion is set to an invalid format. Enabling all change wave versions. Entered value: {0}. Current Change Waves: {1}.</source>
+        <target state="translated">MSB4271: la variable d'environnement MSBuildDisableFeaturesFromVersion a un format non valide. Activation de toutes les versions des vagues de changements. Valeur entrée : {0}. Vagues de changements actuelles : {1}.</target>
+        <note>{StrBegin="MSB4271: "}UE: Value should be of the format: xx.yy</note>
+      </trans-unit>
+      <trans-unit id="ChangeWave_OutOfRotation">
+        <source>MSB4272: Environment variable MSBuildDisableFeaturesFromVersion is set to a version that is out of rotation. Defaulting to Change Wave version: {0}. Entered value: {1}. Current Change Waves: {2}.</source>
+        <target state="translated">MSB4272: la variable d'environnement MSBuildDisableFeaturesFromVersion a une valeur correspondant à une version hors rotation. Utilisation par défaut de la vague de changements version {0}. Valeur entrée : {1}. Vagues de changements actuelles : {2}.</target>
+        <note>{StrBegin="MSB4272: "}</note>
+      </trans-unit>
+      <trans-unit id="CircularDependency">
+        <source>MSB4006: There is a circular dependency in the target dependency graph involving target "{0}".</source>
+        <target state="translated">MSB4006: Il existe une dépendance circulaire dans le graphique de dépendance cible qui implique la cible "{0}".</target>
+        <note>{StrBegin="MSB4006: "}UE: This message is shown when the build engine detects a target referenced in a circular manner -- a project cannot
+    request a target to build itself (perhaps via a chain of other targets).</note>
+      </trans-unit>
       <trans-unit id="CircularDependencyInProjectGraph">
         <source>MSB4251: There is a circular dependency involving the following projects: {0}</source>
         <target state="translated">MSB4251: Il existe une dépendance circulaire impliquant les projets suivants : {0}</target>
@@ -62,9 +86,20 @@
       request a target to build itself (perhaps via a chain of other targets)
     </note>
       </trans-unit>
+      <trans-unit id="CircularDependencyInTargetGraph">
+        <source>MSB4006: There is a circular dependency in the target dependency graph involving target "{0}". Since "{1}" has "{2}" dependence on "{3}", the circular is "{4}".</source>
+        <target state="translated">MSB4006: Il existe une dépendance circulaire dans le graphe des dépendances cibles impliquant la cible "{0}". Dans la mesure où "{1}" a une dépendance "{2}" par rapport à "{3}", la dépendance circulaire est "{4}".</target>
+        <note>{StrBegin="MSB4006: "}UE: This message is shown when the build engine detects a target referenced in a circular manner -- a project cannot
+    request a target to build itself (perhaps via a chain of other targets).</note>
+      </trans-unit>
       <trans-unit id="EmptyOutputCacheFile">
         <source>MSB4257: The specified output result cache file is empty.</source>
         <target state="translated">MSB4257: Le fichier cache des résultats de sortie spécifié est vide.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="EnvironmentVariableRead">
+        <source>Read environment variable "{0}"</source>
+        <target state="translated">Lire la variable d'environnement "{0}"</target>
         <note />
       </trans-unit>
       <trans-unit id="ErrorReadingCacheFile">
@@ -77,9 +112,48 @@
         <target state="translated">MSB4258: L'écriture du fichier cache des résultats de sortie dans le chemin "{0}" a rencontré une erreur : {1}</target>
         <note />
       </trans-unit>
+      <trans-unit id="IllFormedPropertySpaceInCondition">
+        <source>MSB4259: Unexpected space at position "{1}" of condition "{0}". Did you forget to remove a space?</source>
+        <target state="translated">MSB4259: espace inattendu à la position "{1}" de la condition "{0}". Avez-vous oublié de supprimer un espace ?</target>
+        <note>{StrBegin="MSB4259: "}</note>
+      </trans-unit>
       <trans-unit id="InputCacheFilesDoNotExist">
         <source>MSB4255: The following input result cache files do not exist: "{0}"</source>
         <target state="translated">MSB4255: Les fichiers cache des résultats d'entrée suivants n'existent pas : "{0}"</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="InvalidVersionFormat">
+        <source>Version string was not in a correct format.</source>
+        <target state="translated">La chaîne de version n'était pas au format approprié.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IsolatedContextDoesNotSupportFileSystem">
+        <source>EvaluationContext objects created with SharingPolicy.Isolated do not support being passed an MSBuildFileSystemBase file system.</source>
+        <target state="translated">Les objets EvaluationContext créés avec SharingPolicy.Isolated ne prennent pas en charge le passage d'un système de fichiers MSBuildFileSystemBase.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="KillingProcessWithPid">
+        <source>Killing process with pid = {0}.</source>
+        <target state="translated">Arrêt du processus ayant le PID = {0}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="LoadingProjectCachePlugin">
+        <source>Loading the following project cache plugin:
+    {0}</source>
+        <target state="translated">Chargement du plug-in de cache de projet suivant:
+    {0}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="LogLoggerVerbosity">
+        <source>Logging verbosity is set to: {0}.</source>
+        <target state="translated">La verbosité de la journalisation a la valeur {0}.</target>
+        <note>
+      LOCALIZATION: {0} is an enum value of LoggerVerbosity.
+    </note>
+      </trans-unit>
+      <trans-unit id="LogTaskInputs.Truncated">
+        <source>The parameters have been truncated beyond this point. To view all parameters, clear the MSBUILDTRUNCATETASKINPUTLOGGING environment variable.</source>
+        <target state="translated">Les paramètres ont été tronqués au-delà de ce point. Pour voir tous les paramètres, désactivez la variable d'environnement MSBUILDTRUNCATETASKINPUTLOGGING.</target>
         <note />
       </trans-unit>
       <trans-unit id="MetaprojectGenerated">
@@ -92,6 +166,21 @@
         <target state="translated">Impossible d'effectuer l'opération car la méthode BeginBuild n'a pas encore été appelée.</target>
         <note />
       </trans-unit>
+      <trans-unit id="NoProjectCachePluginFoundInAssembly">
+        <source>MSB4270: No project cache plugins found in assembly "{0}". Expected one.</source>
+        <target state="translated">MSB4270: plug-ins de cache de projet introuvables dans l'assembly "{0}". Un plug-in est attendu.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="NotAllNodesDefineACacheItem">
+        <source>MSB4269: When any static graph node defines a project cache, all nodes must define the same project cache. The following project(s) do not contain a "{0}" item declaration: {1}</source>
+        <target state="translated">MSB4269: quand un nœud de graphe statique définit un cache de projet, tous les nœuds doivent définir le même cache de projet. Le ou les projets suivants ne contiennent pas de déclaration d'élément "{0}" : {1}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="NuGetAssemblyNotFound">
+        <source>A required NuGet assembly was not found. Expected Path: {0}</source>
+        <target state="translated">Un assembly NuGet obligatoire est introuvable. Chemin attendu : {0}</target>
+        <note />
+      </trans-unit>
       <trans-unit id="NullReferenceFromProjectInstanceFactory">
         <source>MSB4253: A null reference was returned from a user-provided ProjectInstanceFactoryFunc callback. This is not allowed.</source>
         <target state="translated">MSB4253: Une référence null a été retournée à partir d'un rappel ProjectInstanceFactoryFunc fourni par l'utilisateur. Ceci n'est pas autorisé.</target>
@@ -99,6 +188,56 @@
       {StrBegin="MSB4253: "}
       LOCALIZATION:  Do not localize the following words: ProjectInstanceFactoryFunc.
     </note>
+      </trans-unit>
+      <trans-unit id="OM_MatchOnMetadataIsRestrictedToReferencedItems">
+        <source>Only item types may be referenced when removing with MatchOnMetadata.</source>
+        <target state="translated">Seuls les types d'élément peuvent être référencés pour la suppression à l'aide de MatchOnMetadata.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_MatchOnMetadataOnlyApplicableToRemoveItems">
+        <source>MatchOnMetadata only applies to Remove operations on items.</source>
+        <target state="translated">MatchOnMetadata s'applique uniquement aux opérations de suppression sur des éléments.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_MatchOnMetadataOptionsOnlyApplicableToItemsWithMatchOnMetadata">
+        <source>MatchOnMetadataOptions is valid only when removing items using MatchOnMetadata.</source>
+        <target state="translated">MatchOnMetadataOptions est valide uniquement pour la suppression d'éléments à l'aide de MatchOnMetadata.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_NoMatchOnMetadataOutsideTargets">
+        <source>MatchOnMetadata cannot be used outside of a &lt;Target&gt;.</source>
+        <target state="translated">Impossible d'utiliser MatchOnMetadata en dehors de &lt;Target&gt;.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_TargetNameNullOrEmpty">
+        <source>Method {0} cannot be called with a collection containing null or empty target names.</source>
+        <target state="translated">Impossible d'appeler la méthode {0} avec une collection contenant des noms de cibles qui ont une valeur null ou qui sont vides.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OnlyOneCachePluginMustBeSpecified">
+        <source>MSB4265: A single project cache plugin must be specified but multiple where found: {0}</source>
+        <target state="translated">MSB4265: un seul plug-in de cache de projet doit être spécifié, mais plusieurs plug-ins ont été trouvés : {0}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheException">
+        <source>MSB4273: The project cache threw an unhandled exception from the {0} method.</source>
+        <target state="translated">MSB4273: le cache de projet a levé une exception non gérée à partir de la méthode {0}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheInitializationFailed">
+        <source>MSB4266: Failed to initialize the project cache.</source>
+        <target state="translated">MSB4266: échec de l'initialisation du cache de projet.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheQueryFailed">
+        <source>MSB4267: The project cache failed while being queried for the following project: {0}. The cache is queried in parallel for multiple projects so this specific project might not be the cause.</source>
+        <target state="translated">MSB4267: échec du cache de projet au moment où il a été interrogé pour le projet suivant : {0}. Dans la mesure où le cache est interrogé en parallèle pour plusieurs projets, ce projet spécifique n'est peut-être pas à l'origine du problème.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheShutdownFailed">
+        <source>MSB4268: The project cache failed to shut down properly.</source>
+        <target state="translated">MSB4268: le cache de projet ne s'est pas arrêté correctement.</target>
+        <note />
       </trans-unit>
       <trans-unit id="ProjectGraphDoesNotSupportProjectReferenceWithToolset">
         <source>MSB4250: ProjectGraph does not support ProjectReference items with the ToolsVersion metadata set. Found ProjectReference "{0}" with ToolsVersion in file "{1}"</source>
@@ -108,20 +247,99 @@
       LOCALIZATION:  Do not localize the following words: ProjectGraph, ProjectReference, ToolsVersion.
     </note>
       </trans-unit>
+      <trans-unit id="ProjectImportSkippedExpressionEvaluatedToEmpty">
+        <source>Project "{0}" was not imported by "{1}" at ({2},{3}), due to the expression evaluating to an empty string.</source>
+        <target state="translated">Le projet "{0}" n'a pas été importé par "{1}" sur ({2},{3}), car l'expression a la valeur d'une chaîne vide.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="PropertyAssignment">
+        <source>Property initial value: $({0})="{1}" Source: {2}</source>
+        <target state="translated">Valeur initiale de la propriété : $({0})="{1}" Source : {2}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProxyRequestNotScheduledOnInprocNode">
+        <source>MSB4274: Disabling the inproc node leads to performance degradation when using project cache plugins that emit proxy build requests.</source>
+        <target state="translated">MSB4274: la désactivation du nœud inproc entraîne une détérioration des performances lors de l’utilisation de plug-ins de cache de projet qui émettent des requêtes de build proxy.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="SkippedConstraintsOnRequest">
         <source>MSB4260: Project "{0}" skipped graph isolation constraints on referenced project "{1}"</source>
-        <target state="new">MSB4260: Project "{0}" skipped graph isolation constraints on referenced project "{1}"</target>
+        <target state="translated">MSB4260: le projet "{0}" a ignoré les contraintes d'isolement de graphe dans le projet référencé "{1}"</target>
         <note>
       LOCALIZATION: {0} and {1} are file paths
     </note>
       </trans-unit>
+      <trans-unit id="SolutionPathPropertyMustBeSetOnVSSubmissions">
+        <source>"MSB4264: Invalid $(SolutionPath) property: {0}"</source>
+        <target state="translated">"MSB4264: propriété $(SolutionPath) non valide : {0}"</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="StaticGraphAcceptsSingleSolutionEntryPoint">
+        <source>MSB4261: Multiple entry points with solutions detected: {0}. If static graph is loaded from a solution, that that solution must be the only entry point.</source>
+        <target state="translated">MSB4261: détection de plusieurs points d'entrée avec des solutions : {0}. Si un graphe statique est chargé à partir d'une solution, cette solution doit être le seul point d'entrée.</target>
+        <note>
+      LOCALIZATION: {0} is a semicolon delimited list of files
+    </note>
+      </trans-unit>
+      <trans-unit id="StaticGraphConstructionMetrics">
+        <source>Static graph loaded in {0} seconds: {1} nodes, {2} edges</source>
+        <target state="translated">Graphe statique chargé en {0} secondes : {1} nœuds, {2} arêtes</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="StaticGraphDoesNotSupportSlnReferences">
+        <source>MSB4263: Project "{0}" has a reference to solution file "{1}". Referencing solutions is not supported in static graph.
+    </source>
+        <target state="translated">MSB4263: le projet "{0}" contient une référence au fichier solution "{1}". Le référencement des solutions n'est pas pris en charge dans le graphe statique.
+    </target>
+        <note>
+      LOCALIZATION: {0} and {1} are file paths
+    </note>
+      </trans-unit>
+      <trans-unit id="StaticGraphSolutionLoaderEncounteredSolutionWarningsAndErrors">
+        <source>MSB4262: Solution file "{0}" contains the following warnings and errors:
+           Warnings: {1}
+           Errors: {2}
+    </source>
+        <target state="translated">MSB4262: le fichier solution "{0}" contient les avertissements et erreurs ci-après :
+           Avertissements : {1}
+           Erreurs : {2}
+    </target>
+        <note>
+      LOCALIZATION: {0} is a file, {1} and {2} are semicolon delimited lists of messages
+    </note>
+      </trans-unit>
+      <trans-unit id="TaskAcquiredCores">
+        <source>Task "{0}" requested {1} cores, acquired {2} cores, and now holds {3} cores total.</source>
+        <target state="translated">La tâche "{0}" a demandé {1} cœurs et a obtenu {2} cœurs. Elle détient désormais {3} cœurs au total.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="TaskReleasedCores">
+        <source>Task "{0}" released {1} cores and now holds {2} cores total.</source>
+        <target state="translated">La tâche "{0}" a libéré {1} cœur. Elle détient désormais {2} cœurs au total.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="TaskReleasedCoresWarning">
+        <source>Task "{0}" asked to release {1} cores while holding only {2} and now holds {3} cores total.</source>
+        <target state="translated">La tâche "{0}" a demandé à libérer {1} cœurs alors qu'elle n'en détient que {2}. Elle détient désormais {3} cœurs au total.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="TaskReturnedFalseButDidNotLogError">
+        <source>MSB4181: The "{0}" task returned false but did not log an error.</source>
+        <target state="translated">MSB4181: la tâche "{0}" a retourné false mais n'a pas journalisé d'erreur.</target>
+        <note>{StrBegin="MSB4181: "}</note>
+      </trans-unit>
       <trans-unit id="UndeclaredMSBuildTasksNotAllowedInIsolatedGraphBuilds">
         <source>MSB4254: The MSBuild task is building project(s) "{0}" which are not specified in the ProjectReference item. In isolated builds this probably means that the references are not explicitly specified as a ProjectReference item in "{1}"</source>
-        <target state="needs-review-translation">MSB4254: La tâche MSBuild génère un ou des projets {0} qui ne sont pas spécifiés dans l'élément ProjectReference. Dans les builds isolées, cela signifie probablement que les références ne sont pas explicitement spécifiées en tant qu'élément ProjectReference dans "{1}"</target>
+        <target state="translated">MSB4254: la tâche MSBuild génère un ou plusieurs projets "{0}" qui ne sont pas spécifiés dans l'élément ProjectReference. Dans les builds isolées, cela signifie probablement que les références ne sont pas explicitement spécifiées en tant qu'élément ProjectReference dans "{1}"</target>
         <note>
       {StrBegin="MSB4254:"}
       LOCALIZATION: Do not localize the following words: ProjectReference, MSBuild, task.
     </note>
+      </trans-unit>
+      <trans-unit id="UninitializedPropertyRead">
+        <source>Read uninitialized property "{0}"</source>
+        <target state="translated">Lire la propriété non initialisée "{0}"</target>
+        <note />
       </trans-unit>
       <trans-unit id="UsingInputCaches">
         <source>Using input build results caches: {0}</source>
@@ -286,12 +504,6 @@
         <target state="translated">MSB4114: Impossible d'imbriquer les éléments &lt;Choose&gt; de plus de {0} niveaux.</target>
         <note>{StrBegin="MSB4114: "}UE: This message appears if the project file contains unreasonably nested Choose elements.
     LOCALIZATION: Do not localize "Choose" as it is an XML element name.</note>
-      </trans-unit>
-      <trans-unit id="CircularDependency">
-        <source>MSB4006: There is a circular dependency in the target dependency graph involving target "{0}".</source>
-        <target state="translated">MSB4006: Il existe une dépendance circulaire dans le graphique de dépendance cible qui implique la cible "{0}".</target>
-        <note>{StrBegin="MSB4006: "}UE: This message is shown when the build engine detects a target referenced in a circular manner -- a project cannot
-    request a target to build itself (perhaps via a chain of other targets).</note>
       </trans-unit>
       <trans-unit id="ComparisonOnNonNumericExpression">
         <source>MSB4086: A numeric comparison was attempted on "{1}" that evaluates to "{2}" instead of a number, in condition "{0}".</source>
@@ -552,8 +764,8 @@
         <note>{StrBegin="MSB4101: "}</note>
       </trans-unit>
       <trans-unit id="ImportedProjectNotFound">
-        <source>MSB4019: The imported project "{0}" was not found. Confirm that the path in the &lt;Import&gt; declaration is correct, and that the file exists on disk.</source>
-        <target state="translated">MSB4019: Le projet importé "{0}" est introuvable. Vérifiez que le chemin d'accès dans la déclaration &lt;Import&gt; est correct et que le fichier existe sur le disque.</target>
+        <source>MSB4019: The imported project "{0}" was not found. Confirm that the expression in the Import declaration "{1}" is correct, and that the file exists on disk.</source>
+        <target state="translated">MSB4019: le projet importé "{0}" est introuvable. Vérifiez que l'expression de la déclaration Import "{1}" est correcte et que le fichier existe sur le disque.</target>
         <note>{StrBegin="MSB4019: "}LOCALIZATION: &lt;Import&gt; should not be localized.</note>
       </trans-unit>
       <trans-unit id="ImportedProjectFromExtensionsPathNotFoundFromAppConfig">
@@ -1044,7 +1256,7 @@
       </trans-unit>
       <trans-unit id="OldWrapperGeneratedExplicitToolsVersion">
         <source>Using the MSBuild v3.5 solution wrapper generator because the tools version was set to {0}.</source>
-        <target state="translated">Utilisation du générateur de wrapper de solution MSBuild v3.5, car la version des outils est {0}.</target>
+        <target state="translated">Utilisation du générateur de wrapper de solution MSBuild v3.5 parce que la version des outils est {0}.</target>
         <note />
       </trans-unit>
       <trans-unit id="OldWrapperGeneratedOldSolutionVersion">
@@ -1493,8 +1705,8 @@
         <note>{StrBegin="MSB4091: "}</note>
       </trans-unit>
       <trans-unit id="UnexpectedTaskAttribute">
-        <source>MSB4064: The "{0}" parameter is not supported by the "{1}" task. Verify the parameter exists on the task, and it is a settable public instance property.</source>
-        <target state="translated">MSB4064: Le paramètre "{0}" n'est pas pris en charge par la tâche "{1}". Vérifiez que le paramètre existe pour la tâche et qu'il représente une propriété d'instance publique définissable.</target>
+        <source>MSB4064: The "{0}" parameter is not supported by the "{1}" task loaded from assembly: {2} from the path: {3}. Verify that the parameter exists on the task, the &lt;UsingTask&gt; points to the correct assembly, and it is a settable public instance property.</source>
+        <target state="translated">MSB4064: le paramètre "{0}" n'est pas pris en charge par la tâche "{1}" chargée à partir de l'assembly {2} depuis le chemin {3}. Vérifiez que le paramètre existe pour la tâche, que &lt;UsingTask&gt; pointe vers l'assembly approprié et qu'il s'agit d'une propriété d'instance publique définissable.</target>
         <note>{StrBegin="MSB4064: "}</note>
       </trans-unit>
       <trans-unit id="UnexpectedTaskOutputAttribute">
@@ -1748,7 +1960,8 @@ Id                  : Temps exclusif   Durée totale   Chemin (Cibles)
 ============================== Node Utilization (IDs represent configurations) ====================================================
 Timestamp:            {0} Duration   Cumulative
 -----------------------------------------------------------------------------------------------------------------------------------</source>
-        <target state="translated">============================== Utilisation du nœud (les ID représentent les configurations) ====================================================
+        <target state="translated">
+============================== Utilisation du nœud (les ID représentent les configurations) ====================================================
 Horodateur :            {0} Durée cumulée
 -----------------------------------------------------------------------------------------------------------------------------------</target>
         <note>Spacing is important.  Preserve the number of characters between the start of each word.</note>

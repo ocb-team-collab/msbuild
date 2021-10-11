@@ -5,13 +5,13 @@ using System;
 using System.Collections.Generic;
 
 using Microsoft.Build.BackEnd;
+using Microsoft.Build.Engine.UnitTests.TestComparers;
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Shared;
 using Microsoft.Build.Unittest;
 using Xunit;
-
 using TaskItem = Microsoft.Build.Execution.ProjectItemInstance.TaskItem;
 
 namespace Microsoft.Build.UnitTests.BackEnd
@@ -83,12 +83,10 @@ namespace Microsoft.Build.UnitTests.BackEnd
             BuildRequest request = CreateNewBuildRequest(1, new string[0]);
             BuildResult result = new BuildResult(request);
             Assert.Null(result.Exception);
-#if FEATURE_VARIOUS_EXCEPTIONS
             AccessViolationException e = new AccessViolationException();
             result = new BuildResult(request, e);
 
             Assert.Equal(e, result.Exception);
-#endif
         }
 
         [Fact]

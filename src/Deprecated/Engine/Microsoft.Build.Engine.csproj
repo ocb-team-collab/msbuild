@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>$(FullFrameworkTFM)</TargetFramework>
     <NoWarn>$(NoWarn);618</NoWarn>
-    <GenerateReferenceAssemblySources>true</GenerateReferenceAssemblySources>
+    <GenerateReferenceAssemblySource>true</GenerateReferenceAssemblySource>
     <EnableDefaultItems>false</EnableDefaultItems>
     <CreateTlb>true</CreateTlb>
     <AdditionalTlbExpAsmPaths>$(XMakeRefPath)</AdditionalTlbExpAsmPaths>
@@ -13,8 +13,9 @@
     <IsPackable>true</IsPackable>
     <PackageDescription>This package contains the $(MSBuildProjectName) assembly which contains the legacy compatibility shim for the MSBuild engine.  NOTE: This assembly is deprecated.</PackageDescription>
     <IncludeSatelliteOutputInPack>false</IncludeSatelliteOutputInPack>
+    <NoWarn>$(NoWarn);1570;1572;1573;1587</NoWarn>
   </PropertyGroup>
-  
+
   <ItemGroup>
     <Reference Include="System.Configuration" />
 
@@ -216,5 +217,5 @@
     </EmbeddedResource>
   </ItemGroup>
 
-  <Import Project="$(RepoRoot)eng\ProducesNoOutput.Settings.props" Condition="'$(OsEnvironment)'!='windows'" />
+  <Import Project="$(RepoRoot)eng\ProducesNoOutput.Settings.props" Condition="! $([MSBuild]::IsOSPlatform('windows'))" />
 </Project>

@@ -7,6 +7,10 @@ Param(
   [Parameter(ValueFromRemainingArguments=$true)][String[]]$properties
 )
 
+# Ensure that static state in tools is aware that this is
+# a CI scenario
+$ci = $true
+
 . $PSScriptRoot\common\tools.ps1
 
 Set-StrictMode -Version 2.0
@@ -49,6 +53,7 @@ $RepoRoot = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd($([System.IO.Path]:
 $ArtifactsDir = Join-Path $RepoRoot "artifacts"
 $Stage1Dir = Join-Path $RepoRoot "stage1"
 $Stage1BinDir = Join-Path $Stage1Dir "bin"
+$PerfLogDir = Join-Path $ArtifactsDir "log\$Configuration\PerformanceLogs"
 
 if ($msbuildEngine -eq '')
 {
@@ -79,6 +84,7 @@ try {
   {
     $buildToolPath = Join-Path $bootstrapRoot "net472\MSBuild\Current\Bin\MSBuild.exe"
     $buildToolCommand = "";
+    $buildToolFramework = "net472"
 
     if ($configuration -eq "Debug-MONO" -or $configuration -eq "Release-MONO")
     {
@@ -90,7 +96,8 @@ try {
   else
   {
     $buildToolPath = $dotnetExePath
-    $buildToolCommand = Join-Path $bootstrapRoot "netcoreapp2.1\MSBuild\MSBuild.dll"
+    $buildToolCommand = Join-Path $bootstrapRoot "net5.0\MSBuild\MSBuild.dll"
+    $buildToolFramework = "netcoreapp2.1"
   }
 
   # Use separate artifacts folder for stage 2
@@ -100,10 +107,15 @@ try {
 
   if ($buildStage1)
   {
+    if (Test-Path $Stage1Dir)
+    {
+      Remove-Item -Force -Recurse $Stage1Dir
+    }
+
     Move-Item -Path $ArtifactsDir -Destination $Stage1Dir -Force
   }
 
-  $buildTool = @{ Path = $buildToolPath; Command = $buildToolCommand }
+  $buildTool = @{ Path = $buildToolPath; Command = $buildToolCommand; Tool = $msbuildEngine; Framework = $buildToolFramework }
   $global:_BuildTool = $buildTool
 
   # turn vbcscompiler back on to save on time. It speeds up the build considerably
@@ -111,6 +123,9 @@ try {
 
   # Ensure that debug bits fail fast, rather than hanging waiting for a debugger attach.
   $env:MSBUILDDONOTLAUNCHDEBUGGER="true"
+
+  # Opt into performance logging. https://github.com/dotnet/msbuild/issues/5900
+  $env:DOTNET_PERFLOG_DIR=$PerfLogDir
 
   # When using bootstrapped MSBuild:
   # - Turn off node reuse (so that bootstrapped MSBuild processes don't stay running and lock files)

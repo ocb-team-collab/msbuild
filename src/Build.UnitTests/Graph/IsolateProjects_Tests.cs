@@ -13,7 +13,7 @@ using Shouldly;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Microsoft.Build.Experimental.Graph.UnitTests
+namespace Microsoft.Build.Graph.UnitTests
 {
     public class IsolateProjectsTests : IDisposable
     {
@@ -185,16 +185,16 @@ BuildEngine5.BuildProjectFilesInParallel(
         [Fact(Skip = "https://github.com/Microsoft/msbuild/issues/3876")]
         public void CacheEnforcementShouldFailWhenReferenceWasNotPreviouslyBuiltAndOnContinueOnError()
         {
-            CacheEnforcementShouldFailWhenReferenceWasNotPreviouslyBuilt2(addContinueOnError: true);
+            CacheEnforcementImpl(addContinueOnError: true);
         }
 
         [Fact]
         public void CacheEnforcementShouldFailWhenReferenceWasNotPreviouslyBuiltWithoutContinueOnError()
         {
-            CacheEnforcementShouldFailWhenReferenceWasNotPreviouslyBuilt2(addContinueOnError: false);
+            CacheEnforcementImpl(addContinueOnError: false);
         }
 
-        private void CacheEnforcementShouldFailWhenReferenceWasNotPreviouslyBuilt2(bool addContinueOnError)
+        private void CacheEnforcementImpl(bool addContinueOnError)
         {
             AssertBuild(
                 new[] {"BuildDeclaredReference"},
@@ -206,6 +206,14 @@ BuildEngine5.BuildProjectFilesInParallel(
 
                     logger.Errors.First()
                         .Message.ShouldStartWith("MSB4252:");
+
+                    logger.Errors.First().BuildEventContext.ShouldNotBe(BuildEventContext.Invalid);
+
+                    logger.Errors.First().BuildEventContext.NodeId.ShouldNotBe(BuildEventContext.InvalidNodeId);
+                    logger.Errors.First().BuildEventContext.ProjectInstanceId.ShouldNotBe(BuildEventContext.InvalidProjectInstanceId);
+                    logger.Errors.First().BuildEventContext.ProjectContextId.ShouldNotBe(BuildEventContext.InvalidProjectContextId);
+                    logger.Errors.First().BuildEventContext.TargetId.ShouldNotBe(BuildEventContext.InvalidTargetId);
+                    logger.Errors.First().BuildEventContext.TaskId.ShouldNotBe(BuildEventContext.InvalidTaskId);
                 },
                 addContinueOnError: addContinueOnError);
         }
@@ -379,9 +387,9 @@ BuildEngine5.BuildProjectFilesInParallel(
             Func<string, string> projectReferenceModifier = null,
             Func<string, string> msbuildOnDeclaredReferenceModifier = null)
         {
-            var rootProjectFile = _env.CreateFile().Path;
-            var declaredReferenceFile = _env.CreateFile().Path;
-            var undeclaredReferenceFile = _env.CreateFile().Path;
+            var rootProjectFile = CreateTmpFile(_env).Path;
+            var declaredReferenceFile = CreateTmpFile(_env).Path;
+            var undeclaredReferenceFile = CreateTmpFile(_env).Path;
 
             var projectContents = string.Format(
                 _project.Cleanup(),
@@ -421,6 +429,13 @@ BuildEngine5.BuildProjectFilesInParallel(
 
                 assert(result, buildManagerSession.Logger);
             }
+
+            TransientTestFile CreateTmpFile(TestEnvironment env)
+            {
+                return NativeMethodsShared.IsMono && NativeMethodsShared.IsOSX
+                                                ? env.CreateFile(new TransientTestFolder(Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString("N"))))
+                                                : env.CreateFile();
+            }
         }
 
         [Fact]
@@ -458,8 +473,9 @@ BuildEngine5.BuildProjectFilesInParallel(
 ".Cleanup()).Path;
 
             _buildParametersPrototype.IsolateProjects.ShouldBeTrue();
+            var buildParameters = _buildParametersPrototype.Clone();
 
-            using (var buildManagerSession = new Helpers.BuildManagerSession(_env, _buildParametersPrototype))
+            using (var buildManagerSession = new Helpers.BuildManagerSession(_env, buildParameters))
             {
                 // seed caches with results from the reference
                 buildManagerSession.BuildProjectFile(referenceFile).OverallResult.ShouldBe(BuildResultCode.Success);

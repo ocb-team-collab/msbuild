@@ -195,7 +195,7 @@ namespace Microsoft.Build.BackEnd
         {
             ErrorUtilities.VerifyThrow(configuration.WasGeneratedByNode, "Configuration has already been resolved.");
 
-            _unresolvedConfigurationsToIssue = _unresolvedConfigurationsToIssue ?? new List<BuildRequestConfiguration>();
+            _unresolvedConfigurationsToIssue ??= new List<BuildRequestConfiguration>();
             _unresolvedConfigurationsToIssue.Add(configuration);
         }
 
@@ -233,12 +233,12 @@ namespace Microsoft.Build.BackEnd
         {
             lock (GlobalLock)
             {
-                if (_unresolvedConfigurations == null || !_unresolvedConfigurations.ContainsKey(unresolvedConfigId))
+                List<BuildRequest> requests = null;
+                if (_unresolvedConfigurations?.TryGetValue(unresolvedConfigId, out requests) != true)
                 {
                     return false;
                 }
 
-                List<BuildRequest> requests = _unresolvedConfigurations[unresolvedConfigId];
                 _unresolvedConfigurations.Remove(unresolvedConfigId);
 
                 if (_unresolvedConfigurations.Count == 0)
@@ -252,7 +252,7 @@ namespace Microsoft.Build.BackEnd
                     WaitForResult(request, false);
                 }
 
-                return (_unresolvedConfigurations == null);
+                return _unresolvedConfigurations == null;
             }
         }
 
@@ -372,7 +372,7 @@ namespace Microsoft.Build.BackEnd
                 if (addResults)
                 {
                     // Update the local results record
-                    _outstandingResults = _outstandingResults ?? new Dictionary<int, BuildResult>();
+                    _outstandingResults ??= new Dictionary<int, BuildResult>();
                     ErrorUtilities.VerifyThrow(!_outstandingResults.ContainsKey(result.NodeRequestId), "Request already contains results.");
                     _outstandingResults.Add(result.NodeRequestId, result);
                 }
@@ -511,7 +511,7 @@ namespace Microsoft.Build.BackEnd
 
                 if (newRequest.IsConfigurationResolved)
                 {
-                    _outstandingRequests = _outstandingRequests ?? new Dictionary<int, BuildRequest>();
+                    _outstandingRequests ??= new Dictionary<int, BuildRequest>();
 
                     ErrorUtilities.VerifyThrow(!_outstandingRequests.ContainsKey(newRequest.NodeRequestId), "Already waiting for local request {0}", newRequest.NodeRequestId);
                     _outstandingRequests.Add(newRequest.NodeRequestId, newRequest);
@@ -519,7 +519,7 @@ namespace Microsoft.Build.BackEnd
                 else
                 {
                     ErrorUtilities.VerifyThrow(addToIssueList, "Requests with unresolved configurations should always be added to the issue list.");
-                    _unresolvedConfigurations = _unresolvedConfigurations ?? new Dictionary<int, List<BuildRequest>>();
+                    _unresolvedConfigurations ??= new Dictionary<int, List<BuildRequest>>();
 
                     if (!_unresolvedConfigurations.ContainsKey(newRequest.ConfigurationId))
                     {
@@ -531,7 +531,7 @@ namespace Microsoft.Build.BackEnd
 
                 if (addToIssueList)
                 {
-                    _requestsToIssue = _requestsToIssue ?? new List<BuildRequest>();
+                    _requestsToIssue ??= new List<BuildRequest>();
                     _requestsToIssue.Add(newRequest);
                 }
 

@@ -7,11 +7,10 @@ using Microsoft.Build.Framework;
 using Microsoft.Build.Tasks;
 using Microsoft.Build.Utilities;
 using Microsoft.Build.Shared;
-using System.Text.RegularExpressions;
-using System.Text;
 using Xunit;
 using Xunit.Abstractions;
 using System.IO;
+using System.Threading;
 using Shouldly;
 
 namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
@@ -396,11 +395,11 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
             }
             finally
             {
-                if (null != firstResx) File.Delete(firstResx);
-                if (null != secondResx) File.Delete(secondResx);
-                if (null != cache) File.Delete(cache);
-                if (null != firstResx) File.Delete(Path.ChangeExtension(firstResx, ".resources"));
-                if (null != secondResx) File.Delete(Path.ChangeExtension(secondResx, ".resources"));
+                if (firstResx != null) File.Delete(firstResx);
+                if (secondResx != null) File.Delete(secondResx);
+                if (cache != null) File.Delete(cache);
+                if (firstResx != null) File.Delete(Path.ChangeExtension(firstResx, ".resources"));
+                if (secondResx != null) File.Delete(Path.ChangeExtension(secondResx, ".resources"));
             }
         }
 
@@ -626,8 +625,8 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
             {
                 if (resxFile != null) File.Delete(resxFile);
                 if (resourcesFile != null) File.Delete(resourcesFile);
-                if (additionalInputs != null && additionalInputs[0] != null && File.Exists(additionalInputs[0].ItemSpec)) File.Delete(additionalInputs[0].ItemSpec);
-                if (additionalInputs != null && additionalInputs[1] != null && File.Exists(additionalInputs[1].ItemSpec)) File.Delete(additionalInputs[1].ItemSpec);
+                if (additionalInputs?[0] != null && File.Exists(additionalInputs[0].ItemSpec)) File.Delete(additionalInputs[0].ItemSpec);
+                if (additionalInputs?[1] != null && File.Exists(additionalInputs[1].ItemSpec)) File.Delete(additionalInputs[1].ItemSpec);
             }
         }
 
@@ -1190,10 +1189,8 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
                 // another invalid escape, this one more serious, "unsupported or invalid escape character"
                 new string[] {   @"foo=\ujjjjbar", "MSB3569"},
             };
-
-            GenerateResource t = null;
-            string textFile = null;
-
+            GenerateResource t;
+            string textFile;
             foreach (string[] test in tests)
             {
                 t = Utilities.CreateTaskOutOfProc(_output);
@@ -1274,10 +1271,10 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
             }
             finally
             {
-                if (null != resxFile1) File.Delete(resxFile1);
-                if (null != resxFile2) File.Delete(resxFile2);
-                if (null != resourcesFile1) File.Delete(resourcesFile1);
-                if (null != resourcesFile2) File.Delete(resourcesFile2);
+                if (resxFile1 != null) File.Delete(resxFile1);
+                if (resxFile2 != null) File.Delete(resxFile2);
+                if (resourcesFile1 != null) File.Delete(resourcesFile1);
+                if (resourcesFile2 != null) File.Delete(resourcesFile2);
             }
         }
 
@@ -1334,10 +1331,10 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
             }
             finally
             {
-                if (null != resxFile1) File.Delete(resxFile1);
-                if (null != resxFile2) File.Delete(resxFile2);
-                if (null != resourcesFile1) File.Delete(resourcesFile1);
-                if (null != resourcesFile2) File.Delete(resourcesFile2);
+                if (resxFile1 != null) File.Delete(resxFile1);
+                if (resxFile2 != null) File.Delete(resxFile2);
+                if (resourcesFile1 != null) File.Delete(resourcesFile1);
+                if (resourcesFile2 != null) File.Delete(resourcesFile2);
             }
         }
 
@@ -1419,8 +1416,8 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
             }
             finally
             {
-                if (null != resxFile) File.Delete(resxFile);
-                if (null != resourcesFile) File.Delete(resourcesFile);
+                if (resxFile != null) File.Delete(resxFile);
+                if (resourcesFile != null) File.Delete(resourcesFile);
             }
         }
 
@@ -1511,7 +1508,7 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
                 Assert.False(result);
 
                 // Should have not written any files
-                Assert.True(t.FilesWritten != null && t.FilesWritten.Length == 0);
+                Assert.True(t.FilesWritten?.Length == 0);
                 Assert.False(File.Exists(resourcesFile));
             }
             finally
@@ -1651,8 +1648,7 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
 
             Utilities.ExecuteTask(t);
 
-            int i = 0;
-
+            int i;
             for (i = 0; i < 4; i++)
             {
                 Assert.Equal(t.FilesWritten[i].ItemSpec, t.OutputResources[i].ItemSpec);
@@ -1947,7 +1943,7 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
                 t.Execute();
 
                 // "cannot read state file (opening for read/write)"
-                Utilities.AssertLogContains(t, "MSB3088");
+                Utilities.AssertLogContainsResourceWithUnspecifiedReplacements(t, "General.CouldNotReadStateFileMessage");
                 // "cannot write state file (opening for read/write)"
                 Utilities.AssertLogContains(t, "MSB3101");
             }
@@ -2121,10 +2117,10 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
             }
             finally
             {
-                if (null != resxFile) File.Delete(resxFile);
-                if (null != resxFile2) File.Delete(resxFile2);
-                if (null != resxFile) File.Delete(Path.ChangeExtension(resxFile, ".resources"));
-                if (null != resxFile2) File.Delete(Path.ChangeExtension(resxFile2, ".resources"));
+                if (resxFile != null) File.Delete(resxFile);
+                if (resxFile2 != null) File.Delete(resxFile2);
+                if (resxFile != null) File.Delete(Path.ChangeExtension(resxFile, ".resources"));
+                if (resxFile2 != null) File.Delete(Path.ChangeExtension(resxFile2, ".resources"));
             }
         }
 
@@ -2269,7 +2265,7 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.OutOfProc
             }
             finally
             {
-                if (null != txtFile) File.Delete(txtFile);
+                if (txtFile != null) File.Delete(txtFile);
             }
         }
 
@@ -3019,7 +3015,7 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests
         {
             GenerateResource t = CreateTask(output);
             t.ExecuteAsTool = true;
-            t.SdkToolsPath = ToolLocationHelper.GetPathToDotNetFrameworkSdk(TargetDotNetFrameworkVersion.VersionLatest);
+            t.SdkToolsPath = ToolLocationHelper.GetPathToDotNetFrameworkSdk(TargetDotNetFrameworkVersion.Version48);
 
             return t;
         }

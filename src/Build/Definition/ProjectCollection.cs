@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft. All rights reserved.
+// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
@@ -16,9 +16,10 @@ using Microsoft.Build.Collections;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
+using Microsoft.Build.ObjectModelRemoting;
 using Microsoft.Build.Shared;
 using Microsoft.Build.Internal;
-
+using Microsoft.Build.Utilities;
 using ForwardingLoggerRecord = Microsoft.Build.Logging.ForwardingLoggerRecord;
 using ILoggingService = Microsoft.Build.BackEnd.Logging.ILoggingService;
 using InternalLoggerException = Microsoft.Build.Exceptions.InternalLoggerException;
@@ -149,6 +150,11 @@ namespace Microsoft.Build.Evaluation
         private readonly LoadedProjectCollection _loadedProjects;
 
         /// <summary>
+        /// External projects support
+        /// </summary>
+        private ExternalProjectsProvider _link;
+
+        /// <summary>
         /// Single logging service used for all builds of projects in this project collection
         /// </summary>
         private ILoggingService _loggingService;
@@ -200,7 +206,7 @@ namespace Microsoft.Build.Evaluation
 
         /// <summary>
         /// Whether reevaluation is temporarily disabled on projects in this collection.
-        /// This is useful when the host expects to make a number of reads and writes 
+        /// This is useful when the host expects to make a number of reads and writes
         /// to projects, and wants to temporarily sacrifice correctness for performance.
         /// </summary>
         private bool _skipEvaluation;
@@ -219,17 +225,7 @@ namespace Microsoft.Build.Evaluation
         private int _maxNodeCount;
 
         /// <summary>
-        /// Hook up last minute dumping of any exceptions bringing down the process
-        /// </summary>
-        static ProjectCollection()
-        {
-#if FEATURE_APPDOMAIN_UNHANDLED_EXCEPTION
-            AppDomain.CurrentDomain.UnhandledException += ExceptionHandling.UnhandledExceptionHandler;
-#endif
-        }
-
-        /// <summary>
-        /// Instantiates a project collection with no global properties or loggers that reads toolset 
+        /// Instantiates a project collection with no global properties or loggers that reads toolset
         /// information from the configuration file and registry.
         /// </summary>
         public ProjectCollection()
@@ -309,7 +305,15 @@ namespace Microsoft.Build.Evaluation
             _loadedProjects = new LoadedProjectCollection();
             ToolsetLocations = toolsetDefinitionLocations;
             MaxNodeCount = maxNodeCount;
-            ProjectRootElementCache = new ProjectRootElementCache(false /* do not automatically reload changed files from disk */, loadProjectsReadOnly);
+
+            if (Traits.Instance.UseSimpleProjectRootElementCacheConcurrency)
+            {
+                ProjectRootElementCache = new SimpleProjectRootElementCache();
+            }
+            else
+            {
+                ProjectRootElementCache = new ProjectRootElementCache(autoReloadFromDisk: false, loadProjectsReadOnly);
+            }
             OnlyLogCriticalEvents = onlyLogCriticalEvents;
 
             try
@@ -400,7 +404,7 @@ namespace Microsoft.Build.Evaluation
 
         /// <summary>
         /// Retrieves the global project collection object.
-        /// This is a singleton project collection with no global properties or loggers that reads toolset 
+        /// This is a singleton project collection with no global properties or loggers that reads toolset
         /// information from the configuration file and registry.
         /// May throw InvalidToolsetDefinitionException.
         /// Thread safe.
@@ -463,7 +467,10 @@ namespace Microsoft.Build.Evaluation
                     var fullInformationalVersion = typeof(Constants).GetTypeInfo().Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion;
 
                     // use a truncated version with only 9 digits of SHA
-                    s_assemblyDisplayVersion = fullInformationalVersion.Substring(startIndex: 0, length: fullInformationalVersion.IndexOf('+') + 10);
+                    var plusIndex = fullInformationalVersion.IndexOf('+');
+                    s_assemblyDisplayVersion = plusIndex < 0
+                                                    ? fullInformationalVersion
+                                                    : fullInformationalVersion.Substring(startIndex: 0, length: plusIndex + 10);
                 }
 
                 return s_assemblyDisplayVersion;
@@ -473,7 +480,7 @@ namespace Microsoft.Build.Evaluation
         /// <summary>
         /// The default tools version of this project collection. Projects use this tools version if they
         /// aren't otherwise told what tools version to use.
-        /// This value is gotten from the .exe.config file, or else in the registry, 
+        /// This value is gotten from the .exe.config file, or else in the registry,
         /// or if neither specify a default tools version then it is hard-coded to the tools version "2.0".
         /// Setter throws InvalidOperationException if a toolset with the provided tools version has not been defined.
         /// Always defined.
@@ -522,8 +529,8 @@ namespace Microsoft.Build.Evaluation
         /// </summary>
         /// <remarks>
         /// This is the publicly exposed getter, that translates into a read-only dead IDictionary&lt;string, string&gt;.
-        /// 
-        /// To be consistent with Project, setting and removing global properties is done with 
+        ///
+        /// To be consistent with Project, setting and removing global properties is done with
         /// <see cref="SetGlobalProperty">SetGlobalProperty</see> and <see cref="RemoveGlobalProperty">RemoveGlobalProperty</see>.
         /// </remarks>
         public IDictionary<string, string> GlobalProperties
@@ -556,16 +563,7 @@ namespace Microsoft.Build.Evaluation
         /// Each has a unique combination of path, global properties, and tools version.
         /// </summary>
         [SuppressMessage("Microsoft.Naming", "CA1721:PropertyNamesShouldNotMatchGetMethods", Justification = "This is a reasonable choice. API review approved")]
-        public ICollection<Project> LoadedProjects
-        {
-            get
-            {
-                using (_locker.EnterUpgradeableReadLock())
-                {
-                    return new List<Project>(_loadedProjects);
-                }
-            }
-        }
+        public ICollection<Project> LoadedProjects => GetLoadedProjects(true, null);
 
         /// <summary>
         /// Number of projects currently loaded into this collection.
@@ -584,9 +582,9 @@ namespace Microsoft.Build.Evaluation
         /// <summary>
         /// Loggers that all contained projects will use for their builds.
         /// Loggers are added with the <see cref="RegisterLogger"/>.
-        /// UNDONE: Currently they cannot be removed.
         /// Returns an empty collection if there are no loggers.
         /// </summary>
+        // UNDONE: Currently loggers cannot be removed.
         public ICollection<ILogger> Loggers
         {
             [DebuggerStepThrough]
@@ -739,7 +737,7 @@ namespace Microsoft.Build.Evaluation
 
         /// <summary>
         /// Whether reevaluation is temporarily disabled on projects in this collection.
-        /// This is useful when the host expects to make a number of reads and writes 
+        /// This is useful when the host expects to make a number of reads and writes
         /// to projects, and wants to temporarily sacrifice correctness for performance.
         /// </summary>
         public bool SkipEvaluation
@@ -809,6 +807,22 @@ namespace Microsoft.Build.Evaluation
         }
 
         /// <summary>
+        /// Global collection id.
+        /// Can be used for external providers to optimize the cross-site link exchange
+        /// </summary>
+        internal Guid CollectionId { get; } = Guid.NewGuid();
+
+        /// <summary>
+        /// External project support.
+        /// Establish a remote project link for this collection.
+        /// </summary>
+        internal ExternalProjectsProvider Link
+        {
+            get => _link;
+            set => Interlocked.Exchange(ref _link, value)?.Disconnected(this);
+        }
+
+        /// <summary>
         /// Logging service that should be used for project load and for builds
         /// </summary>
         internal ILoggingService LoggingService
@@ -833,7 +847,7 @@ namespace Microsoft.Build.Evaluation
             get
             {
                 var clone = new PropertyDictionary<ProjectPropertyInstance>();
-                
+
                 using (_locker.EnterUpgradeableReadLock())
                 {
                     foreach (ProjectPropertyInstance property in _globalProperties)
@@ -859,11 +873,11 @@ namespace Microsoft.Build.Evaluation
                     // This is only done once, when the project collection is created. Any subsequent
                     // environment changes will be ignored. Child nodes will be passed this set
                     // of properties in their build parameters.
-                    if (null == _environmentProperties)
+                    if (_environmentProperties == null)
                     {
                         using (_locker.EnterWriteLock())
                         {
-                            if (null == _environmentProperties)
+                            if (_environmentProperties == null)
                             {
                                 _environmentProperties = Utilities.GetEnvironmentProperties();
                             }
@@ -921,7 +935,7 @@ namespace Microsoft.Build.Evaluation
         /// - So that the owner of this project collection can force the XML to be loaded again
         /// from disk, by doing <see cref="UnloadAllProjects"/>.
         /// </summary>
-        internal ProjectRootElementCache ProjectRootElementCache { get; }
+        internal ProjectRootElementCacheBase ProjectRootElementCache { get; }
 
         /// <summary>
         /// Escape a string using MSBuild escaping format. For example, "%3b" for ";".
@@ -946,7 +960,7 @@ namespace Microsoft.Build.Evaluation
         }
 
         /// <summary>
-        /// Returns true if there is a toolset defined for the specified 
+        /// Returns true if there is a toolset defined for the specified
         /// tools version, otherwise false.
         /// </summary>
         public bool ContainsToolset(string toolsVersion) => GetToolset(toolsVersion) != null;
@@ -1026,7 +1040,7 @@ namespace Microsoft.Build.Evaluation
         }
 
         /// <summary>
-        /// Figure out what ToolsVersion to use to actually build the project with. 
+        /// Figure out what ToolsVersion to use to actually build the project with.
         /// </summary>
         /// <param name="explicitToolsVersion">The user-specified ToolsVersion (through e.g. /tv: on the command line). May be null</param>
         /// <param name="toolsVersionFromProject">The ToolsVersion from the project file. May be null</param>
@@ -1043,12 +1057,32 @@ namespace Microsoft.Build.Evaluation
         /// </summary>
         public ICollection<Project> GetLoadedProjects(string fullPath)
         {
+            return GetLoadedProjects(true, fullPath);
+        }
+
+        /// <summary>
+        /// Returns any and all loaded projects with the provided path.
+        /// There may be more than one, if they are distinguished by global properties
+        /// and/or tools version.
+        /// </summary>
+        internal ICollection<Project> GetLoadedProjects(bool includeExternal, string fullPath = null)
+        {
+            List<Project> loaded;
             using (_locker.EnterWriteLock())
             {
-                var loaded = new List<Project>(_loadedProjects.GetMatchingProjectsIfAny(fullPath));
-
-                return loaded;
+                    loaded = fullPath == null ? new List<Project>(_loadedProjects) : new List<Project>(_loadedProjects.GetMatchingProjectsIfAny(fullPath));
             }
+
+            if (includeExternal)
+            {
+                var link = Link;
+                if (link != null)
+                {
+                    loaded.AddRange(link.GetLoadedProjects(fullPath));
+                }
+            }
+
+            return loaded;
         }
 
         /// <summary>
@@ -1266,6 +1300,12 @@ namespace Microsoft.Build.Evaluation
         /// </summary>
         public void UnloadProject(Project project)
         {
+            if (project.IsLinked)
+            {
+                project.Zombify();
+                return;
+            }
+
             using (_locker.EnterWriteLock())
             {
                 bool existed = _loadedProjects.RemoveProject(project);
@@ -1313,10 +1353,14 @@ namespace Microsoft.Build.Evaluation
         public void UnloadProject(ProjectRootElement projectRootElement)
         {
             ErrorUtilities.VerifyThrowArgumentNull(projectRootElement, nameof(projectRootElement));
+            if (projectRootElement.Link != null)
+            {
+                return;
+            }
 
             using (_locker.EnterWriteLock())
             {
-                Project conflictingProject = LoadedProjects.FirstOrDefault(project => project.UsesProjectRootElement(projectRootElement));
+                Project conflictingProject = GetLoadedProjects(false, null).FirstOrDefault(project => project.UsesProjectRootElement(projectRootElement));
                 if (conflictingProject != null)
                 {
                     ErrorUtilities.ThrowInvalidOperation("OM_ProjectXmlCannotBeUnloadedDueToLoadedProjects", projectRootElement.FullPath, conflictingProject.FullPath);
@@ -1421,10 +1465,10 @@ namespace Microsoft.Build.Evaluation
 
         /// <summary>
         /// Called when a host is completely done with the project collection.
-        /// UNDONE: This is a hack to make sure the logging thread shuts down if the build used the logging service
-        /// off the ProjectCollection. After CTP we need to rationalize this and see if we can remove the logging service from
-        /// the project collection entirely so this isn't necessary.
         /// </summary>
+        // UNDONE: This is a hack to make sure the logging thread shuts down if the build used the logging service
+        // off the ProjectCollection. After CTP we need to rationalize this and see if we can remove the logging service from
+        // the project collection entirely so this isn't necessary.
         public void Dispose()
         {
             Dispose(true);
@@ -1460,12 +1504,16 @@ namespace Microsoft.Build.Evaluation
         public bool TryUnloadProject(ProjectRootElement projectRootElement)
         {
             ErrorUtilities.VerifyThrowArgumentNull(projectRootElement, nameof(projectRootElement));
+            if (projectRootElement.Link != null)
+            {
+                return false;
+            }
 
             using (_locker.EnterWriteLock())
             {
                 ProjectRootElementCache.DiscardStrongReferences();
 
-                Project conflictingProject = LoadedProjects.FirstOrDefault(project => project.UsesProjectRootElement(projectRootElement));
+                Project conflictingProject = GetLoadedProjects(false, null).FirstOrDefault(project => project.UsesProjectRootElement(projectRootElement));
                 if (conflictingProject == null)
                 {
                     ProjectRootElementCache.DiscardAnyWeakReference(projectRootElement);
@@ -1567,12 +1615,11 @@ namespace Microsoft.Build.Evaluation
         {
             Debug.Assert(_locker.IsWriteLockHeld);
 
-            if (!_toolsets.ContainsKey(toolsVersion))
+            if (!_toolsets.Remove(toolsVersion))
             {
                 return false;
             }
 
-            _toolsets.Remove(toolsVersion);
             _toolsetsVersion++;
             return true;
         }
@@ -1591,7 +1638,7 @@ namespace Microsoft.Build.Evaluation
         /// <summary>
         /// Handler which is called when a project is added to the RootElementCache of this project collection. We then fire an event indicating that a project was added to the collection itself.
         /// </summary>
-        private void ProjectRootElementCache_ProjectRootElementAddedHandler(object sender, ProjectRootElementCache.ProjectRootElementCacheAddEntryEventArgs e)
+        private void ProjectRootElementCache_ProjectRootElementAddedHandler(object sender, ProjectRootElementCacheAddEntryEventArgs e)
         {
             ProjectAdded?.Invoke(this, new ProjectAddedToProjectCollectionEventArgs(e.RootElement));
         }
@@ -1681,7 +1728,6 @@ namespace Microsoft.Build.Evaluation
             _loggingService.OnlyLogCriticalEvents = onlyLogCriticalEvents;
         }
 
-#if FEATURE_SYSTEM_CONFIGURATION
         /// <summary>
         /// Reset the toolsets using the provided toolset reader, used by unit tests
         /// </summary>
@@ -1689,7 +1735,6 @@ namespace Microsoft.Build.Evaluation
         {
             InitializeToolsetCollection(configReader:configurationReaderForTestsOnly);
         }
-#endif
 
 #if FEATURE_WIN32_REGISTRY
         /// <summary>
@@ -1702,16 +1747,14 @@ namespace Microsoft.Build.Evaluation
 #endif
 
         /// <summary>
-        /// Populate Toolsets with a dictionary of (toolset version, Toolset) 
-        /// using information from the registry and config file, if any.  
+        /// Populate Toolsets with a dictionary of (toolset version, Toolset)
+        /// using information from the registry and config file, if any.
         /// </summary>
         private void InitializeToolsetCollection(
 #if FEATURE_WIN32_REGISTRY
                 ToolsetRegistryReader registryReader = null,
 #endif
-#if FEATURE_SYSTEM_CONFIGURATION
                 ToolsetConfigurationReader configReader = null
-#endif
                 )
         {
             _toolsets = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
@@ -1721,9 +1764,7 @@ namespace Microsoft.Build.Evaluation
 #if FEATURE_WIN32_REGISTRY
                     registryReader,
 #endif
-#if FEATURE_SYSTEM_CONFIGURATION
                     configReader,
-#endif
                     EnvironmentProperties, _globalProperties, ToolsetLocations);
 
             _toolsetsVersion++;
@@ -1753,7 +1794,7 @@ namespace Microsoft.Build.Evaluation
         /// The ReusableLogger wraps a logger and allows it to be used for both design-time and build-time.  It internally swaps
         /// between the design-time and build-time event sources in response to Initialize and Shutdown events.
         /// </summary>
-        internal class ReusableLogger : INodeLogger, IEventSource3
+        internal class ReusableLogger : INodeLogger, IEventSource4
         {
             /// <summary>
             /// The logger we are wrapping.
@@ -1850,6 +1891,8 @@ namespace Microsoft.Build.Evaluation
             private bool _includeEvaluationProfiles;
 
             private bool _includeTaskInputs;
+
+            private bool _includeEvaluationPropertiesAndItems;
 
             /// <summary>
             /// Constructor.
@@ -1990,6 +2033,22 @@ namespace Microsoft.Build.Evaluation
 
                 _includeTaskInputs = true;
             }
+
+            public void IncludeEvaluationPropertiesAndItems()
+            {
+                if (_buildTimeEventSource is IEventSource4 buildEventSource4)
+                {
+                    buildEventSource4.IncludeEvaluationPropertiesAndItems();
+                }
+
+                if (_designTimeEventSource is IEventSource4 designTimeEventSource4)
+                {
+                    designTimeEventSource4.IncludeEvaluationPropertiesAndItems();
+                }
+
+                _includeEvaluationPropertiesAndItems = true;
+            }
+
             #endregion
 
             #region ILogger Members
@@ -2122,6 +2181,7 @@ namespace Microsoft.Build.Evaluation
                     {
                         eventSource3.IncludeEvaluationMetaprojects();
                     }
+
                     if (_includeEvaluationProfiles)
                     {
                         eventSource3.IncludeEvaluationProfiles();
@@ -2130,6 +2190,14 @@ namespace Microsoft.Build.Evaluation
                     if (_includeTaskInputs)
                     {
                         eventSource3.IncludeTaskInputs();
+                    }
+                }
+
+                if (eventSource is IEventSource4 eventSource4)
+                {
+                    if (_includeEvaluationPropertiesAndItems)
+                    {
+                        eventSource4.IncludeEvaluationPropertiesAndItems();
                     }
                 }
             }
@@ -2310,7 +2378,7 @@ namespace Microsoft.Build.Evaluation
             /// with different global properties and/or tools version.
             /// </summary>
             /// <remarks>
-            /// If hosts tend to load lots of projects with the same path, the value will have to be 
+            /// If hosts tend to load lots of projects with the same path, the value will have to be
             /// changed to a more efficient type of collection.
             ///
             /// Lock on this object. Concurrent load must be thread safe.

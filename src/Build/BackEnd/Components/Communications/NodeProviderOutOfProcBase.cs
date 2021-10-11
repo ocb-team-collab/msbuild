@@ -1,25 +1,35 @@
-﻿// Copyright (c) Microsoft. All rights reserved.
+// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.IO.Pipes;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Runtime.InteropServices;
+#if FEATURE_PIPE_SECURITY
 using System.Security.Principal;
-using System.Security.Permissions;
+#endif
 
-using Microsoft.Build.Shared;
+#if FEATURE_APM
+using Microsoft.Build.Eventing;
+#endif
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Internal;
-
-using BackendNativeMethods = Microsoft.Build.BackEnd.NativeMethods;
-using System.Threading.Tasks;
+using Microsoft.Build.Shared;
 using Microsoft.Build.Shared.FileSystem;
 using Microsoft.Build.Utilities;
+
+using BackendNativeMethods = Microsoft.Build.BackEnd.NativeMethods;
+using Task = System.Threading.Tasks.Task;
+using DotNetFrameworkArchitecture = Microsoft.Build.Shared.DotNetFrameworkArchitecture;
+using Microsoft.Build.Framework;
+using Microsoft.Build.BackEnd.Logging;
 
 namespace Microsoft.Build.BackEnd
 {
@@ -43,6 +53,11 @@ namespace Microsoft.Build.BackEnd
         /// The amount of time to wait for an out-of-proc node to spool up before we give up.
         /// </summary>
         private const int TimeoutForNewNodeCreation = 30000;
+
+        /// <summary>
+        /// The amount of time to wait for an out-of-proc node to exit.
+        /// </summary>
+        private const int TimeoutForWaitForExit = 30000;
 
         /// <summary>
         /// The build component host.
@@ -76,7 +91,7 @@ namespace Microsoft.Build.BackEnd
         /// <param name="packet">The packet to send.</param>
         protected void SendData(NodeContext context, INodePacket packet)
         {
-            ErrorUtilities.VerifyThrowArgumentNull(packet, "packet");
+            ErrorUtilities.VerifyThrowArgumentNull(packet, nameof(packet));
             context.SendData(packet);
         }
 
@@ -90,27 +105,44 @@ namespace Microsoft.Build.BackEnd
             // Send the build completion message to the nodes, causing them to shutdown or reset.
             _processesToIgnore.Clear();
 
+            // We wait for child nodes to exit to avoid them changing the terminal
+            // after this process terminates.
+            bool waitForExit =  !enableReuse &&
+                                !Console.IsInputRedirected &&
+                                Traits.Instance.EscapeHatches.EnsureStdOutForChildNodesIsPrimaryStdout;
+
+            Task[] waitForExitTasks = waitForExit && contextsToShutDown.Count > 0 ? new Task[contextsToShutDown.Count] : null;
+            int i = 0;
+            var loggingService = _componentHost.LoggingService;
             foreach (NodeContext nodeContext in contextsToShutDown)
             {
-                if (null != nodeContext)
+                if (nodeContext is null)
                 {
-                    nodeContext.SendData(new NodeBuildComplete(enableReuse));
+                    continue;
                 }
+                nodeContext.SendData(new NodeBuildComplete(enableReuse));
+                if (waitForExit)
+                {
+                    waitForExitTasks[i++] = nodeContext.WaitForExitAsync(loggingService);
+                }
+            }
+            if (waitForExitTasks != null)
+            {
+                Task.WaitAll(waitForExitTasks);
             }
         }
 
         /// <summary>
         /// Shuts down all of the managed nodes permanently.
         /// </summary>
-        /// <param name="hostHandshake">host handshake key</param>
-        /// <param name="clientHandshake">client handshake key</param>
+        /// <param name="nodeReuse">Whether to reuse the node</param>
         /// <param name="terminateNode">Delegate used to tell the node provider that a context has terminated</param>
-        protected void ShutdownAllNodes(long hostHandshake, long clientHandshake, NodeContextTerminateDelegate terminateNode)
+        protected void ShutdownAllNodes(bool nodeReuse, NodeContextTerminateDelegate terminateNode)
         {
             // INodePacketFactory
             INodePacketFactory factory = new NodePacketFactory();
 
-            List<Process> nodeProcesses = GetPossibleRunningNodes();
+            List<Process> nodeProcesses = GetPossibleRunningNodes().nodeProcesses;
 
             // Find proper MSBuildTaskHost executable name
             string msbuildtaskhostExeName = NodeProviderOutOfProcTaskHost.TaskHostNameForClr2TaskHost;
@@ -121,13 +153,23 @@ namespace Microsoft.Build.BackEnd
             // For all processes in the list, send signal to terminate if able to connect
             foreach (Process nodeProcess in nodeProcesses)
             {
-                Stream nodeStream = TryConnectToProcess(nodeProcess.Id, 30/*verified to miss nodes if smaller*/, hostHandshake, clientHandshake);
+                // A 2013 comment suggested some nodes take this long to respond, so a smaller timeout would miss nodes.
+                int timeout = 30;
 
-                if (null != nodeStream)
+                // Attempt to connect to the process with the handshake without low priority.
+                Stream nodeStream = TryConnectToProcess(nodeProcess.Id, timeout, NodeProviderOutOfProc.GetHandshake(nodeReuse, false));
+
+                if (nodeStream == null)
+                {
+                    // If we couldn't connect attempt to connect to the process with the handshake including low priority.
+                    nodeStream = TryConnectToProcess(nodeProcess.Id, timeout, NodeProviderOutOfProc.GetHandshake(nodeReuse, true));
+                }
+
+                if (nodeStream != null)
                 {
                     // If we're able to connect to such a process, send a packet requesting its termination
                     CommunicationsUtilities.Trace("Shutting down node with pid = {0}", nodeProcess.Id);
-                    NodeContext nodeContext = new NodeContext(0, nodeProcess.Id, nodeStream, factory, terminateNode);
+                    NodeContext nodeContext = new NodeContext(0, nodeProcess, nodeStream, factory, terminateNode);
                     nodeContext.SendData(new NodeBuildComplete(false /* no node reuse */));
                     nodeStream.Dispose();
                 }
@@ -138,7 +180,7 @@ namespace Microsoft.Build.BackEnd
         /// Finds or creates a child process which can act as a node.
         /// </summary>
         /// <returns>The pipe stream representing the node.</returns>
-        protected NodeContext GetNode(string msbuildLocation, string commandLineArgs, int nodeId, INodePacketFactory factory, long hostHandshake, long clientHandshake, NodeContextTerminateDelegate terminateNode)
+        protected NodeContext GetNode(string msbuildLocation, string commandLineArgs, int nodeId, INodePacketFactory factory, Handshake hostHandshake, NodeContextTerminateDelegate terminateNode)
         {
 #if DEBUG
             if (Execution.BuildManager.WaitForDebugger)
@@ -167,10 +209,10 @@ namespace Microsoft.Build.BackEnd
             // Try to connect to idle nodes if node reuse is enabled.
             if (_componentHost.BuildParameters.EnableNodeReuse)
             {
-                var candidateProcesses = GetPossibleRunningNodes(msbuildLocation);
+                (string expectedProcessName, List<Process> processes) runningNodesTuple = GetPossibleRunningNodes(msbuildLocation);
 
-                CommunicationsUtilities.Trace("Attempting to connect to each existing msbuild.exe process in turn to establish node {0}...", nodeId);
-                foreach (Process nodeProcess in candidateProcesses)
+                CommunicationsUtilities.Trace("Attempting to connect to each existing {1} process in turn to establish node {0}...", nodeId, runningNodesTuple.expectedProcessName);
+                foreach (Process nodeProcess in runningNodesTuple.processes)
                 {
                     if (nodeProcess.Id == Process.GetCurrentProcess().Id)
                     {
@@ -178,7 +220,7 @@ namespace Microsoft.Build.BackEnd
                     }
 
                     // Get the full context of this inspection so that we can always skip this process when we have the same taskhost context
-                    string nodeLookupKey = GetProcessesToIgnoreKey(hostHandshake, clientHandshake, nodeProcess.Id);
+                    string nodeLookupKey = GetProcessesToIgnoreKey(hostHandshake, nodeProcess.Id);
                     if (_processesToIgnore.Contains(nodeLookupKey))
                     {
                         continue;
@@ -188,12 +230,12 @@ namespace Microsoft.Build.BackEnd
                     _processesToIgnore.Add(nodeLookupKey);
 
                     // Attempt to connect to each process in turn.
-                    Stream nodeStream = TryConnectToProcess(nodeProcess.Id, 0 /* poll, don't wait for connections */, hostHandshake, clientHandshake);
+                    Stream nodeStream = TryConnectToProcess(nodeProcess.Id, 0 /* poll, don't wait for connections */, hostHandshake);
                     if (nodeStream != null)
                     {
                         // Connection successful, use this node.
                         CommunicationsUtilities.Trace("Successfully connected to existed node {0} which is PID {1}", nodeId, nodeProcess.Id);
-                        return new NodeContext(nodeId, nodeProcess.Id, nodeStream, factory, terminateNode);
+                        return new NodeContext(nodeId, nodeProcess, nodeStream, factory, terminateNode);
                     }
                 }
             }
@@ -231,20 +273,20 @@ namespace Microsoft.Build.BackEnd
 #endif
 
                 // Create the node process
-                int msbuildProcessId = LaunchNode(msbuildLocation, commandLineArgs);
-                _processesToIgnore.Add(GetProcessesToIgnoreKey(hostHandshake, clientHandshake, msbuildProcessId));
+                Process msbuildProcess = LaunchNode(msbuildLocation, commandLineArgs);
+                _processesToIgnore.Add(GetProcessesToIgnoreKey(hostHandshake, msbuildProcess.Id));
 
                 // Note, when running under IMAGEFILEEXECUTIONOPTIONS registry key to debug, the process ID
                 // gotten back from CreateProcess is that of the debugger, which causes this to try to connect
                 // to the debugger process. Instead, use MSBUILDDEBUGONSTART=1
 
                 // Now try to connect to it.
-                Stream nodeStream = TryConnectToProcess(msbuildProcessId, TimeoutForNewNodeCreation, hostHandshake, clientHandshake);
+                Stream nodeStream = TryConnectToProcess(msbuildProcess.Id, TimeoutForNewNodeCreation, hostHandshake);
                 if (nodeStream != null)
                 {
                     // Connection successful, use this node.
-                    CommunicationsUtilities.Trace("Successfully connected to created node {0} which is PID {1}", nodeId, msbuildProcessId);
-                    return new NodeContext(nodeId, msbuildProcessId, nodeStream, factory, terminateNode);
+                    CommunicationsUtilities.Trace("Successfully connected to created node {0} which is PID {1}", nodeId, msbuildProcess.Id);
+                    return new NodeContext(nodeId, msbuildProcess, nodeStream, factory, terminateNode);
                 }
             }
 
@@ -253,7 +295,15 @@ namespace Microsoft.Build.BackEnd
             return null;
         }
 
-        private List<Process> GetPossibleRunningNodes(string msbuildLocation = null)
+        /// <summary>
+        /// Finds processes named after either msbuild or msbuildtaskhost.
+        /// </summary>
+        /// <param name="msbuildLocation"></param>
+        /// <returns>
+        /// Item 1 is the name of the process being searched for.
+        /// Item 2 is the list of processes themselves.
+        /// </returns>
+        private (string expectedProcessName, List<Process> nodeProcesses) GetPossibleRunningNodes(string msbuildLocation = null)
         {
             if (String.IsNullOrEmpty(msbuildLocation))
             {
@@ -267,16 +317,16 @@ namespace Microsoft.Build.BackEnd
             // Trivial sort to try to prefer most recently used nodes
             nodeProcesses.Sort((left, right) => left.Id - right.Id);
 
-            return nodeProcesses;
+            return (expectedProcessName, nodeProcesses);
         }
 
         /// <summary>
         /// Generate a string from task host context and the remote process to be used as key to lookup processes we have already
         /// attempted to connect to or are already connected to
         /// </summary>
-        private string GetProcessesToIgnoreKey(long hostHandshake, long clientHandshake, int nodeProcessId)
+        private string GetProcessesToIgnoreKey(Handshake hostHandshake, int nodeProcessId)
         {
-            return hostHandshake.ToString(CultureInfo.InvariantCulture) + "|" + clientHandshake.ToString(CultureInfo.InvariantCulture) + "|" + nodeProcessId.ToString(CultureInfo.InvariantCulture);
+            return hostHandshake.ToString() + "|" + nodeProcessId.ToString(CultureInfo.InvariantCulture);
         }
 
 #if !FEATURE_PIPEOPTIONS_CURRENTUSERONLY
@@ -303,10 +353,10 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Attempts to connect to the specified process.
         /// </summary>
-        private Stream TryConnectToProcess(int nodeProcessId, int timeout, long hostHandshake, long clientHandshake)
+        private Stream TryConnectToProcess(int nodeProcessId, int timeout, Handshake handshake)
         {
             // Try and connect to the process.
-            string pipeName = "MSBuild" + nodeProcessId;
+            string pipeName = NamedPipeUtil.GetPipeNameOrPath("MSBuild" + nodeProcessId);
 
             NamedPipeClientStream nodeStream = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous
 #if FEATURE_PIPEOPTIONS_CURRENTUSERONLY
@@ -319,8 +369,8 @@ namespace Microsoft.Build.BackEnd
             {
                 nodeStream.Connect(timeout);
 
-#if !MONO && !FEATURE_PIPEOPTIONS_CURRENTUSERONLY
-                if (NativeMethodsShared.IsWindows)
+#if !FEATURE_PIPEOPTIONS_CURRENTUSERONLY
+                if (NativeMethodsShared.IsWindows && !NativeMethodsShared.IsMono)
                 {
                     // Verify that the owner of the pipe is us.  This prevents a security hole where a remote node has
                     // been faked up with ACLs that would let us attach to it.  It could then issue fake build requests back to
@@ -329,37 +379,32 @@ namespace Microsoft.Build.BackEnd
                     // remote node could set the owner to something else would also let it change owners on other objects, so
                     // this would be a security flaw upstream of us.
                     ValidateRemotePipeSecurityOnWindows(nodeStream);
-
                 }
 #endif
 
-                CommunicationsUtilities.Trace("Writing handshake to pipe {0}", pipeName);
-                nodeStream.WriteLongForHandshake(hostHandshake);
+                int[] handshakeComponents = handshake.RetrieveHandshakeComponents();
+                for (int i = 0; i < handshakeComponents.Length; i++)
+                {
+                    CommunicationsUtilities.Trace("Writing handshake part {0} ({1}) to pipe {2}", i, handshakeComponents[i], pipeName);
+                    nodeStream.WriteIntForHandshake(handshakeComponents[i]);
+                }
+
+                // This indicates that we have finished all the parts of our handshake; hopefully the endpoint has as well.
+                nodeStream.WriteEndOfHandshakeSignal();
 
                 CommunicationsUtilities.Trace("Reading handshake from pipe {0}", pipeName);
-#if NETCOREAPP2_1
-                long handshake = nodeStream.ReadLongForHandshake(timeout);
+
+#if NETCOREAPP2_1_OR_GREATER || MONO
+                nodeStream.ReadEndOfHandshakeSignal(true, timeout);
 #else
-                long handshake = nodeStream.ReadLongForHandshake();
+                nodeStream.ReadEndOfHandshakeSignal(true);
 #endif
-
-                if (handshake != clientHandshake)
-                {
-                    CommunicationsUtilities.Trace("Handshake failed. Received {0} from client not {1}. Probably the client is a different MSBuild build.", handshake, clientHandshake);
-                    throw new InvalidOperationException();
-                }
-
                 // We got a connection.
                 CommunicationsUtilities.Trace("Successfully connected to pipe {0}...!", pipeName);
                 return nodeStream;
             }
-            catch (Exception e)
+            catch (Exception e) when (!ExceptionHandling.IsCriticalException(e))
             {
-                if (ExceptionHandling.IsCriticalException(e))
-                {
-                    throw;
-                }
-
                 // Can be:
                 // UnauthorizedAccessException -- Couldn't connect, might not be a node.
                 // IOException -- Couldn't connect, already in use.
@@ -368,10 +413,7 @@ namespace Microsoft.Build.BackEnd
                 CommunicationsUtilities.Trace("Failed to connect to pipe {0}. {1}", pipeName, e.Message.TrimEnd());
 
                 // If we don't close any stream, we might hang up the child
-                if (nodeStream != null)
-                {
-                    nodeStream.Dispose();
-                }
+                nodeStream?.Dispose();
             }
 
             return null;
@@ -380,10 +422,10 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Creates a new MSBuild process
         /// </summary>
-        private int LaunchNode(string msbuildLocation, string commandLineArgs)
+        private Process LaunchNode(string msbuildLocation, string commandLineArgs)
         {
             // Should always have been set already.
-            ErrorUtilities.VerifyThrowInternalLength(msbuildLocation, "msbuildLocation");
+            ErrorUtilities.VerifyThrowInternalLength(msbuildLocation, nameof(msbuildLocation));
 
             if (!FileSystems.Default.FileExists(msbuildLocation))
             {
@@ -416,12 +458,12 @@ namespace Microsoft.Build.BackEnd
                     startInfo.hStdInput = BackendNativeMethods.InvalidHandle;
                     startInfo.hStdOutput = BackendNativeMethods.InvalidHandle;
                     startInfo.dwFlags = BackendNativeMethods.STARTFUSESTDHANDLES;
-                    creationFlags = creationFlags | BackendNativeMethods.CREATENOWINDOW;
+                    creationFlags |= BackendNativeMethods.CREATENOWINDOW;
                 }
             }
             else
             {
-                creationFlags = creationFlags | BackendNativeMethods.CREATE_NEW_CONSOLE;
+                creationFlags |= BackendNativeMethods.CREATE_NEW_CONSOLE;
             }
 
             BackendNativeMethods.SECURITY_ATTRIBUTES processSecurityAttributes = new BackendNativeMethods.SECURITY_ATTRIBUTES();
@@ -433,15 +475,18 @@ namespace Microsoft.Build.BackEnd
 
             string exeName = msbuildLocation;
 
-#if RUNTIME_TYPE_NETCORE
-            // Run the child process with the same host as the currently-running process.
-            exeName = GetCurrentHost();
-            commandLineArgs = "\"" + msbuildLocation + "\" " + commandLineArgs;
+#if RUNTIME_TYPE_NETCORE || MONO
+            // Mono automagically uses the current mono, to execute a managed assembly
+            if (!NativeMethodsShared.IsMono)
+            {
+                // Run the child process with the same host as the currently-running process.
+                exeName = GetCurrentHost();
+                commandLineArgs = "\"" + msbuildLocation + "\" " + commandLineArgs;
+            }
 #endif
 
             if (!NativeMethodsShared.IsWindows)
             {
-
                 ProcessStartInfo processStartInfo = new ProcessStartInfo();
                 processStartInfo.FileName = exeName;
                 processStartInfo.Arguments = commandLineArgs;
@@ -475,8 +520,8 @@ namespace Microsoft.Build.BackEnd
                     throw new NodeFailedToLaunchException(ex);
                 }
 
-                CommunicationsUtilities.Trace("Successfully launched msbuild.exe node with PID {0}", process.Id);
-                return process.Id;
+                CommunicationsUtilities.Trace("Successfully launched {1} node with PID {0}", process.Id, exeName);
+                return process;
             }
             else
             {
@@ -533,12 +578,12 @@ namespace Microsoft.Build.BackEnd
                     NativeMethodsShared.CloseHandle(processInfo.hThread);
                 }
 
-                CommunicationsUtilities.Trace("Successfully launched msbuild.exe node with PID {0}", childProcessId);
-                return childProcessId;
+                CommunicationsUtilities.Trace("Successfully launched {1} node with PID {0}", childProcessId, exeName);
+                return Process.GetProcessById(childProcessId);
             }
         }
 
-#if RUNTIME_TYPE_NETCORE
+#if RUNTIME_TYPE_NETCORE || MONO
         private static string CurrentHost;
 #endif
 
@@ -548,7 +593,7 @@ namespace Microsoft.Build.BackEnd
         /// <returns>The full path to the executable hosting the current process, or null if running on Full Framework on Windows.</returns>
         private static string GetCurrentHost()
         {
-#if RUNTIME_TYPE_NETCORE
+#if RUNTIME_TYPE_NETCORE || MONO
             if (CurrentHost == null)
             {
                 using (Process currentProcess = Process.GetCurrentProcess())
@@ -568,6 +613,13 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         internal class NodeContext
         {
+            enum ExitPacketState
+            {
+                None,
+                ExitPacketQueued,
+                ExitPacketSent
+            }
+
             // The pipe(s) used to communicate with the node.
             private Stream _clientToServerStream;
             private Stream _serverToClientStream;
@@ -583,9 +635,9 @@ namespace Microsoft.Build.BackEnd
             private int _nodeId;
 
             /// <summary>
-            /// The process id
+            /// The node process.
             /// </summary>
-            private int _processId;
+            private readonly Process _process;
 
             /// <summary>
             /// An array used to store the header byte for each packet when read.
@@ -594,18 +646,37 @@ namespace Microsoft.Build.BackEnd
 
             /// <summary>
             /// A buffer typically big enough to handle a packet body.
+            /// We use this as a convenient way to manage and cache a byte[] that's resized
+            /// automatically to fit our payload.
             /// </summary>
-            private byte[] _smallReadBuffer;
+            private MemoryStream _readBufferMemoryStream;
 
             /// <summary>
-            /// Event indicating the node has terminated.
+            /// A reusable buffer for writing packets.
             /// </summary>
-            private ManualResetEvent _nodeTerminated;
+            private MemoryStream _writeBufferMemoryStream;
+
+            /// <summary>
+            /// A queue used for enqueuing packets to write to the stream asynchronously.
+            /// </summary>
+            private BlockingCollection<INodePacket> _packetWriteQueue = new BlockingCollection<INodePacket>();
+
+            /// <summary>
+            /// A task representing the last packet write, so we can chain packet writes one after another.
+            /// We want to queue up writing packets on a separate thread asynchronously, but serially.
+            /// Each task drains the <see cref="_packetWriteQueue"/>
+            /// </summary>
+            private Task _packetWriteDrainTask = Task.CompletedTask;
 
             /// <summary>
             /// Delegate called when the context terminates.
             /// </summary>
             private NodeContextTerminateDelegate _terminateDelegate;
+
+            /// <summary>
+            /// Tracks the state of the packet sent to terminate the node.
+            /// </summary>
+            private ExitPacketState _exitPacketState;
 
             /// <summary>
             /// Per node read buffers
@@ -615,18 +686,18 @@ namespace Microsoft.Build.BackEnd
             /// <summary>
             /// Constructor.
             /// </summary>
-            public NodeContext(int nodeId, int processId,
+            public NodeContext(int nodeId, Process process,
                 Stream nodePipe,
                 INodePacketFactory factory, NodeContextTerminateDelegate terminateDelegate)
             {
                 _nodeId = nodeId;
-                _processId = processId;
+                _process = process;
                 _clientToServerStream = nodePipe;
                 _serverToClientStream = nodePipe;
                 _packetFactory = factory;
                 _headerByte = new byte[5]; // 1 for the packet type, 4 for the body length
-                _smallReadBuffer = new byte[1000]; // 1000 was just an average seen on one profile run.
-                _nodeTerminated = new ManualResetEvent(false);
+                _readBufferMemoryStream = new MemoryStream();
+                _writeBufferMemoryStream = new MemoryStream();
                 _terminateDelegate = terminateDelegate;
                 _sharedReadBuffer = InterningBinaryReader.CreateSharedBuffer();
             }
@@ -668,18 +739,10 @@ namespace Microsoft.Build.BackEnd
                     }
 
                     NodePacketType packetType = (NodePacketType)_headerByte[0];
-                    int packetLength = BitConverter.ToInt32(_headerByte, 1);
+                    int packetLength = BinaryPrimitives.ReadInt32LittleEndian(new Span<byte>(_headerByte, 1, 4));
 
-                    byte[] packetData;
-                    if (packetLength < _smallReadBuffer.Length)
-                    {
-                        packetData = _smallReadBuffer;
-                    }
-                    else
-                    {
-                        // Preallocated buffer is not large enough to hold the body. Allocate now, but don't hold it forever.
-                        packetData = new byte[packetLength];
-                    }
+                    _readBufferMemoryStream.SetLength(packetLength);
+                    byte[] packetData = _readBufferMemoryStream.GetBuffer();
 
                     try
                     {
@@ -713,54 +776,89 @@ namespace Microsoft.Build.BackEnd
 #endif
 
             /// <summary>
-            /// Sends the specified packet to this node.
+            /// Sends the specified packet to this node asynchronously.
+            /// The method enqueues a task to write the packet and returns
+            /// immediately. This is because SendData() is on a hot path
+            /// under the primary lock (BuildManager's _syncLock)
+            /// and we want to minimize our time there.
             /// </summary>
             /// <param name="packet">The packet to send.</param>
             public void SendData(INodePacket packet)
             {
-                MemoryStream writeStream = new MemoryStream();
+                if (IsExitPacket(packet))
+                {
+                    _exitPacketState = ExitPacketState.ExitPacketQueued;
+                }
+                _packetWriteQueue.Add(packet);
+                DrainPacketQueue();
+            }
+
+            /// <summary>
+            /// Schedule a task to drain the packet write queue. We could have had a
+            /// dedicated thread that would pump the queue constantly, but
+            /// we don't want to allocate a dedicated thread per node (1MB stack)
+            /// </summary>
+            /// <remarks>Usually there'll be a single packet in the queue, but sometimes
+            /// a burst of SendData comes in, with 10-20 packets scheduled. In this case
+            /// the first scheduled task will drain all of them, and subsequent tasks
+            /// will run on an empty queue. I tried to write logic that avoids queueing
+            /// a new task if the queue is already being drained, but it didn't show any
+            /// improvement and made things more complicated.</remarks>
+            private void DrainPacketQueue()
+            {
+                // this lock is only necessary to protect a write to _packetWriteDrainTask field
+                lock (_packetWriteQueue)
+                {
+                    // average latency between the moment this runs and when the delegate starts
+                    // running is about 100-200 microseconds (unless there's thread pool saturation)
+                    _packetWriteDrainTask = _packetWriteDrainTask.ContinueWith(_ =>
+                    {
+                        while (_packetWriteQueue.TryTake(out var packet))
+                        {
+                            SendDataCore(packet);
+                        }
+                    }, TaskScheduler.Default);
+                }
+            }
+
+            /// <summary>
+            /// Actually writes and sends the packet. This can't be called in parallel
+            /// because it reuses the _writeBufferMemoryStream, and this is why we use
+            /// the _packetWriteDrainTask to serially chain invocations one after another.
+            /// </summary>
+            /// <param name="packet">The packet to send.</param>
+            private void SendDataCore(INodePacket packet)
+            {
+                MemoryStream writeStream = _writeBufferMemoryStream;
+
+                // clear the buffer but keep the underlying capacity to avoid reallocations
+                writeStream.SetLength(0);
+
                 ITranslator writeTranslator = BinaryTranslator.GetWriteTranslator(writeStream);
                 try
                 {
                     writeStream.WriteByte((byte)packet.Type);
 
                     // Pad for the packet length
-                    writeStream.Write(BitConverter.GetBytes((int)0), 0, 4);
+                    WriteInt32(writeStream, 0);
                     packet.Translate(writeTranslator);
+
+                    int writeStreamLength = (int)writeStream.Position;
 
                     // Now plug in the real packet length
                     writeStream.Position = 1;
-                    writeStream.Write(BitConverter.GetBytes((int)writeStream.Length - 5), 0, 4);
+                    WriteInt32(writeStream, writeStreamLength - 5);
 
                     byte[] writeStreamBuffer = writeStream.GetBuffer();
 
-                    for (int i = 0; i < writeStream.Length; i += MaxPacketWriteSize)
+                    for (int i = 0; i < writeStreamLength; i += MaxPacketWriteSize)
                     {
-                        int lengthToWrite = Math.Min((int)writeStream.Length - i, MaxPacketWriteSize);
-                        if ((int)writeStream.Length - i <= MaxPacketWriteSize)
-                        {
-                            // We are done, write the last bit asynchronously.  This is actually the general case for
-                            // most packets in the build, and the asynchronous behavior here is desirable.
-#if FEATURE_APM
-                            _serverToClientStream.BeginWrite(writeStreamBuffer, i, lengthToWrite, PacketWriteComplete, null);
-#else
-                            _serverToClientStream.WriteAsync(writeStreamBuffer, i, lengthToWrite);
-#endif
-                            return;
-                        }
-                        else
-                        {
-                            // If this packet is longer that we can write in one go, then we need to break it up.  We can't
-                            // return out of this function and let the rest of the system continue because another operation
-                            // might want to send data immediately afterward, and that could result in overlapping writes
-                            // to the pipe on different threads.
-#if FEATURE_APM
-                            IAsyncResult result = _serverToClientStream.BeginWrite(writeStream.GetBuffer(), i, lengthToWrite, null, null);
-                            _serverToClientStream.EndWrite(result);
-#else
-                            _serverToClientStream.Write(writeStreamBuffer, i, lengthToWrite);
-#endif
-                        }
+                        int lengthToWrite = Math.Min(writeStreamLength - i, MaxPacketWriteSize);
+                        _serverToClientStream.Write(writeStreamBuffer, i, lengthToWrite);
+                    }
+                    if (IsExitPacket(packet))
+                    {
+                        _exitPacketState = ExitPacketState.ExitPacketSent;
                     }
                 }
                 catch (IOException e)
@@ -774,10 +872,26 @@ namespace Microsoft.Build.BackEnd
                 }
             }
 
+            private static bool IsExitPacket(INodePacket packet)
+            {
+                return packet is NodeBuildComplete buildCompletePacket && !buildCompletePacket.PrepareForReuse;
+            }
+
+            /// <summary>
+            /// Avoid having a BinaryWriter just to write a 4-byte int
+            /// </summary>
+            private void WriteInt32(MemoryStream stream, int value)
+            {
+                stream.WriteByte((byte)value);
+                stream.WriteByte((byte)(value >> 8));
+                stream.WriteByte((byte)(value >> 16));
+                stream.WriteByte((byte)(value >> 24));
+            }
+
             /// <summary>
             /// Closes the node's context, disconnecting it from the node.
             /// </summary>
-            public void Close()
+            private void Close()
             {
                 _clientToServerStream.Dispose();
                 if (!object.ReferenceEquals(_clientToServerStream, _serverToClientStream))
@@ -785,6 +899,52 @@ namespace Microsoft.Build.BackEnd
                     _serverToClientStream.Dispose();
                 }
                 _terminateDelegate(_nodeId);
+            }
+
+            /// <summary>
+            /// Waits for the child node process to exit.
+            /// </summary>
+            public async Task WaitForExitAsync(ILoggingService loggingService)
+            {
+                if (_exitPacketState == ExitPacketState.ExitPacketQueued)
+                {
+                    // Wait up to 100ms until all remaining packets are sent.
+                    // We don't need to wait long, just long enough for the Task to start running on the ThreadPool.
+                    await Task.WhenAny(_packetWriteDrainTask, Task.Delay(100));
+                }
+                if (_exitPacketState == ExitPacketState.ExitPacketSent)
+                {
+                    CommunicationsUtilities.Trace("Waiting for node with pid = {0} to exit", _process.Id);
+
+                    // .NET 5 introduces a real WaitForExitAsyc.
+                    // This is a poor man's implementation that uses polling.
+                    int timeout = TimeoutForWaitForExit;
+                    int delay = 5;
+                    while (timeout > 0)
+                    {
+                        bool exited = _process.WaitForExit(milliseconds: 0);
+                        if (exited)
+                        {
+                            return;
+                        }
+                        timeout -= delay;
+                        await Task.Delay(delay).ConfigureAwait(false);
+
+                        // Double delay up to 500ms.
+                        delay = Math.Min(delay * 2, 500);
+                    }
+                }
+
+                // Kill the child and do a blocking wait.
+                loggingService?.LogWarning(
+                    BuildEventContext.Invalid,
+                    null,
+                    BuildEventFileInfo.Empty,
+                    "KillingProcessWithPid",
+                    _process.Id);
+                CommunicationsUtilities.Trace("Killing node with pid = {0}", _process.Id);
+
+                _process.KillTree(timeoutMilliseconds: 5000);
             }
 
 #if FEATURE_APM
@@ -808,26 +968,20 @@ namespace Microsoft.Build.BackEnd
             {
                 if (bytesRead != _headerByte.Length)
                 {
-                    CommunicationsUtilities.Trace(_nodeId, "COMMUNICATIONS ERROR (HRC) Node: {0} Process: {1} Bytes Read: {2} Expected: {3}", _nodeId, _processId, bytesRead, _headerByte.Length);
+                    CommunicationsUtilities.Trace(_nodeId, "COMMUNICATIONS ERROR (HRC) Node: {0} Process: {1} Bytes Read: {2} Expected: {3}", _nodeId, _process.Id, bytesRead, _headerByte.Length);
                     try
                     {
-                        Process childProcess = Process.GetProcessById(_processId);
-                        if (childProcess == null || childProcess.HasExited)
+                        if (_process.HasExited)
                         {
-                            CommunicationsUtilities.Trace(_nodeId, "   Child Process {0} has exited.", _processId);
+                            CommunicationsUtilities.Trace(_nodeId, "   Child Process {0} has exited.", _process.Id);
                         }
                         else
                         {
-                            CommunicationsUtilities.Trace(_nodeId, "   Child Process {0} is still running.", _processId);
+                            CommunicationsUtilities.Trace(_nodeId, "   Child Process {0} is still running.", _process.Id);
                         }
                     }
-                    catch (Exception e)
+                    catch (Exception e) when (!ExceptionHandling.IsCriticalException(e))
                     {
-                        if (ExceptionHandling.IsCriticalException(e))
-                        {
-                            throw;
-                        }
-
                         CommunicationsUtilities.Trace(_nodeId, "Unable to retrieve remote process information. {0}", e);
                     }
 
@@ -874,18 +1028,13 @@ namespace Microsoft.Build.BackEnd
                     return;
                 }
 
-                int packetLength = BitConverter.ToInt32(_headerByte, 1);
+                int packetLength = BinaryPrimitives.ReadInt32LittleEndian(new Span<byte>(_headerByte, 1, 4));
+                MSBuildEventSource.Log.PacketReadSize(packetLength);
 
-                byte[] packetData;
-                if (packetLength < _smallReadBuffer.Length)
-                {
-                    packetData = _smallReadBuffer;
-                }
-                else
-                {
-                    // Preallocated buffer is not large enough to hold the body. Allocate now, but don't hold it forever.
-                    packetData = new byte[packetLength];
-                }
+                // Ensures the buffer is at least this length.
+                // It avoids reallocations if the buffer is already large enough.
+                _readBufferMemoryStream.SetLength(packetLength);
+                byte[] packetData = _readBufferMemoryStream.GetBuffer();
 
                 _clientToServerStream.BeginRead(packetData, 0, packetLength, BodyReadComplete, new Tuple<byte[], int>(packetData, packetLength));
             }

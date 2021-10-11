@@ -5,13 +5,14 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Threading;
 using System.Globalization;
 using Microsoft.Build.BackEnd;
 using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Experimental.ProjectCache;
 using Microsoft.Build.Framework;
+using Microsoft.Build.Graph;
 using Microsoft.Build.Internal;
 using Microsoft.Build.Shared;
 using Microsoft.Build.Shared.FileSystem;
@@ -69,7 +70,7 @@ namespace Microsoft.Build.Execution
         /// <summary>
         /// Indicates if we should dump string interning stats.
         /// </summary>
-        private static bool? s_dumpOpportunisticInternStats;
+        private static bool? s_dumpStringInterningStats;
 
         /// <summary>
         /// Indicates if we should debug the expander.
@@ -252,7 +253,7 @@ namespace Microsoft.Build.Execution
         /// <summary>
         /// Copy constructor
         /// </summary>
-        private BuildParameters(BuildParameters other)
+        internal BuildParameters(BuildParameters other, bool resetEnvironment = false)
         {
             ErrorUtilities.VerifyThrowInternalNull(other, nameof(other));
 
@@ -260,7 +261,11 @@ namespace Microsoft.Build.Execution
             _culture = other._culture;
             _defaultToolsVersion = other._defaultToolsVersion;
             _enableNodeReuse = other._enableNodeReuse;
-            _buildProcessEnvironment = other._buildProcessEnvironment != null ? new Dictionary<string, string>(other._buildProcessEnvironment) : null;
+            _buildProcessEnvironment = resetEnvironment
+                ? CommunicationsUtilities.GetEnvironmentVariables()
+                : other._buildProcessEnvironment != null
+                    ? new Dictionary<string, string>(other._buildProcessEnvironment)
+                    : null;
             _environmentProperties = other._environmentProperties != null ? new PropertyDictionary<ProjectPropertyInstance>(other._environmentProperties) : null;
             _forwardingLoggers = other._forwardingLoggers != null ? new List<ForwardingLoggerRecord>(other._forwardingLoggers) : null;
             _globalProperties = other._globalProperties != null ? new PropertyDictionary<ProjectPropertyInstance>(other._globalProperties) : null;
@@ -295,6 +300,9 @@ namespace Microsoft.Build.Execution
             _isolateProjects = other._isolateProjects;
             _inputResultsCacheFiles = other._inputResultsCacheFiles;
             _outputResultsCacheFile = other._outputResultsCacheFile;
+            DiscardBuildResults = other.DiscardBuildResults;
+            LowPriority = other.LowPriority;
+            ProjectCacheDescriptor = other.ProjectCacheDescriptor;
         }
 
 #if FEATURE_THREAD_PRIORITY
@@ -314,6 +322,12 @@ namespace Microsoft.Build.Execution
             get => _useSynchronousLogging;
             set => _useSynchronousLogging = value;
         }
+
+
+        /// <summary>
+        /// Indicates whether to emit a default error if a task returns false without logging an error.
+        /// </summary>
+        public bool AllowFailureWithoutError { get; set; } = false;
 
         /// <summary>
         /// Gets the environment variables which were set when this build was created.
@@ -386,7 +400,7 @@ namespace Microsoft.Build.Execution
         public bool EnableNodeReuse
         {
             get => _enableNodeReuse;
-            set => _enableNodeReuse = value;
+            set => _enableNodeReuse = Environment.GetEnvironmentVariable("MSBUILDDISABLENODEREUSE") == "1" ? false : value;
         }
 
         /// <summary>
@@ -458,9 +472,9 @@ namespace Microsoft.Build.Execution
         /// Enables or disables legacy threading semantics
         /// </summary>
         /// <remarks>
-        /// Legacy threading semantics indicate that if a submission is to be built  
+        /// Legacy threading semantics indicate that if a submission is to be built
         /// only on the in-proc node and the submission is executed synchronously, then all of its
-        /// requests will be built on the thread which invoked the build rather than a 
+        /// requests will be built on the thread which invoked the build rather than a
         /// thread owned by the BuildManager.
         /// </remarks>
         public bool LegacyThreadingSemantics { get; set; }
@@ -528,7 +542,7 @@ namespace Microsoft.Build.Execution
         }
 
         /// <summary>
-        /// A list of warnings to treat as errors.  To treat all warnings as errors, set this to an empty <see cref="HashSet{String}"/>.  
+        /// A list of warnings to treat as errors.  To treat all warnings as errors, set this to an empty <see cref="HashSet{String}"/>.
         /// </summary>
         public ISet<string> WarningsAsErrors { get; set; }
 
@@ -546,9 +560,9 @@ namespace Microsoft.Build.Execution
         /// Returns all of the toolsets.
         /// </summary>
         /// <comments>
-        /// toolsetProvider.Toolsets is already a readonly collection. 
+        /// toolsetProvider.Toolsets is already a readonly collection.
         /// </comments>
-        public ICollection<Toolset> Toolsets => _toolsetProvider.Toolsets;
+        public ICollection<Toolset> Toolsets => ToolsetProvider.Toolsets;
 
         /// <summary>
         /// The name of the UI culture to use during the build.
@@ -566,7 +580,7 @@ namespace Microsoft.Build.Execution
         public bool SaveOperatingEnvironment { get; set; } = true;
 
         /// <summary>
-        /// Shutdown the inprocess node when the build finishes. By default this is false 
+        /// Shutdown the inprocess node when the build finishes. By default this is false
         /// since visual studio needs to keep the inprocess node around after the build finishes.
         /// </summary>
         public bool ShutdownInProcNodeOnBuildFinish
@@ -637,7 +651,7 @@ namespace Microsoft.Build.Execution
         /// Indicates whether we should dump string interning stats
         /// </summary>
         internal static bool DumpOpportunisticInternStats => GetStaticBoolVariableOrDefault(
-            "MSBUILDDUMPOPPORTUNISTICINTERNSTATS", ref s_dumpOpportunisticInternStats, false);
+            "MSBUILDDUMPOPPORTUNISTICINTERNSTATS", ref s_dumpStringInterningStats, false);
 
         /// <summary>
         /// Indicates whether we should dump debugging information about the expander
@@ -704,7 +718,7 @@ namespace Microsoft.Build.Execution
         /// <summary>
         /// The one and only project root element cache to be used for the build.
         /// </summary>
-        internal ProjectRootElementCache ProjectRootElementCache { get; set; }
+        internal ProjectRootElementCacheBase ProjectRootElementCache { get; set; }
 
 #if FEATURE_APPDOMAIN
         /// <summary>
@@ -769,6 +783,19 @@ namespace Microsoft.Build.Execution
         public bool DiscardBuildResults { get; set; } = false;
 
         /// <summary>
+        /// Gets or sets a value indicating whether the build process should run as low priority.
+        /// </summary>
+        public bool LowPriority { get; set; }
+
+        /// <summary>
+        /// If set, the BuildManager will query all
+        /// incoming <see cref="BuildSubmission"/> requests against the specified project cache.
+        /// Any <see cref="GraphBuildSubmission"/> requests will also use this project cache instead of
+        /// the potential project caches described in graph node's evaluations.
+        /// </summary>
+        public ProjectCacheDescriptor ProjectCacheDescriptor { get; set; }
+
+        /// <summary>
         /// Retrieves a toolset.
         /// </summary>
         public Toolset GetToolset(string toolsVersion)
@@ -831,6 +858,8 @@ namespace Microsoft.Build.Execution
             // ResetCaches is not transmitted.
             // LegacyThreadingSemantics is not transmitted.
             // InputResultsCacheFiles and OutputResultsCacheFile are not transmitted, as they are only used by the BuildManager
+            // DiscardBuildResults is not transmitted.
+            // LowPriority is passed as an argument to new nodes, so it doesn't need to be transmitted here.
         }
 
 #region INodePacketTranslatable Members
@@ -882,7 +911,7 @@ namespace Microsoft.Build.Execution
         /// <summary>
         /// Centralization of the common parts of construction.
         /// </summary>
-        private void Initialize(PropertyDictionary<ProjectPropertyInstance> environmentProperties, ProjectRootElementCache projectRootElementCache, ToolsetProvider toolsetProvider)
+        private void Initialize(PropertyDictionary<ProjectPropertyInstance> environmentProperties, ProjectRootElementCacheBase projectRootElementCache, ToolsetProvider toolsetProvider)
         {
             _buildProcessEnvironment = CommunicationsUtilities.GetEnvironmentVariables();
             _environmentProperties = environmentProperties;
@@ -936,7 +965,7 @@ namespace Microsoft.Build.Execution
         /// <summary>
         /// Helper to avoid doing an expensive disk check for MSBuild.exe when
         /// we already checked in a previous build.
-        /// This File.Exists otherwise can show up in profiles when there's a lot of 
+        /// This File.Exists otherwise can show up in profiles when there's a lot of
         /// design time builds going on.
         /// </summary>
         private static bool CheckMSBuildExeExistsAt(string path)

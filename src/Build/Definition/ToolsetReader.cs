@@ -4,7 +4,6 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Microsoft.Build.Shared;
@@ -77,7 +76,6 @@ namespace Microsoft.Build.Evaluation
             get;
         }
 
-#if FEATURE_WIN32_REGISTRY || FEATURE_SYSTEM_CONFIGURATION
         /// <summary>
         /// Gathers toolset data from the registry and configuration file, if any:
         /// allows you to specify which of the registry and configuration file to
@@ -89,12 +87,9 @@ namespace Microsoft.Build.Evaluation
 #if FEATURE_WIN32_REGISTRY
                 null,
 #endif
-#if FEATURE_SYSTEM_CONFIGURATION
                 null,
-#endif
                 environmentProperties, globalProperties, locations);
         }
-#endif
 
         /// <summary>
         /// Gathers toolset data from the registry and configuration file, if any.
@@ -106,9 +101,7 @@ namespace Microsoft.Build.Evaluation
 #if FEATURE_WIN32_REGISTRY
             ToolsetRegistryReader registryReader,
 #endif
-#if FEATURE_SYSTEM_CONFIGURATION
             ToolsetConfigurationReader configurationReader,
-#endif
             PropertyDictionary<ProjectPropertyInstance> environmentProperties,
             PropertyDictionary<ProjectPropertyInstance> globalProperties,
             ToolsetDefinitionLocations locations
@@ -125,7 +118,6 @@ namespace Microsoft.Build.Evaluation
             string overrideTasksPathFromConfiguration = null;
             string defaultOverrideToolsVersionFromConfiguration = null;
 
-#if FEATURE_SYSTEM_CONFIGURATION
             if ((locations & ToolsetDefinitionLocations.ConfigurationFile) == ToolsetDefinitionLocations.ConfigurationFile)
             {
                 if (configurationReader == null)
@@ -138,7 +130,6 @@ namespace Microsoft.Build.Evaluation
                     initialProperties, true /* accumulate properties */, out overrideTasksPathFromConfiguration,
                     out defaultOverrideToolsVersionFromConfiguration);
             }
-#endif
 
             string defaultToolsVersionFromRegistry = null;
             string overrideTasksPathFromRegistry = null;
@@ -150,7 +141,7 @@ namespace Microsoft.Build.Evaluation
                 if (NativeMethodsShared.IsWindows || registryReader != null)
                 {
                     // If we haven't been provided a registry reader (i.e. unit tests), create one
-                    registryReader = registryReader ?? new ToolsetRegistryReader(environmentProperties, globalProperties);
+                    registryReader ??= new ToolsetRegistryReader(environmentProperties, globalProperties);
 
                     // We do not accumulate properties when reading them from the registry, because the order
                     // in which values are returned to us is essentially random: so we disallow one property
@@ -509,7 +500,7 @@ namespace Microsoft.Build.Evaluation
             try
             {
                 var importSearchPathsTable = GetProjectImportSearchPathsTable(toolsVersion.Name, NativeMethodsShared.GetOSNameForExtensionsPath());
-                toolset = new Toolset(toolsVersion.Name, toolsPath == null ? binPath : toolsPath, properties, _environmentProperties, globalProperties, subToolsets, MSBuildOverrideTasksPath, DefaultOverrideToolsVersion, importSearchPathsTable);
+                toolset = new Toolset(toolsVersion.Name, toolsPath ?? binPath, properties, _environmentProperties, globalProperties, subToolsets, MSBuildOverrideTasksPath, DefaultOverrideToolsVersion, importSearchPathsTable);
             }
             catch (ArgumentException e)
             {
@@ -626,7 +617,7 @@ namespace Microsoft.Build.Evaluation
         /// <param name="expander">The expander used to expand the value of the properties.  Ref because if we are accumulating the properties, we need to re-create the expander to account for the new property value.</param>
         private void EvaluateAndSetProperty(ToolsetPropertyDefinition property, PropertyDictionary<ProjectPropertyInstance> properties, PropertyDictionary<ProjectPropertyInstance> globalProperties, PropertyDictionary<ProjectPropertyInstance> initialProperties, bool accumulateProperties, ref string toolsPath, ref string binPath, ref Expander<ProjectPropertyInstance, ProjectItemInstance> expander)
         {
-            if (0 == String.Compare(property.Name, ReservedPropertyNames.toolsPath, StringComparison.OrdinalIgnoreCase))
+            if (String.Equals(property.Name, ReservedPropertyNames.toolsPath, StringComparison.OrdinalIgnoreCase))
             {
                 toolsPath = ExpandPropertyUnescaped(property, expander);
                 toolsPath = ExpandRelativePathsRelativeToExeLocation(toolsPath);
@@ -641,7 +632,7 @@ namespace Microsoft.Build.Evaluation
                     );
                 }
             }
-            else if (0 == String.Compare(property.Name, ReservedPropertyNames.binPath, StringComparison.OrdinalIgnoreCase))
+            else if (String.Equals(property.Name, ReservedPropertyNames.binPath, StringComparison.OrdinalIgnoreCase))
             {
                 binPath = ExpandPropertyUnescaped(property, expander);
                 binPath = ExpandRelativePathsRelativeToExeLocation(binPath);
@@ -756,7 +747,6 @@ namespace Microsoft.Build.Evaluation
     /// </summary>
     internal struct MSBuildExtensionsPathReferenceKind
     {
-
         /// <summary>
         /// MSBuildExtensionsPathReferenceKind instance for property named "MSBuildExtensionsPath"
         /// </summary>

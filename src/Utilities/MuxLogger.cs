@@ -2,7 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Shared;
@@ -44,10 +43,10 @@ namespace Microsoft.Build.Utilities
     ///     At this point we will look up the success state of the project finished event for the submission ID and log a build finished event to the logger.
     ///     The event source will be cleaned up.  This may be interesting because the unregister will come from a thread other than what is doing the logging.
     ///     This may create a Synchronization issue, if unregister is called while events are being logged.
-    ///     
-    /// UNDONE: If we can use ErrorUtilities, replace all InvalidOperation and Argument exceptions with the appropriate calls.
-    /// 
     /// </summary>
+    //     
+    // UNDONE: If we can use ErrorUtilities, replace all InvalidOperation and Argument exceptions with the appropriate calls.
+    // 
     public class MuxLogger : INodeLogger
     {
         /// <summary>
@@ -132,6 +131,12 @@ namespace Microsoft.Build.Utilities
         public bool IncludeTaskInputs { get; set; }
 
         /// <summary>
+        /// Should properties and items be logged on <see cref="ProjectEvaluationFinishedEventArgs"/>
+        /// instead of <see cref="ProjectStartedEventArgs"/>?
+        /// </summary>
+        public bool IncludeEvaluationPropertiesAndItems { get; set; }
+
+        /// <summary>
         /// Initialize the logger.
         /// </summary>
         public void Initialize(IEventSource eventSource) => Initialize(eventSource, 1);
@@ -160,6 +165,7 @@ namespace Microsoft.Build.Utilities
                 {
                     eventSource3.IncludeEvaluationMetaprojects();
                 }
+
                 if (IncludeEvaluationProfiles)
                 {
                     eventSource3.IncludeEvaluationProfiles();
@@ -168,6 +174,14 @@ namespace Microsoft.Build.Utilities
                 if (IncludeTaskInputs)
                 {
                     eventSource3.IncludeTaskInputs();
+                }
+            }
+
+            if (_eventSourceForBuild is IEventSource4 eventSource4)
+            {
+                if (IncludeEvaluationPropertiesAndItems)
+                {
+                    eventSource4.IncludeEvaluationPropertiesAndItems();
                 }
             }
         }
@@ -303,10 +317,7 @@ namespace Microsoft.Build.Utilities
                 _submissionProjectsInProgress.Remove(e.BuildEventContext.SubmissionId);
                 lock (_submissionRecords)
                 {
-                    if (_submissionRecords.ContainsKey(e.BuildEventContext.SubmissionId))
-                    {
-                        _submissionRecords.Remove(e.BuildEventContext.SubmissionId);
-                    }
+                    _submissionRecords.Remove(e.BuildEventContext.SubmissionId);
                 }
             }
             else
@@ -1230,7 +1241,7 @@ namespace Microsoft.Build.Utilities
                     // logger is registered without a ProjectFinished handler, but does have an Any handler (as the mock logger does) then we would end up
                     // sending the BuildFinished event before the ProjectFinished event got processed in the Any handler.
                     ProjectFinishedEventArgs projectFinishedEvent = buildEvent as ProjectFinishedEventArgs;
-                    if (projectFinishedEvent != null && buildEvent.BuildEventContext != null && buildEvent.BuildEventContext.Equals(_firstProjectStartedEventContext))
+                    if (projectFinishedEvent != null && buildEvent.BuildEventContext?.Equals(_firstProjectStartedEventContext) == true)
                     {
                         string message = projectFinishedEvent.Succeeded ? ResourceUtilities.GetResourceString("MuxLogger_BuildFinishedSuccess") : ResourceUtilities.GetResourceString("MuxLogger_BuildFinishedFailure");
                         RaiseBuildFinishedEvent(sender, new BuildFinishedEventArgs(message, null, projectFinishedEvent.Succeeded));

@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization.Formatters.Binary;
+using Microsoft.Build.BackEnd;
 using Microsoft.Build.Shared;
 using Shouldly;
 using Xunit;
@@ -368,25 +369,25 @@ namespace Microsoft.Build.UnitTests
             extension = new AssemblyNameExtension("A, Version=2.0.0.0, PublicKeyToken=b03f5f7f11d50a3a");
             Assert.Equal("A", extension.Name);
             Assert.True(extension.Version.Equals(new Version("2.0.0.0")));
-            Assert.True(Object.ReferenceEquals(extension.CultureInfo, null));
+            Assert.True(extension.CultureInfo is null);
             Assert.Contains("b03f5f7f11d50a3a", extension.FullName);
 
             extension = new AssemblyNameExtension("A, Culture=en, PublicKeyToken=b03f5f7f11d50a3a");
             Assert.Equal("A", extension.Name);
-            Assert.True(Object.ReferenceEquals(extension.Version, null));
+            Assert.True(extension.Version is null);
             Assert.True(extension.CultureInfo.Equals(new CultureInfo("en")));
             Assert.Contains("b03f5f7f11d50a3a", extension.FullName);
 
             extension = new AssemblyNameExtension("A, PublicKeyToken=b03f5f7f11d50a3a");
             Assert.Equal("A", extension.Name);
-            Assert.True(Object.ReferenceEquals(extension.Version, null));
-            Assert.True(Object.ReferenceEquals(extension.CultureInfo, null));
+            Assert.True(extension.Version is null);
+            Assert.True(extension.CultureInfo is null);
             Assert.Contains("b03f5f7f11d50a3a", extension.FullName);
 
             extension = new AssemblyNameExtension("A");
             Assert.Equal("A", extension.Name);
-            Assert.True(Object.ReferenceEquals(extension.Version, null));
-            Assert.True(Object.ReferenceEquals(extension.CultureInfo, null));
+            Assert.True(extension.Version is null);
+            Assert.True(extension.CultureInfo is null);
         }
 
         /// <summary>
@@ -712,7 +713,6 @@ namespace Microsoft.Build.UnitTests
         [Fact]
         public void VerifyAssemblyNameExSerializationWithRemappedFrom()
         {
-            
             AssemblyNameExtension assemblyNameOriginal = new AssemblyNameExtension("System.Xml, Version=10.0.0.0, Culture=en, PublicKeyToken=b03f5f7f11d50a3a");
             AssemblyNameExtension assemblyRemappedFrom = new AssemblyNameExtension("System.Xml, Version=9.0.0.0, Culture=en, PublicKeyToken=b03f5f7f11d50a3a");
             assemblyRemappedFrom.MarkImmutable();
@@ -741,9 +741,55 @@ namespace Microsoft.Build.UnitTests
             assemblyNameDeserialized.RemappedFromEnumerator.Count().ShouldBe(1);
             assemblyNameDeserialized.RemappedFromEnumerator.First().ShouldBe(assemblyRemappedFrom);
         }
+
+        [Theory]
+        [InlineData("System.Xml")]
+        [InlineData("System.XML, Version=2.0.0.0")]
+        [InlineData("System.Xml, Culture=de-DE")]
+        [InlineData("System.Xml, Version=10.0.0.0, Culture=en, PublicKeyToken=b03f5f7f11d50a3a, Retargetable=Yes")]
+        [InlineData("System.Drawing, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a")]
+        public void VerifyAssemblyNameExSerializationByTranslator(string assemblyName)
+        {
+            AssemblyNameExtension assemblyNameOriginal = new AssemblyNameExtension(assemblyName);
+            AssemblyNameExtension assemblyNameDeserialized = null;
+
+            MemoryStream serializationStream = new MemoryStream();
+            ITranslator writeTranslator = BinaryTranslator.GetWriteTranslator(serializationStream);
+
+            writeTranslator.Translate(ref assemblyNameOriginal, (ITranslator t) => new AssemblyNameExtension(t));
+
+            serializationStream.Seek(0, SeekOrigin.Begin);
+            ITranslator readTranslator = BinaryTranslator.GetReadTranslator(serializationStream, null);
+
+            readTranslator.Translate(ref assemblyNameDeserialized, (ITranslator t) => new AssemblyNameExtension(t));
+
+            assemblyNameDeserialized.ShouldBe(assemblyNameOriginal);
+        }
+
+        [Fact]
+        public void VerifyAssemblyNameExSerializationWithRemappedFromByTranslator()
+        {
+            AssemblyNameExtension assemblyNameOriginal = new AssemblyNameExtension("System.Xml, Version=10.0.0.0, Culture=en, PublicKeyToken=b03f5f7f11d50a3a");
+            AssemblyNameExtension assemblyRemappedFrom = new AssemblyNameExtension("System.Xml, Version=9.0.0.0, Culture=en, PublicKeyToken=b03f5f7f11d50a3a");
+            assemblyRemappedFrom.MarkImmutable();
+            assemblyNameOriginal.AddRemappedAssemblyName(assemblyRemappedFrom);
+            assemblyNameOriginal.RemappedFromEnumerator.Count().ShouldBe(1);
+
+            AssemblyNameExtension assemblyNameDeserialized = null;
+
+            MemoryStream serializationStream = new MemoryStream();
+            ITranslator writeTranslator = BinaryTranslator.GetWriteTranslator(serializationStream);
+
+            writeTranslator.Translate(ref assemblyNameOriginal, (ITranslator t) => new AssemblyNameExtension(t));
+
+            serializationStream.Seek(0, SeekOrigin.Begin);
+            ITranslator readTranslator = BinaryTranslator.GetReadTranslator(serializationStream, null);
+
+            readTranslator.Translate(ref assemblyNameDeserialized, (ITranslator t) => new AssemblyNameExtension(t));
+
+            assemblyNameDeserialized.Equals(assemblyNameOriginal).ShouldBeTrue();
+            assemblyNameDeserialized.RemappedFromEnumerator.Count().ShouldBe(1);
+            assemblyNameDeserialized.RemappedFromEnumerator.First().ShouldBe(assemblyRemappedFrom);
+        }
     }
 }
-
-
-
-

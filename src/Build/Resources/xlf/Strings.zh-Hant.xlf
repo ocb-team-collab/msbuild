@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.2" xsi:schemaLocation="urn:oasis:names:tc:xliff:document:1.2 xliff-core-1.2-transitional.xsd">
-  <file datatype="xml" source-language="en" target-language="zh-HANT" original="../Strings.resx">
+  <file datatype="xml" source-language="en" target-language="zh-Hant" original="../Strings.resx">
     <body>
       <trans-unit id="AmbiguousTaskParameterError">
         <source>MSB4001: The "{0}" task has more than one parameter called "{1}".</source>
@@ -32,19 +32,27 @@
         <note />
       </trans-unit>
       <trans-unit id="CacheMissesNotAllowedInIsolatedGraphBuilds">
-        <source>MSB4252: Project "{0}" has a reference to "{1}" ({2} target(s)) but the build result for the reference is not in the engine cache. In isolated builds this could mean one of the following:
-    - the reference was not explicitly specified as a ProjectReference item in "{0}"
-    - the reference was not included in the provided input caches
-    - the reference was called with a target which is not specified in the ProjectReferenceTargets item in "{0}"
+        <source>MSB4252: Project "{0}" with global properties
+    ({1})
+    is building project "{2}" with global properties
+    ({3})
+    with the ({4}) target(s) but the build result for the built project is not in the engine cache. In isolated builds this could mean one of the following:
+    - the reference was called with a target which is not specified in the ProjectReferenceTargets item in project "{0}"
+    - the reference was called with global properties that do not match the static graph inferred nodes
+    - the reference was not explicitly specified as a ProjectReference item in project "{0}"
     </source>
-        <target state="translated">MSB4252: 專案 "{0}" 具有對 "{1}" 的參考 ({2} 目標)，但是參考的組建結果不在引擎快取中。這在隔離組建中可能表示下列其一：
-    - 未將參考明確指定為 "{0}" 中的 ProjectReference 項目
-    - 參考未包含在提供的輸入快取中
-    - 使用未在 "{0}" 中 ProjectReferenceTargets 項目內指定的目標呼叫參考
+        <target state="translated">MSB4252: 具有全域屬性的專案 "{0}"
+    ({1})
+    正在建置具有全域屬性的專案 "{2}"
+    ({3})
+    具有 ({4}) 個目標，但是已建置專案的組建結果不在引擎快取中。在隔離式組建中，這可能代表下列其中一項情況:
+    - 使用在專案 "{0}" 中 ProjectReferenceTargets 項目內未指定的目標呼叫了參考
+    - 使用與靜態圖表推斷節點不相符的全域屬性呼叫了參考
+    - 未明確指定參考作為專案 "{0}" 中的 ProjectReference 項目
     </target>
         <note>
       {StrBegin="MSB4252:"}
-      LOCALIZATION: Do not localize the following words: ProjectReference.
+      LOCALIZATION: Do not localize the following words: ProjectReference, ProjectReferenceTargets
     </note>
       </trans-unit>
       <trans-unit id="CannotExpandItemMetadata">
@@ -54,6 +62,22 @@
     %(RootDir) to an item-spec that's not a valid path would result in this error.
     LOCALIZATION: "{1}" is a localized message explaining the problem.</note>
       </trans-unit>
+      <trans-unit id="ChangeWave_InvalidFormat">
+        <source>MSB4271: Environment variable MSBuildDisableFeaturesFromVersion is set to an invalid format. Enabling all change wave versions. Entered value: {0}. Current Change Waves: {1}.</source>
+        <target state="translated">MSB4271: 環境變數 MSBuildDisableFeaturesFromVersion 設定的格式無效。正在啟用所有變更波版本。輸入的值: {0}。目前的變更波: {1}。</target>
+        <note>{StrBegin="MSB4271: "}UE: Value should be of the format: xx.yy</note>
+      </trans-unit>
+      <trans-unit id="ChangeWave_OutOfRotation">
+        <source>MSB4272: Environment variable MSBuildDisableFeaturesFromVersion is set to a version that is out of rotation. Defaulting to Change Wave version: {0}. Entered value: {1}. Current Change Waves: {2}.</source>
+        <target state="translated">MSB4272: 環境變數 MSBuildDisableFeaturesFromVersion 已設定為無法輪替的版本。預設為變更波版本: {0}。輸入的值: {1}。目前的變更波: {2}。</target>
+        <note>{StrBegin="MSB4272: "}</note>
+      </trans-unit>
+      <trans-unit id="CircularDependency">
+        <source>MSB4006: There is a circular dependency in the target dependency graph involving target "{0}".</source>
+        <target state="translated">MSB4006: 涉及目標 "{0}" 的目標相依性圖形中有循環相依性。</target>
+        <note>{StrBegin="MSB4006: "}UE: This message is shown when the build engine detects a target referenced in a circular manner -- a project cannot
+    request a target to build itself (perhaps via a chain of other targets).</note>
+      </trans-unit>
       <trans-unit id="CircularDependencyInProjectGraph">
         <source>MSB4251: There is a circular dependency involving the following projects: {0}</source>
         <target state="translated">MSB4251: 有循環相依性涉及下列專案: {0}</target>
@@ -62,9 +86,20 @@
       request a target to build itself (perhaps via a chain of other targets)
     </note>
       </trans-unit>
+      <trans-unit id="CircularDependencyInTargetGraph">
+        <source>MSB4006: There is a circular dependency in the target dependency graph involving target "{0}". Since "{1}" has "{2}" dependence on "{3}", the circular is "{4}".</source>
+        <target state="translated">MSB4006: 目標 "{0}" 相關的目標相依性關係圖中包含循環相依性。因為 "{1}" 與 "{3}" 上的 "{2}" 相依，所以循環為 "{4}"。</target>
+        <note>{StrBegin="MSB4006: "}UE: This message is shown when the build engine detects a target referenced in a circular manner -- a project cannot
+    request a target to build itself (perhaps via a chain of other targets).</note>
+      </trans-unit>
       <trans-unit id="EmptyOutputCacheFile">
         <source>MSB4257: The specified output result cache file is empty.</source>
         <target state="translated">MSB4257: 指定的輸出結果快取檔案是空的。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="EnvironmentVariableRead">
+        <source>Read environment variable "{0}"</source>
+        <target state="translated">讀取環境變數 "{0}"</target>
         <note />
       </trans-unit>
       <trans-unit id="ErrorReadingCacheFile">
@@ -77,9 +112,48 @@
         <target state="translated">MSB4258: 在路徑 "{0}" 中寫入輸出結果快取檔案發生錯誤: {1}</target>
         <note />
       </trans-unit>
+      <trans-unit id="IllFormedPropertySpaceInCondition">
+        <source>MSB4259: Unexpected space at position "{1}" of condition "{0}". Did you forget to remove a space?</source>
+        <target state="translated">MSB4259: 條件 "{0}" 的位置 "{1}" 出現非預期的空格。忘記移除空格了嗎?</target>
+        <note>{StrBegin="MSB4259: "}</note>
+      </trans-unit>
       <trans-unit id="InputCacheFilesDoNotExist">
         <source>MSB4255: The following input result cache files do not exist: "{0}"</source>
         <target state="translated">MSB4255: 下列輸入結果快取檔案不存在: "{0}"</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="InvalidVersionFormat">
+        <source>Version string was not in a correct format.</source>
+        <target state="translated">版本字串格式不正確。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IsolatedContextDoesNotSupportFileSystem">
+        <source>EvaluationContext objects created with SharingPolicy.Isolated do not support being passed an MSBuildFileSystemBase file system.</source>
+        <target state="translated">使用 SharingPolicy.Isolated 建立的 EvaluationContext 物件不支援以 MSBuildFileSystemBase 檔案系統傳遞。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="KillingProcessWithPid">
+        <source>Killing process with pid = {0}.</source>
+        <target state="translated">正在終止 pid = {0} 的處理序。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="LoadingProjectCachePlugin">
+        <source>Loading the following project cache plugin:
+    {0}</source>
+        <target state="translated">正在載入下列專案快取外掛程式:
+    {0}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="LogLoggerVerbosity">
+        <source>Logging verbosity is set to: {0}.</source>
+        <target state="translated">記錄詳細程度設定為: {0}。</target>
+        <note>
+      LOCALIZATION: {0} is an enum value of LoggerVerbosity.
+    </note>
+      </trans-unit>
+      <trans-unit id="LogTaskInputs.Truncated">
+        <source>The parameters have been truncated beyond this point. To view all parameters, clear the MSBUILDTRUNCATETASKINPUTLOGGING environment variable.</source>
+        <target state="translated">參數已在此點之後截斷。若要檢視所有參數，請清除 MSBUILDTRUNCATETASKINPUTLOGGING 環境變數。</target>
         <note />
       </trans-unit>
       <trans-unit id="MetaprojectGenerated">
@@ -92,6 +166,21 @@
         <target state="translated">無法完成作業，因為尚未呼叫 BeginBuild。</target>
         <note />
       </trans-unit>
+      <trans-unit id="NoProjectCachePluginFoundInAssembly">
+        <source>MSB4270: No project cache plugins found in assembly "{0}". Expected one.</source>
+        <target state="translated">MSB4270: 在組件 "{0}" 中找不到任何專案快取外掛程式，但應該要有一個外掛程式。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="NotAllNodesDefineACacheItem">
+        <source>MSB4269: When any static graph node defines a project cache, all nodes must define the same project cache. The following project(s) do not contain a "{0}" item declaration: {1}</source>
+        <target state="translated">MSB4269: 當任何靜態圖表節點定義了專案快取時，所有節點都必須定義相同的專案快取。下列專案不包含 "{0}" 項目宣告: {1}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="NuGetAssemblyNotFound">
+        <source>A required NuGet assembly was not found. Expected Path: {0}</source>
+        <target state="translated">找不到必要的 NuGet 元件。預期的路徑: {0}</target>
+        <note />
+      </trans-unit>
       <trans-unit id="NullReferenceFromProjectInstanceFactory">
         <source>MSB4253: A null reference was returned from a user-provided ProjectInstanceFactoryFunc callback. This is not allowed.</source>
         <target state="translated">MSB4253: 使用者提供的 ProjectInstanceFactoryFunc 回呼傳回了 null 參考。這是不允許的情況。</target>
@@ -99,6 +188,56 @@
       {StrBegin="MSB4253: "}
       LOCALIZATION:  Do not localize the following words: ProjectInstanceFactoryFunc.
     </note>
+      </trans-unit>
+      <trans-unit id="OM_MatchOnMetadataIsRestrictedToReferencedItems">
+        <source>Only item types may be referenced when removing with MatchOnMetadata.</source>
+        <target state="translated">使用 MatchOnMetadata 移除時，只能參考項目類型。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_MatchOnMetadataOnlyApplicableToRemoveItems">
+        <source>MatchOnMetadata only applies to Remove operations on items.</source>
+        <target state="translated">MatchOnMetadata 只可對項目執行移除作業。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_MatchOnMetadataOptionsOnlyApplicableToItemsWithMatchOnMetadata">
+        <source>MatchOnMetadataOptions is valid only when removing items using MatchOnMetadata.</source>
+        <target state="translated">僅當使用 MatchOnMetadata 移除項目時，MatchOnMetadataOptions 才有效。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_NoMatchOnMetadataOutsideTargets">
+        <source>MatchOnMetadata cannot be used outside of a &lt;Target&gt;.</source>
+        <target state="translated">MatchOnMetadata 無法在 &lt;目標&gt; 之外使用。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OM_TargetNameNullOrEmpty">
+        <source>Method {0} cannot be called with a collection containing null or empty target names.</source>
+        <target state="translated">無法使用內含 null 或空白目標名稱的集合呼叫方法 {0}。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="OnlyOneCachePluginMustBeSpecified">
+        <source>MSB4265: A single project cache plugin must be specified but multiple where found: {0}</source>
+        <target state="translated">MSB4265: 只可指定單一專案快取外掛程式，但發現多個指定項目: {0}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheException">
+        <source>MSB4273: The project cache threw an unhandled exception from the {0} method.</source>
+        <target state="translated">MSB4273: 專案快取從 {0} 方法擲回未處理的例外狀況。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheInitializationFailed">
+        <source>MSB4266: Failed to initialize the project cache.</source>
+        <target state="translated">MSB4266: 無法將專案快取初始化。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheQueryFailed">
+        <source>MSB4267: The project cache failed while being queried for the following project: {0}. The cache is queried in parallel for multiple projects so this specific project might not be the cause.</source>
+        <target state="translated">MSB4267: 查詢下列專案時，專案快取失敗: {0}。查詢多個專案時，會平行查詢快取，因此這個特定專案可能不是失敗原因。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProjectCacheShutdownFailed">
+        <source>MSB4268: The project cache failed to shut down properly.</source>
+        <target state="translated">MSB4268: 無法正確關閉專案快取。</target>
+        <note />
       </trans-unit>
       <trans-unit id="ProjectGraphDoesNotSupportProjectReferenceWithToolset">
         <source>MSB4250: ProjectGraph does not support ProjectReference items with the ToolsVersion metadata set. Found ProjectReference "{0}" with ToolsVersion in file "{1}"</source>
@@ -108,20 +247,99 @@
       LOCALIZATION:  Do not localize the following words: ProjectGraph, ProjectReference, ToolsVersion.
     </note>
       </trans-unit>
+      <trans-unit id="ProjectImportSkippedExpressionEvaluatedToEmpty">
+        <source>Project "{0}" was not imported by "{1}" at ({2},{3}), due to the expression evaluating to an empty string.</source>
+        <target state="translated">因為運算式評估為空字串，所以專案 "{0}" 未在 ({2},{3}) 由 "{1}" 匯入。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="PropertyAssignment">
+        <source>Property initial value: $({0})="{1}" Source: {2}</source>
+        <target state="translated">屬性初始值: $({0})="{1}" 來源: {2}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ProxyRequestNotScheduledOnInprocNode">
+        <source>MSB4274: Disabling the inproc node leads to performance degradation when using project cache plugins that emit proxy build requests.</source>
+        <target state="translated">MSB4274: 停用 inproc 節點會在使用可發出 proxy 組建要求的專案快取外掛程式時，導致效能降低。</target>
+        <note />
+      </trans-unit>
       <trans-unit id="SkippedConstraintsOnRequest">
         <source>MSB4260: Project "{0}" skipped graph isolation constraints on referenced project "{1}"</source>
-        <target state="new">MSB4260: Project "{0}" skipped graph isolation constraints on referenced project "{1}"</target>
+        <target state="translated">MSB4260: 專案 "{0}" 已跳過參考專案 "{1}" 上的圖形隔離條件約束</target>
         <note>
       LOCALIZATION: {0} and {1} are file paths
     </note>
       </trans-unit>
+      <trans-unit id="SolutionPathPropertyMustBeSetOnVSSubmissions">
+        <source>"MSB4264: Invalid $(SolutionPath) property: {0}"</source>
+        <target state="translated">"MSB4264: $(SolutionPath) 屬性無效: {0}"</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="StaticGraphAcceptsSingleSolutionEntryPoint">
+        <source>MSB4261: Multiple entry points with solutions detected: {0}. If static graph is loaded from a solution, that that solution must be the only entry point.</source>
+        <target state="translated">MSB4261: 偵測到解決方案有多個進入點: {0}。若是從解決方案載入靜態圖表，則該解決方案只可有一個進入點。</target>
+        <note>
+      LOCALIZATION: {0} is a semicolon delimited list of files
+    </note>
+      </trans-unit>
+      <trans-unit id="StaticGraphConstructionMetrics">
+        <source>Static graph loaded in {0} seconds: {1} nodes, {2} edges</source>
+        <target state="translated">在 {0} 秒內載入的靜態圖形: {1} 個節點、{2} 個邊緣</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="StaticGraphDoesNotSupportSlnReferences">
+        <source>MSB4263: Project "{0}" has a reference to solution file "{1}". Referencing solutions is not supported in static graph.
+    </source>
+        <target state="translated">MSB4263: 專案 "{0}" 具有解決方案檔 "{1}" 的參考。靜態圖形不支援參考解決方案。
+    </target>
+        <note>
+      LOCALIZATION: {0} and {1} are file paths
+    </note>
+      </trans-unit>
+      <trans-unit id="StaticGraphSolutionLoaderEncounteredSolutionWarningsAndErrors">
+        <source>MSB4262: Solution file "{0}" contains the following warnings and errors:
+           Warnings: {1}
+           Errors: {2}
+    </source>
+        <target state="translated">MSB4262: 解決方案檔 "{0}" 包含下列警告和錯誤:
+           警告: {1}
+           錯誤: {2}
+    </target>
+        <note>
+      LOCALIZATION: {0} is a file, {1} and {2} are semicolon delimited lists of messages
+    </note>
+      </trans-unit>
+      <trans-unit id="TaskAcquiredCores">
+        <source>Task "{0}" requested {1} cores, acquired {2} cores, and now holds {3} cores total.</source>
+        <target state="translated">工作 "{0}" 已要求 {1} 個核心、已取得 {2} 個核心，現在共保留 {3} 個核心。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="TaskReleasedCores">
+        <source>Task "{0}" released {1} cores and now holds {2} cores total.</source>
+        <target state="translated">工作 "{0}" 已發行 {1} 個核心，現在共保留 {2} 個核心。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="TaskReleasedCoresWarning">
+        <source>Task "{0}" asked to release {1} cores while holding only {2} and now holds {3} cores total.</source>
+        <target state="translated">工作 "{0}" 要求在僅保留 {2} 個核心的情況下發行 {1} 個核心，現在共保留 {3} 個核心。</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="TaskReturnedFalseButDidNotLogError">
+        <source>MSB4181: The "{0}" task returned false but did not log an error.</source>
+        <target state="translated">MSB4181: "{0}" 工作傳回了 False，但未記錄錯誤。</target>
+        <note>{StrBegin="MSB4181: "}</note>
+      </trans-unit>
       <trans-unit id="UndeclaredMSBuildTasksNotAllowedInIsolatedGraphBuilds">
         <source>MSB4254: The MSBuild task is building project(s) "{0}" which are not specified in the ProjectReference item. In isolated builds this probably means that the references are not explicitly specified as a ProjectReference item in "{1}"</source>
-        <target state="needs-review-translation">MSB4254: MSBuild 工作建置的專案 {0} 未在 ProjectReference 項目中指定。在隔離式組建中，這可能代表未在 "{1}" 中將該參考明確指定為 ProjectReference 項目</target>
+        <target state="translated">MSB4254: MSBuild 工作正在建置未在 ProjectReference 項目中指定的專案 "{0}"。在隔離式組建中，這可能代表未在 "{1}" 中將該參考明確指定為 ProjectReference 項目</target>
         <note>
       {StrBegin="MSB4254:"}
       LOCALIZATION: Do not localize the following words: ProjectReference, MSBuild, task.
     </note>
+      </trans-unit>
+      <trans-unit id="UninitializedPropertyRead">
+        <source>Read uninitialized property "{0}"</source>
+        <target state="translated">讀取未初始化的屬性 "{0}"</target>
+        <note />
       </trans-unit>
       <trans-unit id="UsingInputCaches">
         <source>Using input build results caches: {0}</source>
@@ -286,12 +504,6 @@
         <target state="translated">MSB4114: &lt;Choose&gt; 項目無法放在深於 {0} 層以上的巢狀結構中。</target>
         <note>{StrBegin="MSB4114: "}UE: This message appears if the project file contains unreasonably nested Choose elements.
     LOCALIZATION: Do not localize "Choose" as it is an XML element name.</note>
-      </trans-unit>
-      <trans-unit id="CircularDependency">
-        <source>MSB4006: There is a circular dependency in the target dependency graph involving target "{0}".</source>
-        <target state="translated">MSB4006: 涉及目標 "{0}" 的目標相依性圖形中有循環相依性。</target>
-        <note>{StrBegin="MSB4006: "}UE: This message is shown when the build engine detects a target referenced in a circular manner -- a project cannot
-    request a target to build itself (perhaps via a chain of other targets).</note>
       </trans-unit>
       <trans-unit id="ComparisonOnNonNumericExpression">
         <source>MSB4086: A numeric comparison was attempted on "{1}" that evaluates to "{2}" instead of a number, in condition "{0}".</source>
@@ -552,8 +764,8 @@
         <note>{StrBegin="MSB4101: "}</note>
       </trans-unit>
       <trans-unit id="ImportedProjectNotFound">
-        <source>MSB4019: The imported project "{0}" was not found. Confirm that the path in the &lt;Import&gt; declaration is correct, and that the file exists on disk.</source>
-        <target state="translated">MSB4019: 找不到匯入的專案 "{0}"。請確認 &lt;Import&gt; 宣告中的路徑正確，而且檔案存在於磁碟上。</target>
+        <source>MSB4019: The imported project "{0}" was not found. Confirm that the expression in the Import declaration "{1}" is correct, and that the file exists on disk.</source>
+        <target state="translated">MSB4019: 找不到匯入的專案 "{0}"。請確認 Import 宣告 "{1}" 中的運算式正確，以及該檔案位於磁碟中。</target>
         <note>{StrBegin="MSB4019: "}LOCALIZATION: &lt;Import&gt; should not be localized.</note>
       </trans-unit>
       <trans-unit id="ImportedProjectFromExtensionsPathNotFoundFromAppConfig">
@@ -1493,8 +1705,8 @@
         <note>{StrBegin="MSB4091: "}</note>
       </trans-unit>
       <trans-unit id="UnexpectedTaskAttribute">
-        <source>MSB4064: The "{0}" parameter is not supported by the "{1}" task. Verify the parameter exists on the task, and it is a settable public instance property.</source>
-        <target state="translated">MSB4064: "{1}" 工作不支援 "{0}" 參數。請驗證參數位於工作上，且為可設定的公用執行個體屬性。</target>
+        <source>MSB4064: The "{0}" parameter is not supported by the "{1}" task loaded from assembly: {2} from the path: {3}. Verify that the parameter exists on the task, the &lt;UsingTask&gt; points to the correct assembly, and it is a settable public instance property.</source>
+        <target state="translated">MSB4064: 從路徑 {3} 中組件 {2} 所載入的 "{1}" 工作不支援 "{0}" 參數。請確認該參數存在於該工作中、&lt;UsingTask&gt; 指向正確的組件，且為可設定的公用執行個體屬性。</target>
         <note>{StrBegin="MSB4064: "}</note>
       </trans-unit>
       <trans-unit id="UnexpectedTaskOutputAttribute">
@@ -2211,7 +2423,7 @@ Utilization:          {0} Average Utilization: {1:###.0}</source>
       </trans-unit>
       <trans-unit id="SdkResultVersionDifferentThanReference">
         <source>MSB4241: The SDK reference "{0}" version "{1}" was resolved to version "{2}" instead.  You could be using a different version than expected if you do not update the referenced version to match.</source>
-        <target state="translated">MSB4241: SDK 參考 "{0}" 版本 "{1}" 已改為解析成版本 {2}"。若您未將參考的版本更新為符合的版本，您可能使用了與預期不同的版本。</target>
+        <target state="translated">MSB4241: SDK 參考 "{0}" 版本 "{1}" 已改為解析成版本 "{2}"。若您未將參考的版本更新為符合的版本，您可能使用了與預期不同的版本。</target>
         <note>{StrBegin="MSB4241: "}
       LOCALIZATION:  Do not localize the word SDK.
     </note>

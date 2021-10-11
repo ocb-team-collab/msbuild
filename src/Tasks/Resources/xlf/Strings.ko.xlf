@@ -161,6 +161,11 @@
         <target state="translated">MSB3021: "{0}" 파일을 "{1}"(으)로 복사할 수 없습니다. {2}</target>
         <note>{StrBegin="MSB3021: "}</note>
       </trans-unit>
+      <trans-unit id="Copy.ErrorIfLinkFailsSetWithoutLinkOption">
+        <source>MSB3892: ErrorIfLinkFails requires UseHardlinksIfPossible or UseSymbolicLinksIfPossible to be set.</source>
+        <target state="translated">MSB3892: ErrorIfLinkFails에 대해 UseHardlinksIfPossible 또는 UseSymbolicLinksIfPossible을 설정해야 합니다.</target>
+        <note>{StrBegin="MSB3892: "} LOCALIZATION: Do not localize "ErrorIfLinkFails", "UseHardLinksIfPossible", or "UseSymbolicLinksIfPossible".</note>
+      </trans-unit>
       <trans-unit id="Copy.ExactlyOneTypeOfDestination">
         <source>MSB3022: Both "{0}" and "{1}" were specified as input parameters in the project file. Please choose one or the other.</source>
         <target state="translated">MSB3022: 프로젝트 파일에서 "{0}"과(와) "{1}"을(를) 모두 입력 매개 변수로 지정했습니다. 둘 중 하나만 선택하세요.</target>
@@ -175,6 +180,11 @@
         <source>Creating hard link to copy "{0}" to "{1}".</source>
         <target state="translated">"{0}"을(를) "{1}"(으)로 복사하기 위해 하드 링크를 만듭니다.</target>
         <note>LOCALIZATION: {0} and {1} are paths.</note>
+      </trans-unit>
+      <trans-unit id="Copy.LinkFailed">
+        <source>MSB3893: Could not use a link to copy "{0}" to "{1}".</source>
+        <target state="translated">MSB3893: 링크를 사용하여 "{0}"을(를) "{1}"에 복사할 수 없습니다.</target>
+        <note>{StrBegin="MSB3893: "} LOCALIZATION: {0} and {1} are paths.</note>
       </trans-unit>
       <trans-unit id="Copy.RetryingAsFileCopy">
         <source>Could not use a link to copy "{0}" to "{1}". Copying the file instead. {2}</source>
@@ -358,7 +368,7 @@
       </trans-unit>
       <trans-unit id="FileHash.FileNotFound">
         <source>MSB3954: Failed to compute hash for file '{0}' because it does not exist or is inaccessible.</source>
-        <target state="translated">MSB3954: '{0}' 파일이 존재하지 않거나 액세스할 수 없어서 이 파일에 대한 해시를 계산하지 못했습니다.</target>
+        <target state="translated">MSB3954: '{0}' 파일이 존재하지 않거나 액세스할 수 없어서 이 파일에 대한 해시를 컴퓨팅하지 못했습니다.</target>
         <note>{StrBegin="MSB3954: "}</note>
       </trans-unit>
       <trans-unit id="FileHash.UnrecognizedHashAlgorithm">
@@ -498,6 +508,11 @@
         <source>Global Properties:</source>
         <target state="translated">전역 속성:</target>
         <note />
+      </trans-unit>
+      <trans-unit id="General.StateFileAlreadyPresent">
+        <source>MSB3667: There is already a file at "{0}". If you are trying to create a precomputed cache, ensure that you are building a single project that depends on your assemblies rather than building your assemblies themselves. If you are running the ResolveAssemblyReference task normally, do not set the "AssemblyInformationCacheOutputPath" parameter of the ResolveAssemblyReference task.</source>
+        <target state="translated">MSB3667: "{0}"에 파일이 이미 있습니다. 사전 계산 캐시를 만들려면 어셈블리 자체를 빌드하는 대신 어셈블리에 종속되는 단일 프로젝트를 빌드하고 있는지 확인하세요. ResolveAssemblyReference 작업을 정상적으로 실행 중인 경우 ResolveAssemblyReference 작업의 "AssemblyInformationCacheOutputPath" 매개 변수를 설정하지 마세요.</target>
+        <note>{StrBegin="MSB3667: "}</note>
       </trans-unit>
       <trans-unit id="General.UndefineProperties">
         <source>Removing Properties:</source>
@@ -764,6 +779,31 @@
         <target state="translated">MSB3160: '{0}' 파일에서 XML 유효성 검사 경고가 발생했습니다. {1}</target>
         <note>{StrBegin="MSB3160: "}</note>
       </trans-unit>
+      <trans-unit id="GenerateLauncher.CopyError">
+        <source>MSB3961: An error occurred trying to copy '{0}' to '{1}': {2}</source>
+        <target state="translated">MSB3961: '{0}'을(를) '{1}'에 복사하는 동안 오류가 발생했습니다. {2}</target>
+        <note>{StrBegin="MSB3961: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.General">
+        <source>MSB3962: An error occurred generating a launcher: {0}</source>
+        <target state="translated">MSB3962: 시작 관리자를 생성하는 동안 오류가 발생했습니다. {0}</target>
+        <note>{StrBegin="MSB3962: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.InvalidInput">
+        <source>MSB3963: Not enough data was provided to generate a launcher. Please provide a value for: 'EntryPoint'.</source>
+        <target state="translated">MSB3963: 시작 관리자를 생성하는 데 충분한 데이터가 제공되지 않았습니다. 'EntryPoint'의 값을 제공하세요.</target>
+        <note>{StrBegin="MSB3963: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.MissingLauncherExe">
+        <source>MSB3964: Could not find required file '{0}'.</source>
+        <target state="translated">MSB3964: 필요한 파일 '{0}'을(를) 찾을 수 없습니다.</target>
+        <note>{StrBegin="MSB3964: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.NoOutputPath">
+        <source>MSB3965: No output path specified in build settings.</source>
+        <target state="translated">MSB3965: 빌드 설정에 출력 경로를 지정하지 않았습니다.</target>
+        <note>{StrBegin="MSB3965: "}</note>
+      </trans-unit>
       <trans-unit id="GenerateManifest.AllowPartiallyTrustedCallers">
         <source>MSB3177: Reference '{0}' does not allow partially trusted callers.</source>
         <target state="translated">MSB3177: '{0}' 참조에는 부분적으로 신뢰할 수 있는 호출자를 사용할 수 없습니다.</target>
@@ -969,6 +1009,11 @@
         <target state="translated">MSB3190: ClickOnce는 요청 실행 수준 '{0}'을(를) 지원하지 않습니다.</target>
         <note>{StrBegin="MSB3190: "}</note>
       </trans-unit>
+      <trans-unit id="GenerateResource.CoreSupportsLimitedScenarios">
+        <source>MSB3824: In order to build with .NET Core, resource inputs must be in .txt or .resx format.</source>
+        <target state="translated">MSB3824: .NET Core로 빌드하려면 리소스 입력이 .txt 또는 .resx 형식이어야 합니다.</target>
+        <note>{StrBegin="MSB3824: "}</note>
+      </trans-unit>
       <trans-unit id="GenerateResource.InputDoesntExist">
         <source>Input file "{0}" does not exist.</source>
         <target state="translated">입력 파일 "{0}"이(가) 없습니다.</target>
@@ -1001,12 +1046,12 @@
       </trans-unit>
       <trans-unit id="GenerateResource.PreserializedResourcesRequiresExtensions">
         <source>MSB3822: Non-string resources require the System.Resources.Extensions assembly at runtime, but it was not found in this project's references.</source>
-        <target state="new">MSB3822: Non-string resources require the System.Resources.Extensions assembly at runtime, but it was not found in this project's references.</target>
+        <target state="translated">MSB3822: 문자열이 아닌 리소스에는 런타임 시 System.Resources.Extensions 어셈블리가 필요하지만, 이 프로젝트의 참조에서 찾을 수 없습니다.</target>
         <note>{StrBegin="MSB3822: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.PreserializedResourcesRequiresProperty">
         <source>MSB3823: Non-string resources require the property GenerateResourceUsePreserializedResources to be set to true.</source>
-        <target state="new">MSB3823: Non-string resources require the property GenerateResourceUsePreserializedResources to be set to true.</target>
+        <target state="translated">MSB3823: 문자열이 아닌 리소스의 경우 GenerateResourceUsePreserializedResources 속성을 true로 설정해야 합니다.</target>
         <note>{StrBegin="MSB3823: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.ResourceNotFound">
@@ -1025,9 +1070,9 @@
         <note>{StrBegin="MSB3554: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.CorruptOutput">
-        <source>MSB3555: Output file "{0}" is possibly corrupt.</source>
-        <target state="translated">MSB3555: 출력 파일 "{0}"이(가) 손상된 것 같습니다.</target>
-        <note>{StrBegin="MSB3555: "}</note>
+        <source>Output file "{0}" is possibly corrupt and will be deleted and recreated.</source>
+        <target state="translated">출력 파일 "{0}"이(가) 손상된 것 같아 삭제된 후 다시 생성됩니다.</target>
+        <note />
       </trans-unit>
       <trans-unit id="GenerateResource.OnlyStringsSupported">
         <source>MSB3556: Only strings can be written to a .txt file, resource "{0}" is type {1}.</source>
@@ -1290,6 +1335,11 @@
         <source>Found the Microsoft Windows SDK installed at "{0}".</source>
         <target state="translated">Microsoft Windows SDK가 "{0}"에 설치되어 있습니다.</target>
         <note />
+      </trans-unit>
+      <trans-unit id="GetReferenceAssemblyPaths.OutOfDateSDK">
+        <source>MSB3971: The reference assemblies for "{0}" were not found. You might be using an older .NET SDK to target .NET 5.0 or higher. Update Visual Studio and/or your .NET SDK.</source>
+        <target state="translated">MSB3971: "{0}"에 대한 참조 어셈블리를 찾을 수 없습니다. 이전 .NET SDK를 사용하여 .NET 5.0 이상을 대상으로 하고 있을 수 있습니다. Visual Studio 및/또는 .NET SDK를 업데이트하세요.</target>
+        <note>{StrBegin="MSB3971: "}</note>
       </trans-unit>
       <trans-unit id="MakeDir.Comment">
         <source>Creating directory "{0}".</source>
@@ -1693,7 +1743,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoRedistAssembliesToGenerateExclusionList">
         <source>MSB3256: No assemblies were read in from the redist lists. A TargetFramework profile exclusion list could not be generated. </source>
-        <target state="translated">MSB3256: 재배포 목록에서 읽어온 어셈블리가 없습니다. TargetFramework 프로필 제외 목록을 생성할 수 없습니다. </target>
+        <target state="translated">MSB3256: 재배포 가능 패키지 목록에서 읽어온 어셈블리가 없습니다. TargetFramework 프로필 제외 목록을 생성할 수 없습니다. </target>
         <note>{StrBegin="MSB3256: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.PrimaryReferenceOutsideOfFramework">
@@ -1713,7 +1763,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoProfilesFound">
         <source>MSB3260: Could not find any target framework profile redist files in the FullFrameworkFolders locations.</source>
-        <target state="translated">MSB3260: FullFrameworkFolders 위치에서 대상 프레임워크 프로필 재배포 파일을 찾을 수 없습니다.</target>
+        <target state="translated">MSB3260: FullFrameworkFolders 위치에서 대상 프레임워크 프로필 재배포 가능 패키지 파일을 찾을 수 없습니다.</target>
         <note>{StrBegin="MSB3260: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.FrameworkDirectoryOnProfiles">
@@ -1787,8 +1837,10 @@
         <note>{StrBegin="MSB3276: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.FoundConflicts">
-        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.  These reference conflicts are listed in the build log when log verbosity is set to detailed.</source>
-        <target state="translated">MSB3277: 확인할 수 없는 "{0}"의 서로 다른 버전이 충돌합니다. 이러한 참조 충돌은 로그의 세부 정보 표시가 [자세히]로 설정된 경우 빌드 로그에 나열됩니다.</target>
+        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.
+{1}</source>
+        <target state="translated">MSB3277: 해결할 수 없는 "{0}"의 다른 버전 간 충돌이 발견되었습니다.
+{1}</target>
         <note>{StrBegin="MSB3277: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.LogAttributeFormat">
@@ -1916,7 +1968,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.RemappedReference">
         <source>Due to a remapping entry in the currently targeted framework redist list, reference "{0}" was remapped to "{1}".</source>
-        <target state="translated">현재 대상 프레임워크 재배포 목록에 있는 다시 매핑 항목으로 인해 "{0}" 참조가 "{1}"(으)로 다시 매핑되었습니다.</target>
+        <target state="translated">현재 대상 프레임워크 재배포 가능 패키지 목록에 있는 다시 매핑 항목으로 인해 "{0}" 참조가 "{1}"(으)로 다시 매핑되었습니다.</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.UnificationByFrameworkRetarget">
@@ -1976,7 +2028,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.TargetFrameworkRedistLogHeader">
         <source>Redist List File Paths:</source>
-        <target state="translated">재배포 목록 파일 경로:</target>
+        <target state="translated">재배포 가능 패키지 목록 파일 경로:</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.TargetFrameworkExclusionListLogHeader">
@@ -1991,7 +2043,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoSubSetRedistListName">
         <source>The redist list file "{0}" has a null or empty Redist name in the FileList element. Make sure the Redist Name is not null or empty.</source>
-        <target state="translated">재배포 목록 파일 "{0}"의 FileList 요소에 null이거나 빈 재배포 가능 패키지 이름이 있습니다. 재배포 이름이 null이거나 비어 있지 않은지 확인하세요.</target>
+        <target state="translated">재배포 가능 패키지 목록 파일 "{0}"의 FileList 요소에 null이거나 비어 있는 재배포 가능 패키지 이름이 있습니다. 재배포 가능 패키지 이름이 null이거나 비어 있지 않도록 하세요.</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveComReference.TreatingTlbOfActiveXAsNonEmbedded">
@@ -2278,6 +2330,11 @@
         <target state="translated">MSB3473: "{0}"의 경로가 잘못되었습니다. {1}</target>
         <note>{StrBegin="MSB3473: "}</note>
       </trans-unit>
+      <trans-unit id="SGen.TaskNotSupported">
+        <source>MSB3474: The task "{0}" is not supported on the .NET Core version of MSBuild. Use the Microsoft XML Serializer Generator package instead. See https://go.microsoft.com/fwlink/?linkid=858594 for more information.</source>
+        <target state="translated">MSB3474: MSBuild .NET Core 버전에서는 "{0}" 작업이 지원되지 않습니다. Microsoft XML Serializer Generator 패키지를 대신 사용합니다. 자세한 내용은 https://go.microsoft.com/fwlink/?linkid=858594를 참조하세요.</target>
+        <note>{StrBegin="MSB3474: "}</note>
+      </trans-unit>
       <trans-unit id="SignFile.CertNotInStore">
         <source>MSB3481: The signing certificate could not be located. Ensure that it is in the current user's personal store.</source>
         <target state="translated">MSB3481: 서명 인증서를 찾을 수 없습니다. 인증서가 현재 사용자의 개인 저장소에 있는지 확인하세요.</target>
@@ -2428,6 +2485,11 @@
         <target state="translated">"{2}" 매개 변수가 프로젝트에 "{3}"(으)로 설정되었고 파일 크기와 타임스탬프가 일치하기 때문에 "{0}" 파일에서 "{1}" 파일로 압축을 풀 수 없습니다.</target>
         <note />
       </trans-unit>
+      <trans-unit id="Unzip.DidNotUnzipBecauseOfFilter">
+        <source>Did not unzip file "{0}" because it didn't match the include filter or because it matched the exclude filter.</source>
+        <target state="translated">파일 "{0}"이(가) 포함 필터와 일치하지 않거나 제외 필터와 일치하므로 압축을 풀지 않았습니다.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="Unzip.ErrorCouldNotCreateDestinationDirectory">
         <source>MSB3931: Failed to unzip to directory "{0}" because it could not be created.  {1}</source>
         <target state="translated">MSB3931: "{0}" 디렉터리를 생성할 수 없기 때문에 이 디렉터리에 압축을 풀지 못했습니다.  {1}</target>
@@ -2458,6 +2520,16 @@
         <target state="translated">MSB3932: 파일이 존재하지 않거나 액세스할 수 없기 때문에 파일 "{0}"의 압축을 풀지 못했습니다.</target>
         <note>{StrBegin="MSB3932: "}</note>
       </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternInvalidPath">
+        <source>MSB3937: Failed to parse pattern "{0}" because it contains an invalid path character.</source>
+        <target state="translated">MSB3937: 잘못된 경로 문자가 포함되어 있기 때문에 패턴 "{0}"을(를) 구문 분석하지 못했습니다.</target>
+        <note>{StrBegin="MSB3937: "}</note>
+      </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternPropertyReferences">
+        <source>MSB3938: Failed to parse pattern "{0}" because it contains a property reference which isn't supported.</source>
+        <target state="translated">MSB3938: 지원되지 않는 속성 참조가 포함되어 있기 때문에 패턴 "{0}"을(를) 구문 분석하지 못했습니다.</target>
+        <note>{StrBegin="MSB3938: "}</note>
+      </trans-unit>
       <trans-unit id="Unzip.FileComment">
         <source>Unzipping file "{0}" to "{1}".</source>
         <target state="translated">파일 "{0}"의 압축을 "{1}"에 푸는 중입니다.</target>
@@ -2482,6 +2554,31 @@
         <source>MSB3952: File hash mismatch. Expected {0} to have a {1} file hash of {2}, but it was {3}.</source>
         <target state="translated">MSB3952: 파일 해시가 일치하지 않습니다. {0}에 {2}의 {1} 파일 해시가 필요하지만 {3}이었습니다.</target>
         <note>{StrBegin="MSB3952: "}</note>
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertToInferredType">
+        <source>Could not convert the value for parameter "{0}" to the inferred type "{1}". The value will be treated as a string. {2}</source>
+        <target state="translated">매개 변수 "{0}"의 값을 유추된 유형 "{1}"(으)로 변환할 수 없습니다. 값이 문자열로 처리됩니다. {2}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertValue">
+        <source>MSB3716: The parameter value "{0}" could not be converted to "{1}". {2}</source>
+        <target state="translated">MSB3716: 매개 변수 값 "{0}"(을)를 "{1}"(으)로 변환할 수 없습니다. {2}</target>
+        <note>{StrBegin="MSB3716: "}</note>
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotInferParameterType">
+        <source>Could not infer the type of parameter "{0}" because the attribute type is unknown. The value will be treated as a string.</source>
+        <target state="translated">특성 유형을 알 수 없기 때문에 매개 변수 "{0}" 유형을 유추할 수 없습니다. 값이 문자열로 처리됩니다.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.MultipleConstructorsFound">
+        <source>Multiple attribute constructors were found for type inferencing.</source>
+        <target state="translated">유형 유추를 위해 여러 특성 생성자가 발견됨</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.ParameterTypeNotFound">
+        <source>MSB3715: The type "{0}" was not found.</source>
+        <target state="translated">MSB3715: "{0}" 형식을 찾을 수 없습니다.</target>
+        <note>{StrBegin="MSB3715: "}</note>
       </trans-unit>
       <trans-unit id="WriteLinesToFile.ErrorOrWarning">
         <source>MSB3491: Could not write lines to file "{0}". {1}</source>
@@ -2512,6 +2609,11 @@
         <source>MSB3762: No references were passed to the task. References to at least mscorlib and Windows.Foundation are required.</source>
         <target state="translated">MSB3762: 참조가 작업에 전달되지 않았습니다. 적어도 mscorlib 및 Windows.Foundation에 대한 참조가 필요합니다.</target>
         <note>{StrBegin="MSB3762: "}</note>
+      </trans-unit>
+      <trans-unit id="Xaml.DuplicatePropertyName">
+        <source>MSB3724: Unable to create Xaml task.  Duplicate property name '{0}'.</source>
+        <target state="translated">MSB3724: XAML 작업을 만들 수 없습니다. 속성 이름 '{0}'이(가) 중복되었습니다.</target>
+        <note>{StrBegin="MSB3724: "}</note>
       </trans-unit>
       <trans-unit id="Xaml.TaskCreationFailed">
         <source>MSB3686: Unable to create Xaml task.  Compilation failed.  {0}</source>
@@ -2577,6 +2679,11 @@
         <source>MSB3701: Unable to load arguments for the XslTransformation task. {0}</source>
         <target state="translated">MSB3701: XslTransformation 작업의 인수를 로드할 수 없습니다. {0}</target>
         <note>{StrBegin="MSB3701: "}</note>
+      </trans-unit>
+      <trans-unit id="XslTransform.PrecompiledXsltError">
+        <source>MSB3705: XslCompiledDllPath is not supported when building with .NET Core.</source>
+        <target state="translated">MSB3705: XslCompiledDllPath는 .NET Core로 빌드할 때 지원되지 않습니다.</target>
+        <note>{StrBegin="MSB3705: "}</note>
       </trans-unit>
       <trans-unit id="XslTransform.XsltArgumentsError">
         <source>MSB3702: Unable to process the XsltParameters argument for the XslTransformation task. {0}</source>
@@ -3000,7 +3107,7 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ExpandRedistFrom">
         <source>Looking for redist files under "{0}".</source>
-        <target state="translated">"{0}" 아래에서 재배포 파일을 찾고 있습니다.</target>
+        <target state="translated">"{0}" 아래에서 재배포 가능 패키지 파일을 찾고 있습니다.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.NotExpanding">
@@ -3015,17 +3122,17 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.AddingRedistFile">
         <source>Adding file "{0}" from redist folder with target path "{1}".</source>
-        <target state="translated">대상 경로가 "{1}"인 재배포 폴더에서 "{0}" 파일을 추가하고 있습니다.</target>
+        <target state="translated">대상 경로가 "{1}"인 재배포 가능 패키지 폴더에서 "{0}" 파일을 추가하고 있습니다.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictRedistSameSDK">
         <source>There was a conflict between two redist files going to the same target path "{0}" within the "{1}" SDK. Choosing "{2}" over "{3}" because it was resolved first.</source>
-        <target state="translated">"{1}" SDK 내 동일한 대상 경로 "{0}"(으)로 이동하는 두 재배포 파일 간에 충돌이 발생했습니다. "{3}" 대신 먼저 확인된 "{2}"을(를) 선택합니다.</target>
+        <target state="translated">"{1}" SDK 내 동일한 대상 경로 "{0}"(으)로 이동하는 두 재배포 가능 패키지 파일 간에 충돌이 발생했습니다. "{3}" 대신 먼저 확인된 "{2}"을(를) 선택합니다.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictRedistDifferentSDK">
         <source>There was a conflict between two files from the redist folder files going to the same target path "{0}" between the "{1}" and "{2}" SDKs. Choosing "{3}" over "{4}" because it was resolved first.</source>
-        <target state="translated">"{1}" 및 "{2}" SDK 사이의 동일한 대상 경로 "{0}"(으)로 이동하는 재배포 폴더 파일의 두 파일 간에 충돌이 발생했습니다. "{4}" 대신 먼저 확인된 "{3}"을(를) 선택합니다.</target>
+        <target state="translated">"{1}" 및 "{2}" SDK 사이의 동일한 대상 경로 "{0}"(으)로 이동하는 재배포 가능 패키지 폴더 파일의 두 파일 간에 충돌이 발생했습니다. "{4}" 대신 먼저 확인된 "{3}"을(를) 선택합니다.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictReferenceSameSDK">
@@ -3080,12 +3187,12 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.CannotHaveEmptyTargetConfiguration">
         <source>MSB3797: The targeted configuration for the resolved sdk reference "{0}" was empty. Cannot find reference or redist files without a targeted configuration.</source>
-        <target state="translated">MSB3797: 확인된 SDK 참조 "{0}"에 대한 대상 구성이 비어 있습니다. 대상 구성이 없는 참조 또는 재배포 파일을 찾을 수 없습니다.</target>
+        <target state="translated">MSB3797: 확인된 SDK 참조 "{0}"에 대한 대상 구성이 비어 있습니다. 대상 구성이 없는 참조 또는 재배포 가능 패키지 파일을 찾을 수 없습니다.</target>
         <note>{StrBegin="MSB3797: "}</note>
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.CannotHaveEmptyTargetArchitecture">
         <source>MSB3798: The targeted architecture for the resolved sdk reference "{0}" was empty. Cannot find reference or redist files without a targeted architecture.</source>
-        <target state="translated">MSB3798: 확인된 SDK 참조 "{0}"에 대한 대상 아키텍처가 비어 있습니다. 대상 아키텍처가 없는 참조 또는 재배포 파일을 찾을 수 없습니다.</target>
+        <target state="translated">MSB3798: 확인된 SDK 참조 "{0}"에 대한 대상 아키텍처가 비어 있습니다. 대상 아키텍처가 없는 참조 또는 재배포 가능 패키지 파일을 찾을 수 없습니다.</target>
         <note>{StrBegin="MSB3798: "}</note>
       </trans-unit>
       <trans-unit id="FindInvalidProjectReferences.WarnWhenVersionIsIncompatible">
@@ -3124,9 +3231,9 @@
         <note>{StrBegin="MSB3492: "}</note>
       </trans-unit>
       <trans-unit id="WriteLinesToFile.SkippingUnchangedFile">
-        <source>MSB3493: Skipping write to file "{0}" because content would not change.</source>
-        <target state="translated">MSB3493: 콘텐츠가 변경되지 않아 "{0}" 파일에 쓰기를 건너뜁니다.</target>
-        <note>{StrBegin="MSB3493: "}</note>
+        <source>Skipping write to file "{0}" because content would not change.</source>
+        <target state="translated">콘텐츠가 변경되지 않아 "{0}" 파일에 쓰기를 건너뜁니다.</target>
+        <note />
       </trans-unit>
       <trans-unit id="Telemetry.IllegalEventDataString">
         <source>The property "{0}" in the telemetry event data property list "{1}" is malformed.  Please only pass in a semicolon-delimited list of constant string values separated by "=", e.g., "Property1=Value1;Property2=Value2".</source>

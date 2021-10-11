@@ -6,6 +6,12 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 
+// Declare this to get init properties. See https://github.com/dotnet/roslyn/issues/45510#issuecomment-694977239
+namespace System.Runtime.CompilerServices
+{
+    internal static class IsExternalInit { }
+}
+
 namespace Microsoft.Build.Shared
 {
     /// <summary>
@@ -153,8 +159,7 @@ namespace Microsoft.Build.Shared
         {
             var cultureTypesType = s_cultureInfoGetCultureMethod?.GetParameters().FirstOrDefault()?.ParameterType;
 
-            ErrorUtilities.VerifyThrow(cultureTypesType != null &&
-                                       cultureTypesType.Name == "CultureTypes" &&
+            ErrorUtilities.VerifyThrow(cultureTypesType?.Name == "CultureTypes" &&
                                        Enum.IsDefined(cultureTypesType, "AllCultures"),
                                        "GetCulture is expected to accept CultureTypes.AllCultures");
 

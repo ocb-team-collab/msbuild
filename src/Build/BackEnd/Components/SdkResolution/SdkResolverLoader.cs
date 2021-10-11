@@ -16,15 +16,28 @@ namespace Microsoft.Build.BackEnd.SdkResolution
 {
     internal class SdkResolverLoader
     {
-#if !FEATURE_ASSEMBLY_LOADFROM
+#if FEATURE_ASSEMBLYLOADCONTEXT
         private readonly CoreClrAssemblyLoader _loader = new CoreClrAssemblyLoader();
 #endif
+
+        private readonly string IncludeDefaultResolver = Environment.GetEnvironmentVariable("MSBUILDINCLUDEDEFAULTSDKRESOLVER");
+
+        //  Test hook for loading SDK Resolvers from additional folders.  Support runtime-specific test hook environment variables,
+        //  as an SDK resolver built for .NET Framework probably won't work on .NET Core, and vice versa.
+        private readonly string AdditionalResolversFolder = Environment.GetEnvironmentVariable(
+#if NETFRAMEWORK
+            "MSBUILDADDITIONALSDKRESOLVERSFOLDER_NETFRAMEWORK"
+#elif NET
+            "MSBUILDADDITIONALSDKRESOLVERSFOLDER_NET"
+#endif
+            ) ?? Environment.GetEnvironmentVariable("MSBUILDADDITIONALSDKRESOLVERSFOLDER");
 
         internal virtual IList<SdkResolver> LoadResolvers(LoggingContext loggingContext,
             ElementLocation location)
         {
-            // Always add the default resolver
-            var resolvers = new List<SdkResolver> {new DefaultSdkResolver()};
+            var resolvers = !String.Equals(IncludeDefaultResolver, "false", StringComparison.OrdinalIgnoreCase) ? 
+                new List<SdkResolver> {new DefaultSdkResolver()}
+                : new List<SdkResolver>();
 
             var potentialResolvers = FindPotentialSdkResolvers(
                 Path.Combine(BuildEnvironmentHelper.Instance.MSBuildToolsDirectory32, "SdkResolvers"), location);
@@ -47,17 +60,20 @@ namespace Microsoft.Build.BackEnd.SdkResolution
         ///     Root\SdkResolver\(ResolverName)\(ResolverName).dll.
         /// </summary>
         /// <param name="rootFolder"></param>
+        /// <param name="location"></param>
         /// <returns></returns>
         internal virtual IList<string> FindPotentialSdkResolvers(string rootFolder, ElementLocation location)
         {
             var assembliesList = new List<string>();
 
-            if (string.IsNullOrEmpty(rootFolder) || !FileUtilities.DirectoryExistsNoThrow(rootFolder))
+            if ((string.IsNullOrEmpty(rootFolder) || !FileUtilities.DirectoryExistsNoThrow(rootFolder)) && AdditionalResolversFolder == null)
             {
                 return assembliesList;
             }
 
-            foreach (var subfolder in new DirectoryInfo(rootFolder).GetDirectories())
+            DirectoryInfo[] subfolders = GetSubfolders(rootFolder, AdditionalResolversFolder);
+
+            foreach (var subfolder in subfolders)
             {
                 var assembly = Path.Combine(subfolder.FullName, $"{subfolder.Name}.dll");
                 var manifest = Path.Combine(subfolder.FullName, $"{subfolder.Name}.xml");
@@ -75,6 +91,44 @@ namespace Microsoft.Build.BackEnd.SdkResolution
             }
 
             return assembliesList;
+        }
+
+        private DirectoryInfo[] GetSubfolders(string rootFolder, string additionalResolversFolder)
+        {
+            DirectoryInfo[] subfolders = null;
+            if (!string.IsNullOrEmpty(rootFolder) && FileUtilities.DirectoryExistsNoThrow(rootFolder))
+            {
+                subfolders = new DirectoryInfo(rootFolder).GetDirectories();
+            }
+
+            if (additionalResolversFolder != null)
+            {
+                var resolversDirInfo = new DirectoryInfo(additionalResolversFolder);
+                if (resolversDirInfo.Exists)
+                {
+                    HashSet<DirectoryInfo> overrideFolders = resolversDirInfo.GetDirectories().ToHashSet(new DirInfoNameComparer());
+                    if (subfolders != null)
+                    {
+                        overrideFolders.UnionWith(subfolders);
+                    }
+                    return overrideFolders.ToArray();
+                }
+            }
+
+            return subfolders;
+        }
+
+        private class DirInfoNameComparer : IEqualityComparer<DirectoryInfo>
+        {
+            public bool Equals(DirectoryInfo first, DirectoryInfo second)
+            {
+                return string.Equals(first.Name, second.Name, StringComparison.OrdinalIgnoreCase);
+            }
+
+            public int GetHashCode(DirectoryInfo value)
+            {
+                return value.Name.GetHashCode();
+            }
         }
 
         private bool TryAddAssemblyFromManifest(string pathToManifest, string manifestFolder, List<string> assembliesList, ElementLocation location)
@@ -135,10 +189,9 @@ namespace Microsoft.Build.BackEnd.SdkResolution
 
         protected virtual Assembly LoadResolverAssembly(string resolverPath, LoggingContext loggingContext, ElementLocation location)
         {
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
             return Assembly.LoadFrom(resolverPath);
 #else
-            _loader.AddDependencyLocation(Path.GetDirectoryName(resolverPath));
             return _loader.LoadFromPath(resolverPath);
 #endif
         }

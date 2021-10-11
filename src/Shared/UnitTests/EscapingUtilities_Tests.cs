@@ -46,9 +46,7 @@ namespace Microsoft.Build.UnitTests
         [Fact]
         public void UnescapeEscape()
         {
-            string text;
-
-            text = "*";
+            string text = "*";
             Assert.Equal(text, EscapingUtilities.UnescapeAll(EscapingUtilities.Escape(text)));
 
             text = "?";
@@ -63,9 +61,7 @@ namespace Microsoft.Build.UnitTests
         [Fact]
         public void EscapeUnescape()
         {
-            string text;
-
-            text = "%2a";
+            string text = "%2a";
             Assert.Equal(text, EscapingUtilities.Escape(EscapingUtilities.UnescapeAll(text)));
 
             text = "%3f";
@@ -79,13 +75,18 @@ namespace Microsoft.Build.UnitTests
         public void ContainsEscapedWildcards()
         {
             Assert.False(EscapingUtilities.ContainsEscapedWildcards("NoStarOrQMark"));
+            Assert.False(EscapingUtilities.ContainsEscapedWildcards("%"));
+            Assert.False(EscapingUtilities.ContainsEscapedWildcards("%%"));
+            Assert.False(EscapingUtilities.ContainsEscapedWildcards("%2"));
             Assert.False(EscapingUtilities.ContainsEscapedWildcards("%4"));
-            Assert.False(EscapingUtilities.ContainsEscapedWildcards("%3B"));
+            Assert.False(EscapingUtilities.ContainsEscapedWildcards("%3A"));
             Assert.False(EscapingUtilities.ContainsEscapedWildcards("%2B"));
             Assert.True(EscapingUtilities.ContainsEscapedWildcards("%2a"));
             Assert.True(EscapingUtilities.ContainsEscapedWildcards("%2A"));
             Assert.True(EscapingUtilities.ContainsEscapedWildcards("%3F"));
             Assert.True(EscapingUtilities.ContainsEscapedWildcards("%3f"));
+            Assert.True(EscapingUtilities.ContainsEscapedWildcards("%%3f"));
+            Assert.True(EscapingUtilities.ContainsEscapedWildcards("%3%3f"));
         }
     }
 }

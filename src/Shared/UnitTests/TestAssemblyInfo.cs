@@ -1,6 +1,5 @@
 ﻿
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -36,10 +35,16 @@ public class MSBuildTestAssemblyFixture : IDisposable
 
         _testEnvironment = TestEnvironment.Create();
 
+        _testEnvironment.DoNotLaunchDebugger();
+
         //  Reset the VisualStudioVersion environment variable.  This will be set if tests are run from a VS command prompt.  However,
         //  if the environment variable is set, it will interfere with tests which set the SubToolsetVersion
         //  (VerifySubToolsetVersionSetByConstructorOverridable), as the environment variable would take precedence.
         _testEnvironment.SetEnvironmentVariable("VisualStudioVersion", string.Empty);
+
+        // Prevent test assemblies from logging any performance info.
+        // https://github.com/dotnet/msbuild/pull/6274
+        _testEnvironment.SetEnvironmentVariable("DOTNET_PERFLOG_DIR", string.Empty);
 
         SetDotnetHostPath(_testEnvironment);
 

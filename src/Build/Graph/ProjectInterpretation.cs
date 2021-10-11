@@ -2,7 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -14,7 +13,7 @@ using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Shared;
 
-namespace Microsoft.Build.Experimental.Graph
+namespace Microsoft.Build.Graph
 {
     internal sealed class ProjectInterpretation
     {
@@ -25,6 +24,9 @@ namespace Microsoft.Build.Experimental.Graph
         private const string SetTargetFrameworkMetadataName = "SetTargetFramework";
         private const string GlobalPropertiesToRemoveMetadataName = "GlobalPropertiesToRemove";
         private const string ProjectReferenceTargetIsOuterBuildMetadataName = "OuterBuild";
+        private const string InnerBuildReferenceItemName = "_ProjectSelfReference";
+        internal static string TransitiveReferenceItemName = "_TransitiveProjectReference";
+        internal const string AddTransitiveProjectReferencesInStaticGraphPropertyName = "AddTransitiveProjectReferencesInStaticGraph";
 
         private static readonly char[] PropertySeparator = MSBuildConstants.SemicolonChar;
 
@@ -41,7 +43,19 @@ namespace Microsoft.Build.Experimental.Graph
             OuterBuild, InnerBuild, NonMultitargeting
         }
 
-        public IEnumerable<(ConfigurationMetadata referenceConfiguration, ProjectItemInstance projectReferenceItem)> GetReferences(ProjectInstance requesterInstance)
+        internal readonly struct ReferenceInfo
+        {
+            public ConfigurationMetadata ReferenceConfiguration { get; }
+            public ProjectItemInstance ProjectReferenceItem { get; }
+
+            public ReferenceInfo(ConfigurationMetadata referenceConfiguration, ProjectItemInstance projectReferenceItem)
+            {
+                ReferenceConfiguration = referenceConfiguration;
+                ProjectReferenceItem = projectReferenceItem;
+            }
+        }
+
+        public IEnumerable<ReferenceInfo> GetReferences(ProjectInstance requesterInstance)
         {
             IEnumerable<ProjectItemInstance> projectReferenceItems;
             IEnumerable<GlobalPropertiesModifier> globalPropertiesModifiers = null;
@@ -49,7 +63,7 @@ namespace Microsoft.Build.Experimental.Graph
             switch (GetProjectType(requesterInstance))
             {
                 case ProjectType.OuterBuild:
-                    projectReferenceItems = GetInnerBuildReferences(requesterInstance);
+                    projectReferenceItems = ConstructInnerBuildReferences(requesterInstance);
                     break;
                 case ProjectType.InnerBuild:
                     globalPropertiesModifiers = ModifierForNonMultitargetingNodes.Add((parts, reference) => parts.AddPropertyToUndefine(GetInnerBuildPropertyName(requesterInstance)));
@@ -82,7 +96,7 @@ namespace Microsoft.Build.Experimental.Graph
 
                 var referenceConfig = new ConfigurationMetadata(projectReferenceFullPath, referenceGlobalProperties);
 
-                yield return (referenceConfig, projectReferenceItem);
+                yield return new ReferenceInfo(referenceConfig, projectReferenceItem);
             }
         }
 
@@ -120,14 +134,14 @@ namespace Microsoft.Build.Experimental.Graph
         /// However, at build time, for non root outer builds, the inner builds are NOT referenced by the outer build, but by the nodes referencing the
         /// outer build. Change the graph to mimic this behaviour.
         /// Examples
-        /// OuterAsRoot -> Inner stays the same
-        /// Node -> Outer -> Inner goes to: Node -> Outer; Node->Inner; Outer -> empty
+        /// OuterAsRoot -> Inner go to OuterAsRoot -> Inner. Inner builds remain the same, parented to their outer build
+        /// Node -> Outer -> Inner go to: Node -> Outer; Node->Inner; Outer -> empty. Inner builds get reparented to Node
         /// </summary>
-        public void PostProcess(Dictionary<ConfigurationMetadata, ProjectGraphNode> allNodes, GraphBuilder graphBuilder)
+        public void ReparentInnerBuilds(Dictionary<ConfigurationMetadata, ParsedProject> allNodes, GraphBuilder graphBuilder)
         {
-            foreach (var nodeKvp in allNodes)
+            foreach (var node in allNodes)
             {
-                var outerBuild = nodeKvp.Value;
+                var outerBuild = node.Value.GraphNode;
 
                 if (GetProjectType(outerBuild.ProjectInstance) == ProjectType.OuterBuild && outerBuild.ReferencingProjects.Count != 0)
                 {
@@ -141,6 +155,20 @@ namespace Microsoft.Build.Experimental.Graph
                             // targets to call on the references.
                             var newInnerBuildEdge = graphBuilder.Edges[(outerBuildReferencingProject, outerBuild)];
 
+                            if (outerBuildReferencingProject.ProjectReferences.Contains(innerBuild))
+                            {
+                                graphBuilder.Edges.TryGetEdge((outerBuildReferencingProject, innerBuild), out var existingEdge);
+
+                                ErrorUtilities.VerifyThrow(
+                                    graphBuilder.Edges[(outerBuildReferencingProject, innerBuild)]
+                                        .ItemType.Equals(
+                                            TransitiveReferenceItemName,
+                                            StringComparison.OrdinalIgnoreCase),
+                                    "Only transitive references may reference inner builds that got generated by outer builds");
+
+                                outerBuildReferencingProject.RemoveReference(innerBuild, graphBuilder.Edges);
+                            }
+
                             outerBuildReferencingProject.AddProjectReference(innerBuild, newInnerBuildEdge, graphBuilder.Edges);
                         }
                     }
@@ -150,7 +178,7 @@ namespace Microsoft.Build.Experimental.Graph
             }
         }
 
-        private static IEnumerable<ProjectItemInstance> GetInnerBuildReferences(ProjectInstance outerBuild)
+        private static IEnumerable<ProjectItemInstance> ConstructInnerBuildReferences(ProjectInstance outerBuild)
         {
             var globalPropertyName = GetInnerBuildPropertyName(outerBuild);
             var globalPropertyValues = GetInnerBuildPropertyValues(outerBuild);
@@ -161,11 +189,11 @@ namespace Microsoft.Build.Experimental.Graph
             foreach (var globalPropertyValue in ExpressionShredder.SplitSemiColonSeparatedList(globalPropertyValues))
             {
                 yield return new ProjectItemInstance(
-                    outerBuild,
-                    "_ProjectSelfReference",
-                    outerBuild.FullPath,
-                    new[] {new KeyValuePair<string, string>(ItemMetadataNames.PropertiesMetadataName, $"{globalPropertyName}={globalPropertyValue}")},
-                    outerBuild.FullPath);
+                    project: outerBuild,
+                    itemType: InnerBuildReferenceItemName,
+                    includeEscaped: outerBuild.FullPath,
+                    directMetadata: new[] {new KeyValuePair<string, string>(ItemMetadataNames.PropertiesMetadataName, $"{globalPropertyName}={globalPropertyValue}")},
+                    definingFileEscaped: outerBuild.FullPath);
             }
         }
 
@@ -374,7 +402,7 @@ namespace Microsoft.Build.Experimental.Graph
                         {
                             var targetsMetadataValue = projectReferenceTarget.GetMetadataValue(ItemMetadataNames.ProjectReferenceTargetsMetadataName);
 
-                            var targetsAreForOuterBuild = projectReferenceTarget.GetMetadataValue(ProjectReferenceTargetIsOuterBuildMetadataName).Equals("true", StringComparison.OrdinalIgnoreCase);
+                            var targetsAreForOuterBuild = MSBuildStringIsTrue(projectReferenceTarget.GetMetadataValue(ProjectReferenceTargetIsOuterBuildMetadataName));
 
                             var targets = ExpressionShredder.SplitSemiColonSeparatedList(targetsMetadataValue).ToArray();
 
@@ -395,18 +423,40 @@ namespace Microsoft.Build.Experimental.Graph
 
             public ImmutableList<string> GetApplicableTargetsForReference(ProjectInstance reference)
             {
-                switch (GetProjectType(reference))
+                return (GetProjectType(reference)) switch
                 {
-                    case ProjectType.InnerBuild:
-                        return _allTargets;
-                    case ProjectType.OuterBuild:
-                        return _outerBuildTargets;
-                    case ProjectType.NonMultitargeting:
-                        return _allTargets;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+                    ProjectType.InnerBuild => _allTargets,
+                    ProjectType.OuterBuild => _outerBuildTargets,
+                    ProjectType.NonMultitargeting => _allTargets,
+                    _ => throw new ArgumentOutOfRangeException(),
+                };
             }
         }
+
+        public bool RequiresTransitiveProjectReferences(ProjectInstance projectInstance)
+        {
+            // Outer builds do not get edges based on ProjectReference or their transitive closure, only inner builds do.
+            if (GetProjectType(projectInstance) == ProjectType.OuterBuild)
+            {
+                return false;
+            }
+
+            // special case for Quickbuild which updates msbuild binaries independent of props/targets. Remove this when all QB repos will have
+            // migrated to new enough Visual Studio versions whose Microsoft.Managed.After.Targets enable transitive references.
+            if (string.IsNullOrWhiteSpace(projectInstance.GetPropertyValue(AddTransitiveProjectReferencesInStaticGraphPropertyName)) &&
+                MSBuildStringIsTrue(projectInstance.GetPropertyValue("UsingMicrosoftNETSdk")) &&
+                MSBuildStringIsFalse(projectInstance.GetPropertyValue("DisableTransitiveProjectReferences")))
+            {
+                return true;
+            }
+
+            return MSBuildStringIsTrue(
+                projectInstance.GetPropertyValue(AddTransitiveProjectReferencesInStaticGraphPropertyName));
+        }
+
+        private static bool MSBuildStringIsTrue(string msbuildString) =>
+            ConversionUtilities.ConvertStringToBool(msbuildString, nullOrWhitespaceIsFalse: true);
+
+        private static bool MSBuildStringIsFalse(string msbuildString) => !MSBuildStringIsTrue(msbuildString);
     }
 }

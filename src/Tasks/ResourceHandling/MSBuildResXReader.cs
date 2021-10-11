@@ -3,14 +3,10 @@
 
 using Microsoft.Build.Shared;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -81,13 +77,15 @@ namespace Microsoft.Build.Tasks.ResourceHandling
         private const string ByteArraySerializedObjectMimeType = "application/x-microsoft.net.object.bytearray.base64";
         private const string ResMimeType = "text/microsoft-resx";
 
-        private const string StringTypeName = "System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+        private const string StringTypeNamePrefix = "System.String, mscorlib,";
+        private const string StringTypeName40 = "System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+        private const string MemoryStreamTypeNamePrefix = "System.IO.MemoryStream, mscorlib,";
 
         private static string GetFullTypeNameFromAlias(string aliasedTypeName, Dictionary<string, string> aliases)
         {
             if (aliasedTypeName == null)
             {
-                return StringTypeName;
+                return StringTypeName40;
             }
 
             int indexStart = aliasedTypeName.IndexOf(',');
@@ -99,7 +97,7 @@ namespace Microsoft.Build.Tasks.ResourceHandling
             // Allow "System.String" bare
             if (aliasedTypeName.Equals("System.String", StringComparison.Ordinal))
             {
-                return StringTypeName;
+                return StringTypeName40;
             }
 
             // No alias found. Hope it's sufficiently complete to be resolved at runtime
@@ -131,7 +129,7 @@ namespace Microsoft.Build.Tasks.ResourceHandling
 
             typename = GetFullTypeNameFromAlias(typename, aliases);
 
-            if (typename == StringTypeName)
+            if (IsString(typename))
             {
                 if (mimetype == null)
                 {
@@ -151,18 +149,21 @@ namespace Microsoft.Build.Tasks.ResourceHandling
                 return;
             }
 
+            if (typename.StartsWith("System.Resources.ResXNullRef", StringComparison.Ordinal))
+            {
+                resources.Add(new LiveObjectResource(name, null));
+                return;
+            }
+
             // TODO: validate typename at this point somehow to make sure it's vaguely right?
 
             if (mimetype == null)
             {
-                if (typename.IndexOf("System.Byte[]") != -1 && typename.IndexOf("mscorlib") != -1)
+                if (IsByteArray(typename))
                 {
+                    // Handle byte[]'s, which are stored as base-64 encoded strings.
                     byte[] byteArray = Convert.FromBase64String(value);
 
-                    // Comment and logic from https://github.com/dotnet/winforms/blob/16b192389b377c647ab3d280130781ab1a9d3385/src/System.Windows.Forms/src/System/Resources/ResXDataNode.cs#L411-L416
-                    // Handle byte[]'s, which are stored as base-64 encoded strings.
-                    // We can't hard-code byte[] type name due to version number
-                    // updates & potential whitespace issues with ResX files.
                     resources.Add(new LiveObjectResource(name, byteArray));
                     return;
                 }
@@ -209,7 +210,7 @@ namespace Microsoft.Build.Tasks.ResourceHandling
                     fileName);
             }
 
-            if (fileRefType == StringTypeName)
+            if (IsString(fileRefType))
             {
                 string fileRefEncoding = null;
                 if (fileRefInfo.Length == 3)
@@ -234,8 +235,48 @@ namespace Microsoft.Build.Tasks.ResourceHandling
                     return;
                 }
             }
+            else if (IsByteArray(fileRefType))
+            {
+                byte[] byteArray = File.ReadAllBytes(fileName);
+
+                resources.Add(new LiveObjectResource(name, byteArray));
+                return;
+            }
+            else if (IsMemoryStream(fileRefType))
+            {
+                // See special-case handling in ResXFileRef
+                // https://github.com/dotnet/winforms/blob/689cd9c69e632997bc85bf421af221d79b12ddd4/src/System.Windows.Forms/src/System/Resources/ResXFileRef.cs#L293-L297
+                byte[] byteArray = File.ReadAllBytes(fileName);
+
+                resources.Add(new LiveObjectResource(name, new MemoryStream(byteArray)));
+                return;
+            }
 
             resources.Add(new FileStreamResource(name, fileRefType, fileName, resxFilename));
+        }
+
+        /// <summary>
+        /// Does this assembly-qualified type name represent an array of bytes?
+        /// </summary>
+        /// <remarks>
+        /// We can't hard-code byte[] type name due to version number
+        /// updates and potential whitespace issues with ResX files.
+        ///
+        /// Comment and logic from https://github.com/dotnet/winforms/blob/16b192389b377c647ab3d280130781ab1a9d3385/src/System.Windows.Forms/src/System/Resources/ResXDataNode.cs#L411-L416
+        /// </remarks>
+        private static bool IsByteArray(string fileRefType)
+        {
+            return fileRefType.IndexOf("System.Byte[]") != -1 && fileRefType.IndexOf("mscorlib") != -1;
+        }
+
+        internal static bool IsString(string fileRefType)
+        {
+            return fileRefType.StartsWith(StringTypeNamePrefix, StringComparison.Ordinal);
+        }
+
+        internal static bool IsMemoryStream(string fileRefType)
+        {
+            return fileRefType.StartsWith(MemoryStreamTypeNamePrefix, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -302,6 +343,5 @@ namespace Microsoft.Build.Tasks.ResourceHandling
             }
             return result;
         }
-
     }
 }

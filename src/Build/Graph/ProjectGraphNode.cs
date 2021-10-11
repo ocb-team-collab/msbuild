@@ -3,13 +3,15 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using Microsoft.Build.BackEnd;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Shared;
 
-namespace Microsoft.Build.Experimental.Graph
+namespace Microsoft.Build.Graph
 {
     /// <summary>
     /// Represents the node for a particular project in a project graph.
+    /// A node is defined by (ProjectPath, ToolsVersion, GlobalProperties).
     /// </summary>
     [DebuggerDisplay(@"{DebugString()}")]
     public sealed class ProjectGraphNode
@@ -56,6 +58,14 @@ namespace Microsoft.Build.Experimental.Graph
             edges[(this, reference)] = projectReferenceItem;
         }
 
+        internal void RemoveReference(ProjectGraphNode reference, GraphBuilder.GraphEdges edges)
+        {
+            _projectReferences.Remove(reference);
+            reference._referencingProjects.Remove(reference);
+
+            edges.RemoveEdge((this, reference));
+        }
+
         internal void RemoveReferences(GraphBuilder.GraphEdges edges)
         {
             foreach (var reference in _projectReferences)
@@ -67,6 +77,11 @@ namespace Microsoft.Build.Experimental.Graph
             }
 
             _projectReferences.Clear();
+        }
+
+        internal ConfigurationMetadata ToConfigurationMetadata()
+        {
+            return new ConfigurationMetadata(ProjectInstance.FullPath, ProjectInstance.GlobalPropertiesDictionary);
         }
     }
 }

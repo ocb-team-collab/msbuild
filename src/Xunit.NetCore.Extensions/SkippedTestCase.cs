@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
 using Xunit.Sdk;
 
@@ -17,6 +16,11 @@ namespace Xunit.NetCore.Extensions
     {
         private readonly IXunitTestCase _testCase;
         private readonly string _skippedReason;
+
+        public SkippedTestCase()
+        {
+
+        }
 
         internal SkippedTestCase(IXunitTestCase testCase, string skippedReason)
         {

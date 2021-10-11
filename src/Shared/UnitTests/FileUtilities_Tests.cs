@@ -2,13 +2,10 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Reflection;
-using System.Text;
 using System.Threading;
-using Microsoft.Build.Evaluation;
+using System.Linq;
 using Microsoft.Build.Shared;
 using Shouldly;
 using Xunit;
@@ -86,9 +83,6 @@ namespace Microsoft.Build.UnitTests
         }
 
         [Fact]
-        [Trait("Category", "mono-osx-failing")]
-        [Trait("Category", "netcore-osx-failing")]
-        [Trait("Category", "netcore-linux-failing")]
         public void MakeRelativeTests()
         {
             if (NativeMethodsShared.IsWindows)
@@ -100,21 +94,55 @@ namespace Microsoft.Build.UnitTests
                 Assert.Equal(@"e:\abc\def\foo.cpp", FileUtilities.MakeRelative(@"c:\abc\def", @"e:\abc\def\foo.cpp"));
                 Assert.Equal(@"foo.cpp", FileUtilities.MakeRelative(@"\\aaa\abc\def", @"\\aaa\abc\def\foo.cpp"));
                 Assert.Equal(@"foo.cpp", FileUtilities.MakeRelative(@"c:\abc\def", @"foo.cpp"));
-                Assert.Equal(@"foo.cpp", FileUtilities.MakeRelative(@"c:\abc\def", @"..\def\foo.cpp"));
                 Assert.Equal(@"\\host\path\file", FileUtilities.MakeRelative(@"c:\abc\def", @"\\host\path\file"));
                 Assert.Equal(@"\\host\d$\file", FileUtilities.MakeRelative(@"c:\abc\def", @"\\host\d$\file"));
                 Assert.Equal(@"..\fff\ggg.hh", FileUtilities.MakeRelative(@"c:\foo\bar\..\abc\cde", @"c:\foo\bar\..\abc\fff\ggg.hh"));
+
+                /* Directories */
+                Assert.Equal(@"def\", FileUtilities.MakeRelative(@"c:\abc\", @"c:\abc\def\"));
+                Assert.Equal(@"..\", FileUtilities.MakeRelative(@"c:\abc\def\xyz\", @"c:\abc\def\"));
+                Assert.Equal(@"..\ttt\", FileUtilities.MakeRelative(@"c:\abc\def\xyz\", @"c:\abc\def\ttt\"));
+                Assert.Equal(@".", FileUtilities.MakeRelative(@"c:\abc\def\", @"c:\abc\def\"));
+
+                /* Directory + File */
+                Assert.Equal(@"def", FileUtilities.MakeRelative(@"c:\abc\", @"c:\abc\def"));
+                Assert.Equal(@"..\..\ghi", FileUtilities.MakeRelative(@"c:\abc\def\xyz\", @"c:\abc\ghi"));
+                Assert.Equal(@"..\ghi", FileUtilities.MakeRelative(@"c:\abc\def\xyz\", @"c:\abc\def\ghi"));
+                Assert.Equal(@"..\ghi", FileUtilities.MakeRelative(@"c:\abc\def\", @"c:\abc\ghi"));
+
+                /* File + Directory */
+                Assert.Equal(@"def\", FileUtilities.MakeRelative(@"c:\abc", @"c:\abc\def\"));
+                Assert.Equal(@"..\", FileUtilities.MakeRelative(@"c:\abc\def\xyz", @"c:\abc\def\"));
+                Assert.Equal(@"..\ghi\", FileUtilities.MakeRelative(@"c:\abc\def\xyz", @"c:\abc\def\ghi\"));
+                Assert.Equal(@".", FileUtilities.MakeRelative(@"c:\abc\def", @"c:\abc\def\"));
             }
             else
             {
-                Assert.Equal(@"foo.cpp", FileUtilities.MakeRelative(@"/abc/def", @"/abc/def/foo.cpp"));
+                Assert.Equal(@"bar.cpp", FileUtilities.MakeRelative(@"/abc/def", @"/abc/def/bar.cpp"));
                 Assert.Equal(@"def/foo.cpp", FileUtilities.MakeRelative(@"/abc/", @"/abc/def/foo.cpp"));
-                Assert.Equal(@"..\foo.cpp", FileUtilities.MakeRelative(@"/abc/def/xyz", @"/abc/def/foo.cpp"));
-                Assert.Equal(@"..\ttt\foo.cpp", FileUtilities.MakeRelative(@"/abc/def/xyz/", @"/abc/def/ttt/foo.cpp"));
-                Assert.Equal(@"/abc/def/foo.cpp", FileUtilities.MakeRelative(@"/abc/def", @"/abc/def/foo.cpp"));
+                Assert.Equal(@"../foo.cpp", FileUtilities.MakeRelative(@"/abc/def/xyz", @"/abc/def/foo.cpp"));
+                Assert.Equal(@"../ttt/foo.cpp", FileUtilities.MakeRelative(@"/abc/def/xyz/", @"/abc/def/ttt/foo.cpp"));
                 Assert.Equal(@"foo.cpp", FileUtilities.MakeRelative(@"/abc/def", @"foo.cpp"));
-                Assert.Equal(@"foo.cpp", FileUtilities.MakeRelative(@"/abc/def", @"../def/foo.cpp"));
                 Assert.Equal(@"../fff/ggg.hh", FileUtilities.MakeRelative(@"/foo/bar/../abc/cde", @"/foo/bar/../abc/fff/ggg.hh"));
+
+                /* Directories */
+                Assert.Equal(@"def/", FileUtilities.MakeRelative(@"/abc/", @"/abc/def/"));
+                Assert.Equal(@"../", FileUtilities.MakeRelative(@"/abc/def/xyz/", @"/abc/def/"));
+                Assert.Equal(@"../ttt/", FileUtilities.MakeRelative(@"/abc/def/xyz/", @"/abc/def/ttt/"));
+                Assert.Equal(@".", FileUtilities.MakeRelative(@"/abc/def/", @"/abc/def/"));
+
+                /* Directory + File */
+                Assert.Equal(@"def", FileUtilities.MakeRelative(@"/abc/", @"/abc/def"));
+                Assert.Equal(@"../../ghi", FileUtilities.MakeRelative(@"/abc/def/xyz/", @"/abc/ghi"));
+                Assert.Equal(@"../ghi", FileUtilities.MakeRelative(@"/abc/def/xyz/", @"/abc/def/ghi"));
+                Assert.Equal(@"../ghi", FileUtilities.MakeRelative(@"/abc/def/", @"/abc/ghi"));
+
+                /* File + Directory */
+                Assert.Equal(@"def/", FileUtilities.MakeRelative(@"/abc", @"/abc/def/"));
+                Assert.Equal(@"../", FileUtilities.MakeRelative(@"/abc/def/xyz", @"/abc/def/"));
+                Assert.Equal(@"../ghi/", FileUtilities.MakeRelative(@"/abc/def/xyz", @"/abc/def/ghi/"));
+                Assert.Equal(@".", FileUtilities.MakeRelative(@"/abc/def", @"/abc/def/"));
+
             }
         }
 
@@ -243,7 +271,10 @@ namespace Microsoft.Build.UnitTests
         {
             var result = FileUtilities.HasExtension(fileName, allowedExtensions);
 
-            Assert.True(result);
+            if (!FileUtilities.GetIsFileSystemCaseSensitive() || allowedExtensions.Any(extension => fileName.Contains(extension)))
+            {
+                result.ShouldBeTrue();
+            }
         }
 
         [Theory]
@@ -269,11 +300,8 @@ namespace Microsoft.Build.UnitTests
             Assert.Throws<ArgumentException>(() =>
             {
                 FileUtilities.HasExtension("|/", new[] { ".exe" });
-
             });
         }
-
-#if FEATURE_THREAD_CULTURE
 
         [Fact]
         public void HasExtension_UsesOrdinalIgnoreCase()
@@ -285,15 +313,13 @@ namespace Microsoft.Build.UnitTests
 
                 var result = FileUtilities.HasExtension("foo.ini", new string[] { ".INI" });
 
-                Assert.True(result);
+                result.ShouldBe(!FileUtilities.GetIsFileSystemCaseSensitive());
             }
             finally
             {
                 Thread.CurrentThread.CurrentCulture = currentCulture;
             }
         }
-
-#endif
 
         /// <summary>
         /// Exercises FileUtilities.EnsureTrailingSlash
@@ -532,6 +558,19 @@ namespace Microsoft.Build.UnitTests
             {
                 FileUtilities.NormalizePath(filePath);
             });
+        }
+
+        [Fact]
+        [PlatformSpecific(TestPlatforms.Windows)]
+        public void CannotNormalizePathWithNewLineAndSpace()
+        {
+            string filePath = "\r\n      C:\\work\\sdk3\\artifacts\\tmp\\Debug\\SimpleNamesWi---6143883E\\NETFrameworkLibrary\\bin\\Debug\\net462\\NETFrameworkLibrary.dll\r\n      ";
+
+#if FEATURE_LEGACY_GETFULLPATH
+            Assert.Throws<ArgumentException>(() => FileUtilities.NormalizePath(filePath));
+#else
+            Assert.NotEqual("C:\\work\\sdk3\\artifacts\\tmp\\Debug\\SimpleNamesWi---6143883E\\NETFrameworkLibrary\\bin\\Debug\\net462\\NETFrameworkLibrary.dll", FileUtilities.NormalizePath(filePath));
+#endif
         }
 
         [Fact]

@@ -39,7 +39,7 @@ namespace Microsoft.Build.Tasks
         // threads at the advantage of performing file copies more quickly in the kernel - we must avoid
         // taking up the whole threadpool esp. when hosted in Visual Studio. IOW we use a specific number
         // instead of int.MaxValue.
-        private static readonly int DefaultCopyParallelism = Environment.ProcessorCount > 4 ? 6 : 4;
+        private static readonly int DefaultCopyParallelism = NativeMethodsShared.GetLogicalCoreCount() > 4 ? 6 : 4;
 
         /// <summary>
         /// Constructor.
@@ -47,7 +47,26 @@ namespace Microsoft.Build.Tasks
         public Copy()
         {
             RetryDelayMilliseconds = RetryDelayMillisecondsDefault;
+
+            if (DidNotCopyBecauseOfFileMatch == null)
+            {
+                CreatesDirectory = Log.GetResourceMessage("Copy.CreatesDirectory");
+                DidNotCopyBecauseOfFileMatch = Log.GetResourceMessage("Copy.DidNotCopyBecauseOfFileMatch");
+                FileComment = Log.GetResourceMessage("Copy.FileComment");
+                HardLinkComment = Log.GetResourceMessage("Copy.HardLinkComment");
+                RetryingAsFileCopy = Log.GetResourceMessage("Copy.RetryingAsFileCopy");
+                RemovingReadOnlyAttribute = Log.GetResourceMessage("Copy.RemovingReadOnlyAttribute");
+                SymbolicLinkComment = Log.GetResourceMessage("Copy.SymbolicLinkComment");
+            }
         }
+
+        private static string CreatesDirectory;
+        private static string DidNotCopyBecauseOfFileMatch;
+        private static string FileComment;
+        private static string HardLinkComment;
+        private static string RetryingAsFileCopy;
+        private static string RemovingReadOnlyAttribute;
+        private static string SymbolicLinkComment;
 
         #region Properties
 
@@ -103,6 +122,11 @@ namespace Microsoft.Build.Tasks
         /// Create Symbolic Links for the copied files rather than copy the files if possible to do so
         /// </summary>
         public bool UseSymboliclinksIfPossible { get; set; } = s_forceSymlinks;
+
+        /// <summary>
+        /// Fail if unable to create a symbolic or hard link instead of falling back to copy
+        /// </summary>
+        public bool ErrorIfLinkFails { get; set; }
 
         public bool SkipUnchangedFiles { get; set; }
 
@@ -228,7 +252,7 @@ namespace Microsoft.Build.Tasks
             {
                 if (!FileSystems.Default.DirectoryExists(destinationFolder))
                 {
-                    Log.LogMessageFromResources(MessageImportance.Normal, "Copy.CreatesDirectory", destinationFolder);
+                    Log.LogMessage(MessageImportance.Normal, CreatesDirectory, destinationFolder);
                     Directory.CreateDirectory(destinationFolder);
                 }
 
@@ -250,11 +274,17 @@ namespace Microsoft.Build.Tasks
             // If we want to create hard or symbolic links, then try that first
             if (UseHardlinksIfPossible)
             {
-                TryCopyViaLink("Copy.HardLinkComment", MessageImportance.Normal, sourceFileState, destinationFileState, ref destinationFileExists, out linkCreated, ref errorMessage, (source, destination, errMessage) => NativeMethods.MakeHardLink(destination, source, ref errorMessage));
+                TryCopyViaLink(HardLinkComment, MessageImportance.Normal, sourceFileState, destinationFileState, ref destinationFileExists, out linkCreated, ref errorMessage, (source, destination, errMessage) => NativeMethods.MakeHardLink(destination, source, ref errorMessage));
             }
             else if (UseSymboliclinksIfPossible)
             {
-                TryCopyViaLink("Copy.SymbolicLinkComment", MessageImportance.Normal, sourceFileState, destinationFileState, ref destinationFileExists, out linkCreated, ref errorMessage, (source, destination, errMessage) => NativeMethods.MakeSymbolicLink(destination, source, ref errorMessage));
+                TryCopyViaLink(SymbolicLinkComment, MessageImportance.Normal, sourceFileState, destinationFileState, ref destinationFileExists, out linkCreated, ref errorMessage, (source, destination, errMessage) => NativeMethods.MakeSymbolicLink(destination, source, ref errorMessage));
+            }
+
+            if (ErrorIfLinkFails && !linkCreated)
+            {
+                Log.LogErrorWithCodeFromResources("Copy.LinkFailed", sourceFileState.Name, destinationFileState.Name);
+                return false;
             }
 
             // If the link was not created (either because the user didn't want one, or because it couldn't be created)
@@ -264,7 +294,7 @@ namespace Microsoft.Build.Tasks
                 // Do not log a fake command line as well, as it's superfluous, and also potentially expensive
                 string sourceFilePath = FileUtilities.GetFullPathNoThrow(sourceFileState.Name);
                 string destinationFilePath = FileUtilities.GetFullPathNoThrow(destinationFileState.Name);
-                Log.LogMessageFromResources(MessageImportance.Normal, "Copy.FileComment", sourceFilePath, destinationFilePath);
+                Log.LogMessage(MessageImportance.Normal, FileComment, sourceFilePath, destinationFilePath);
 
                 File.Copy(sourceFileState.Name, destinationFileState.Name, true);
             }
@@ -285,7 +315,7 @@ namespace Microsoft.Build.Tasks
         private void TryCopyViaLink(string linkComment, MessageImportance messageImportance, FileState sourceFileState, FileState destinationFileState, ref bool destinationFileExists, out bool linkCreated, ref string errorMessage, Func<string, string, string, bool> createLink)
         {
             // Do not log a fake command line as well, as it's superfluous, and also potentially expensive
-            Log.LogMessageFromResources(MessageImportance.Normal, linkComment, sourceFileState.Name, destinationFileState.Name);
+            Log.LogMessage(MessageImportance.Normal, linkComment, sourceFileState.Name, destinationFileState.Name);
 
             if (!OverwriteReadOnlyFiles)
             {
@@ -304,7 +334,7 @@ namespace Microsoft.Build.Tasks
             if (!linkCreated)
             {
                 // This is only a message since we don't want warnings when copying to network shares etc.
-                Log.LogMessageFromResources(messageImportance, "Copy.RetryingAsFileCopy", sourceFileState.Name, destinationFileState.Name, errorMessage);
+                Log.LogMessage(messageImportance, RetryingAsFileCopy, sourceFileState.Name, destinationFileState.Name, errorMessage);
             }
         }
 
@@ -320,7 +350,7 @@ namespace Microsoft.Build.Tasks
                 {
                     if (logActivity)
                     {
-                        Log.LogMessageFromResources(MessageImportance.Low, "Copy.RemovingReadOnlyAttribute", file.Name);
+                        Log.LogMessage(MessageImportance.Low, RemovingReadOnlyAttribute, file.Name);
                     }
 
                     File.SetAttributes(file.Name, FileAttributes.Normal);
@@ -336,6 +366,7 @@ namespace Microsoft.Build.Tasks
         /// <param name="parallelism">
         /// Thread parallelism allowed during copies. 1 uses the original algorithm, >1 uses newer algorithm.
         /// </param>
+        /// <param name="staticEvaluation">Whether we are in static mode.</param>
         internal bool Execute
         (
             CopyFileWithState copyFile,
@@ -611,6 +642,12 @@ namespace Microsoft.Build.Tasks
                 return false;
             }
 
+            if (ErrorIfLinkFails && !UseHardlinksIfPossible && !UseSymboliclinksIfPossible)
+            {
+                Log.LogErrorWithCodeFromResources("Copy.ErrorIfLinkFailsSetWithoutLinkOption");
+                return false;
+            }
+
             return true;
         }
 
@@ -669,9 +706,9 @@ namespace Microsoft.Build.Tasks
                     // If we got here, then the file's time and size match AND
                     // the user set the SkipUnchangedFiles flag which means we
                     // should skip matching files.
-                    Log.LogMessageFromResources(
+                    Log.LogMessage(
                         MessageImportance.Low,
-                        "Copy.DidNotCopyBecauseOfFileMatch",
+                        DidNotCopyBecauseOfFileMatch,
                         sourceFileState.Name,
                         destinationFileState.Name,
                         "SkipUnchangedFiles",
@@ -681,7 +718,7 @@ namespace Microsoft.Build.Tasks
                 // We only do the cheap check for identicalness here, we try the more expensive check
                 // of comparing the fullpaths of source and destination to see if they are identical,
                 // in the exception handler lower down.
-                else if (0 != String.Compare(
+                else if (!String.Equals(
                              sourceFileState.Name,
                              destinationFileState.Name,
                              StringComparison.OrdinalIgnoreCase))
@@ -887,7 +924,7 @@ namespace Microsoft.Build.Tasks
             string fullSourcePath = Path.GetFullPath(source);
             string fullDestinationPath = Path.GetFullPath(destination);
             StringComparison filenameComparison = NativeMethodsShared.IsWindows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            return (0 == String.Compare(fullSourcePath, fullDestinationPath, filenameComparison));
+            return String.Equals(fullSourcePath, fullDestinationPath, filenameComparison);
         }
 
     	private static int GetParallelismFromEnvironment()

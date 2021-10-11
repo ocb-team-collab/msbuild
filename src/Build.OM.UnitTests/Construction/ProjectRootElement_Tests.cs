@@ -3,23 +3,23 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 #if FEATURE_SECURITY_PRINCIPAL_WINDOWS
 using System.Security.AccessControl;
 using System.Security.Principal;
 #endif
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Xml;
 using Microsoft.Build.Construction;
-using Microsoft.Build.Engine.UnitTests;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Shared;
 
 using InvalidProjectFileException = Microsoft.Build.Exceptions.InvalidProjectFileException;
 using ProjectCollection = Microsoft.Build.Evaluation.ProjectCollection;
+using Shouldly;
 using Xunit;
 
 namespace Microsoft.Build.UnitTests.OM.Construction
@@ -532,7 +532,7 @@ namespace Microsoft.Build.UnitTests.OM.Construction
         public void LoadCommonTargets()
         {
             ProjectCollection projectCollection = new ProjectCollection();
-            string toolsPath = projectCollection.Toolsets.Where(toolset => (string.Compare(toolset.ToolsVersion, ObjectModelHelpers.MSBuildDefaultToolsVersion, StringComparison.OrdinalIgnoreCase) == 0)).First().ToolsPath;
+            string toolsPath = projectCollection.Toolsets.Where(toolset => (string.Equals(toolset.ToolsVersion, ObjectModelHelpers.MSBuildDefaultToolsVersion, StringComparison.OrdinalIgnoreCase))).First().ToolsPath;
 
             string[] targets =
             {
@@ -733,13 +733,7 @@ namespace Microsoft.Build.UnitTests.OM.Construction
         /// Verifies that ProjectRootElement.Encoding returns the correct value
         /// after reading a file off disk, even if no xml declaration is present.
         /// </summary>
-#if FEATURE_ENCODING_DEFAULT
         [Fact]
-#else
-        [Fact(Skip = "https://github.com/Microsoft/msbuild/issues/301")]
-#endif
-        [Trait("Category", "netcore-osx-failing")]
-        [Trait("Category", "netcore-linux-failing")]
         public void EncodingGetterBasedOnActualEncodingWhenXmlDeclarationIsAbsent()
         {
             string projectFullPath = FileUtilities.GetTemporaryFile();
@@ -907,14 +901,10 @@ namespace Microsoft.Build.UnitTests.OM.Construction
         /// Build a solution file that can't be accessed
         /// </summary>
         [Fact]
+        [PlatformSpecific(TestPlatforms.Windows)]  // Security classes are not supported on Unix
+
         public void SolutionCanNotBeOpened()
         {
-            if (NativeMethodsShared.IsUnixLike)
-            {
-                // Security classes are not supported on Unix
-                return;
-            }
-
             Assert.Throws<InvalidProjectFileException>(() =>
             {
                 string solutionFile = null;
@@ -945,10 +935,7 @@ namespace Microsoft.Build.UnitTests.OM.Construction
                 }
                 finally
                 {
-                    if (security != null)
-                    {
-                        security.RemoveAccessRule(rule);
-                    }
+                    security?.RemoveAccessRule(rule);
 
                     File.Delete(solutionFile);
                     File.Delete(tempFileSentinel);
@@ -962,13 +949,10 @@ namespace Microsoft.Build.UnitTests.OM.Construction
         /// Build a project file that can't be accessed
         /// </summary>
         [Fact]
+        [PlatformSpecific (TestPlatforms.Windows)]
+        // FileSecurity class is not supported on Unix
         public void ProjectCanNotBeOpened()
         {
-            if (NativeMethodsShared.IsUnixLike)
-            {
-                return; // FileSecurity class is not supported on Unix
-            }
-
             Assert.Throws<InvalidProjectFileException>(() =>
             {
                 string projectFile = null;
@@ -996,10 +980,7 @@ namespace Microsoft.Build.UnitTests.OM.Construction
                 }
                 finally
                 {
-                    if (security != null)
-                    {
-                        security.RemoveAccessRule(rule);
-                    }
+                    security?.RemoveAccessRule(rule);
 
                     File.Delete(projectFile);
                     Assert.False(File.Exists(projectFile));
@@ -1043,13 +1024,9 @@ Project(""{";
         /// Open lots of projects concurrently to try to trigger problems
         /// </summary>
         [Fact]
+        [PlatformSpecific(TestPlatforms.Windows)]  //This test is platform specific for Windows
         public void ConcurrentProjectOpenAndCloseThroughProject()
         {
-            if (NativeMethodsShared.IsUnixLike)
-            {
-                return; // TODO: This test hangs on Linux. Investigate
-            }
-
             int iterations = 500;
             string[] paths = ObjectModelHelpers.GetTempFiles(iterations);
 
@@ -1758,7 +1735,6 @@ true, true, true)]
             bool reloadProjectFromMemory,
             Action<string, string, string> projectFileAssert)
         {
-
             using (var env = TestEnvironment.Create())
             {
                 var projectCollection = env.CreateProjectCollection().Collection;
@@ -1880,6 +1856,31 @@ true, true, true)]
             AssertReload(SimpleProject, ComplexProject, true, true, true, act);
         }
 
+        [Fact]
+        public void ReloadDoesNotLeakCachedXmlDocuments()
+        {
+            using var env = TestEnvironment.Create();
+            var testFiles = env.CreateTestProjectWithFiles("", new[] { "build.proj" });
+            var projectFile = testFiles.CreatedFiles.First();
+
+            var projectElement = ObjectModelHelpers.CreateInMemoryProjectRootElement(SimpleProject);
+            projectElement.Save(projectFile);
+
+            int originalDocumentCount = GetNumberOfDocumentsInProjectStringCache(projectElement);
+
+            // Test successful reload.
+            projectElement.Reload(false);
+            GetNumberOfDocumentsInProjectStringCache(projectElement).ShouldBe(originalDocumentCount);
+
+            // Test failed reload.
+            using (StreamWriter sw = new StreamWriter(projectFile))
+            {
+                sw.WriteLine("<XXX />"); // Invalid root element
+            }
+            Should.Throw<InvalidProjectFileException>(() => projectElement.Reload(false));
+            GetNumberOfDocumentsInProjectStringCache(projectElement).ShouldBe(originalDocumentCount);
+        }
+
         private void AssertReload(
             string initialContents,
             string changedContents,
@@ -1914,7 +1915,6 @@ true, true, true)]
             {
                 Assert.Equal(childrenCount, projectElement.AllChildren.Count());
             }
-
 
             if (xmlChanged)
             {
@@ -2012,6 +2012,18 @@ true, true, true)]
         private void VerifyAssertLineByLine(string expected, string actual)
         {
             Helpers.VerifyAssertLineByLine(expected, actual, false);
+        }
+
+        /// <summary>
+        /// Returns the number of documents retained by the project string cache.
+        /// Peeks at it via reflection since internals are not visible to these tests.
+        /// </summary>
+        private int GetNumberOfDocumentsInProjectStringCache(ProjectRootElement project)
+        {
+            var bindingFlags = BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetProperty;
+            object document = typeof(ProjectRootElement).InvokeMember("XmlDocument", bindingFlags, null, project, Array.Empty<object>());
+            object cache = document.GetType().InvokeMember("StringCache", bindingFlags, null, document, Array.Empty<object>());
+            return (int)cache.GetType().InvokeMember("DocumentCount", bindingFlags, null, cache, Array.Empty<object>());
         }
     }
 }

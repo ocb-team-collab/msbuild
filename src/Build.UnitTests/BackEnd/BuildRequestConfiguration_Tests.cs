@@ -6,11 +6,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml;
-using System.Text;
-using System.Collections;
-using System.Text.RegularExpressions;
-using System.Threading;
-using Microsoft.Build.Framework;
 using Microsoft.Build.Shared;
 using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
@@ -31,7 +26,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         public BuildRequestConfiguration_Tests(ITestOutputHelper testOutput)
         {
             _env = TestEnvironment.Create(testOutput);
-            _env.DoNotLaunchDebugger();
         }
 
         public void Dispose()
@@ -502,7 +496,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             glob = $"$([MSBuild]::Escape('{glob}'))";
 
-            projectContents = projectContents ?? $@"
+            projectContents ??= $@"
 <Project>
     <ItemGroup>
         <{ItemTypeNames.GraphIsolationExemptReference} Include=`{glob};ShouldNotMatchAnything`/>

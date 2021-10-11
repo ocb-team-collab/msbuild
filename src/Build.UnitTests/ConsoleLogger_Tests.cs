@@ -16,10 +16,10 @@ using Microsoft.Build.Shared;
 
 
 using TaskItem = Microsoft.Build.Execution.ProjectItemInstance.TaskItem;
-using Microsoft.Build.Evaluation;
 using Shouldly;
 using Xunit;
 using Xunit.Abstractions;
+using Microsoft.Build.Execution;
 
 namespace Microsoft.Build.UnitTests
 {
@@ -185,6 +185,140 @@ namespace Microsoft.Build.UnitTests
         }
 
         [Fact]
+        public void WarningMessage()
+        {
+            using var env = TestEnvironment.Create(_output);
+
+            var pc = env.CreateProjectCollection();
+
+            var project = env.CreateTestProjectWithFiles(@"
+         <Project>
+            <ItemGroup>
+                <P Include='$(MSBuildThisFileFullPath)' AdditionalProperties='Number=1' />
+                <P Include='$(MSBuildThisFileFullPath)' AdditionalProperties='Number=2' />
+
+                <ProjectConfigurationDescription Include='Number=$(Number)' />
+            </ItemGroup>
+            <Target Name='Spawn'>
+                <MSBuild Projects='@(P)' BuildInParallel='true' Targets='Inner' />
+            </Target>
+            <Target Name='Inner'>
+                <Warning Text='Hello from project $(Number)'
+                         File='source_of_warning' />
+            </Target>
+        </Project>");
+
+            SimulatedConsole sc = new SimulatedConsole();
+            ConsoleLogger logger = new ConsoleLogger(LoggerVerbosity.Minimal, sc.Write, null, null);
+            logger.Parameters = "EnableMPLogging;ShowProjectFile";
+
+            pc.Collection.RegisterLogger(logger);
+            var p = pc.Collection.LoadProject(project.ProjectFile);
+
+            BuildManager.DefaultBuildManager.Build(
+                new BuildParameters(pc.Collection),
+                new BuildRequestData(p.CreateProjectInstance(), new[] { "Spawn" }));
+
+            p.Build().ShouldBeTrue();
+            sc.ToString().ShouldContain("source_of_warning : warning : Hello from project 1 [" + project.ProjectFile + ":: Number=1]");
+            sc.ToString().ShouldContain("source_of_warning : warning : Hello from project 2 [" + project.ProjectFile + ":: Number=2]");
+        }
+
+        [Fact]
+        public void ErrorMessage()
+        {
+            using var env = TestEnvironment.Create(_output);
+
+            var pc = env.CreateProjectCollection();
+
+            var project = env.CreateTestProjectWithFiles(@"
+         <Project>
+            <ItemGroup>
+                <P Include='$(MSBuildThisFileFullPath)' AdditionalProperties='Number=1' />
+                <P Include='$(MSBuildThisFileFullPath)' AdditionalProperties='Number=2' />
+
+                <ProjectConfigurationDescription Include='Number=$(Number)' />
+            </ItemGroup>
+            <Target Name='Spawn'>
+                <MSBuild Projects='@(P)' BuildInParallel='true' Targets='Inner' />
+            </Target>
+            <Target Name='Inner'>
+                <Error Text='Hello from project $(Number)'
+                         File='source_of_error' />
+            </Target>
+        </Project>");
+
+            SimulatedConsole sc = new SimulatedConsole();
+            ConsoleLogger logger = new ConsoleLogger(LoggerVerbosity.Minimal, sc.Write, null, null);
+            logger.Parameters = "EnableMPLogging;ShowProjectFile";
+
+            pc.Collection.RegisterLogger(logger);
+
+            var p = pc.Collection.LoadProject(project.ProjectFile);
+
+            BuildManager.DefaultBuildManager.Build(
+                new BuildParameters(pc.Collection),
+                new BuildRequestData(p.CreateProjectInstance(), new[] { "Spawn" }));
+
+            p.Build().ShouldBeFalse();
+            sc.ToString().ShouldContain("source_of_error : error : Hello from project 1 [" + project.ProjectFile + ":: Number=1]");
+            sc.ToString().ShouldContain("source_of_error : error : Hello from project 2 [" + project.ProjectFile + ":: Number=2]");
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ErrorMessageWithMultiplePropertiesInMessage(bool includeEvaluationPropertiesAndItems)
+        {
+            using var env = TestEnvironment.Create(_output);
+
+            var pc = env.CreateProjectCollection();
+
+            if (includeEvaluationPropertiesAndItems)
+            {
+                pc.Collection.LoggingService.IncludeEvaluationPropertiesAndItems = true;
+            }
+
+            var project = env.CreateTestProjectWithFiles(@"
+         <Project>
+            <PropertyGroup>
+            <TargetFramework>netcoreapp2.1</TargetFramework>
+            </PropertyGroup>
+            <ItemGroup>
+                <P Include='$(MSBuildThisFileFullPath)' AdditionalProperties='Number=1' />
+                <P Include='$(MSBuildThisFileFullPath)' AdditionalProperties='Number=2' />
+    
+                <ProjectConfigurationDescription Include='Number=$(Number)' />
+                <ProjectConfigurationDescription Include='TargetFramework=$(TargetFramework)' />
+            </ItemGroup>
+            <Target Name='Spawn'>
+                <MSBuild Projects='@(P)' BuildInParallel='true' Targets='Inner' />
+            </Target>
+            <Target Name='Inner'>
+                <Error Text='Hello from project $(Number)'
+                         File='source_of_error' />
+            </Target>
+        </Project>");
+
+            SimulatedConsole sc = new SimulatedConsole();
+            ConsoleLogger logger = new ConsoleLogger(LoggerVerbosity.Minimal, sc.Write, null, null);
+            logger.Parameters = "EnableMPLogging;ShowProjectFile";
+
+            pc.Collection.RegisterLogger(logger);
+
+            var p = pc.Collection.LoadProject(project.ProjectFile);
+
+            BuildManager.DefaultBuildManager.Build(
+                new BuildParameters(pc.Collection),
+                new BuildRequestData(p.CreateProjectInstance(), new[] { "Spawn" }));
+
+            p.Build().ShouldBeFalse();
+            string output = sc.ToString();
+            output.ShouldContain("source_of_error : error : Hello from project 1 [" + project.ProjectFile + ":: Number=1 TargetFramework=netcoreapp2.1]");
+            output.ShouldContain("source_of_error : error : Hello from project 2 [" + project.ProjectFile + ":: Number=2 TargetFramework=netcoreapp2.1]");
+        }
+
+        [Fact]
         [SkipOnTargetFramework(TargetFrameworkMonikers.Netcoreapp, "Minimal path validation in Core allows expanding path containing quoted slashes.")]
         [SkipOnTargetFramework(TargetFrameworkMonikers.Mono, "Minimal path validation in Mono allows expanding path containing quoted slashes.")]
         public void TestItemsWithUnexpandableMetadata()
@@ -205,7 +339,6 @@ namespace Microsoft.Build.UnitTests
 </Project>", logger);
 
             sc.ToString().ShouldContain("\"a\\b\\%(Filename).c\"");
-
         }
 
         /// <summary>
@@ -560,7 +693,6 @@ namespace Microsoft.Build.UnitTests
 
                 if (expectedMessageType.Equals("message"))
                 {
-                    
                     console.ToString().ShouldMatch($@"<{expectedColor}><cyan>\d\d:\d\d:\d\d\.\d\d\d\s+\d+><reset color>{Regex.Escape(file)}\({lineNumber}\): {subcategory} {expectedMessageType} {code}: {message} \(TaskId:\d+\){Environment.NewLine}<reset color>");
                 }
                 else
@@ -575,7 +707,7 @@ namespace Microsoft.Build.UnitTests
                 console.ToString().ShouldMatch($@"<{expectedColor}>{Regex.Escape(file)}\({lineNumber}\): {subcategory} {expectedMessageType} {code}: {message}{Environment.NewLine}<reset color>");
             }
         }
-        
+
 
         [Fact]
         public void TestQuietWithHighMessage()
@@ -1176,13 +1308,13 @@ namespace Microsoft.Build.UnitTests
             sc.ToString().ShouldBe("<cyan>" + BaseConsoleLogger.projectSeparatorLine + Environment.NewLine +
                                    ResourceUtilities.FormatResourceStringStripCodeAndKeyword("ProjectStartedPrefixForTopLevelProjectWithDefaultTargets", "fname1") + Environment.NewLine +
                                    Environment.NewLine + "<reset color>");
-            
+
             sc.Clear();
 
             es.Consume(new TargetStartedEventArgs("ts", null,
                                                      "tarname", "fname", "tfile"));
             sc.ToString().ShouldBeEmpty();
-            
+
             sc.Clear();
 
             es.Consume(new TaskStartedEventArgs("", "", "", "", "Exec"));
@@ -1194,7 +1326,7 @@ namespace Microsoft.Build.UnitTests
                                           + Environment.NewLine +
                 "    " + ResourceUtilities.FormatResourceStringStripCodeAndKeyword("ProjectStartedPrefixForNestedProjectWithDefaultTargets", "fname1", "fname2") + Environment.NewLine +
                 Environment.NewLine + "<reset color>");
-            
+
             sc.Clear();
 
             es.Consume(new ProjectFinishedEventArgs("pf2", null, "fname2", true));
@@ -1295,10 +1427,9 @@ namespace Microsoft.Build.UnitTests
             properties.Add("prop1", "val1");
             properties.Add("prop2", "val2");
             properties.Add("pro(p3)", "va%3b%253b%3bl3");
-            string prop1 = string.Empty;
-            string prop2 = string.Empty;
-            string prop3 = string.Empty;
-
+            string prop1;
+            string prop2;
+            string prop3;
             if (cl is SerialConsoleLogger)
             {
                 var propertyList = ((SerialConsoleLogger)cl).ExtractPropertyList(properties);
@@ -1497,7 +1628,7 @@ namespace Microsoft.Build.UnitTests
             // Being careful not to make locale assumptions here, eg about sorting
             foreach (KeyValuePair<string, string> kvp in _environment)
             {
-                string message = String.Empty;
+                string message;
                 if (cl is ParallelConsoleLogger)
                 {
                     message = String.Format(CultureInfo.CurrentCulture, "{0} = {1}", kvp.Key, kvp.Value);
@@ -1538,12 +1669,12 @@ namespace Microsoft.Build.UnitTests
 
             items.Add("type(3)", taskItem3);
 
-            string item1type = string.Empty;
-            string item2type = string.Empty;
-            string item3type = string.Empty;
-            string item1spec = string.Empty;
-            string item2spec = string.Empty;
-            string item3spec = string.Empty;
+            string item1type;
+            string item2type;
+            string item3type;
+            string item1spec;
+            string item2spec;
+            string item3spec;
             string item3metadatum = string.Empty;
 
             if (cl is SerialConsoleLogger)
@@ -2336,4 +2467,3 @@ namespace Microsoft.Build.UnitTests
         }
     }
 }
-

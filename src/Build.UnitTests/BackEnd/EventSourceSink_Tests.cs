@@ -2,7 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Microsoft.Build.Framework;
 using Microsoft.Build.BackEnd.Logging;
@@ -69,6 +68,7 @@ namespace Microsoft.Build.UnitTests.Logging
             eventHelper.RaiseBuildEvent(RaiseEventHelper.NormalMessage);
             eventHelper.RaiseBuildEvent(RaiseEventHelper.TaskFinished);
             eventHelper.RaiseBuildEvent(RaiseEventHelper.CommandLine);
+            eventHelper.RaiseBuildEvent(RaiseEventHelper.TaskParameter);
             eventHelper.RaiseBuildEvent(RaiseEventHelper.Warning);
             eventHelper.RaiseBuildEvent(RaiseEventHelper.Error);
             eventHelper.RaiseBuildEvent(RaiseEventHelper.TargetStarted);
@@ -91,9 +91,7 @@ namespace Microsoft.Build.UnitTests.Logging
             List<Exception> exceptionList = new List<Exception>();
             exceptionList.Add(new LoggerException());
             exceptionList.Add(new ArgumentException());
-#if FEATURE_VARIOUS_EXCEPTIONS
             exceptionList.Add(new StackOverflowException());
-#endif
 
             foreach (Exception exception in exceptionList)
             {
@@ -102,6 +100,7 @@ namespace Microsoft.Build.UnitTests.Logging
                 RaiseExceptionInEventHandler(RaiseEventHelper.NormalMessage, exception);
                 RaiseExceptionInEventHandler(RaiseEventHelper.TaskFinished, exception);
                 RaiseExceptionInEventHandler(RaiseEventHelper.CommandLine, exception);
+                RaiseExceptionInEventHandler(RaiseEventHelper.TaskParameter, exception);
                 RaiseExceptionInEventHandler(RaiseEventHelper.Warning, exception);
                 RaiseExceptionInEventHandler(RaiseEventHelper.Error, exception);
                 RaiseExceptionInEventHandler(RaiseEventHelper.TargetStarted, exception);
@@ -418,20 +417,20 @@ namespace Microsoft.Build.UnitTests.Logging
             internal EventHandlerHelper(IEventSource source, Exception exceptionToThrow)
             {
                 _exceptionInHandlers = exceptionToThrow;
-                source.AnyEventRaised += new AnyEventHandler(Source_AnyEventRaised);
-                source.BuildFinished += new BuildFinishedEventHandler(Source_BuildFinished);
-                source.BuildStarted += new BuildStartedEventHandler(Source_BuildStarted);
-                source.CustomEventRaised += new CustomBuildEventHandler(Source_CustomEventRaised);
-                source.ErrorRaised += new BuildErrorEventHandler(Source_ErrorRaised);
-                source.MessageRaised += new BuildMessageEventHandler(Source_MessageRaised);
-                source.ProjectFinished += new ProjectFinishedEventHandler(Source_ProjectFinished);
-                source.ProjectStarted += new ProjectStartedEventHandler(Source_ProjectStarted);
-                source.StatusEventRaised += new BuildStatusEventHandler(Source_StatusEventRaised);
-                source.TargetFinished += new TargetFinishedEventHandler(Source_TargetFinished);
-                source.TargetStarted += new TargetStartedEventHandler(Source_TargetStarted);
-                source.TaskFinished += new TaskFinishedEventHandler(Source_TaskFinished);
-                source.TaskStarted += new TaskStartedEventHandler(Source_TaskStarted);
-                source.WarningRaised += new BuildWarningEventHandler(Source_WarningRaised);
+                source.AnyEventRaised += Source_AnyEventRaised;
+                source.BuildFinished += Source_BuildFinished;
+                source.BuildStarted += Source_BuildStarted;
+                source.CustomEventRaised += Source_CustomEventRaised;
+                source.ErrorRaised += Source_ErrorRaised;
+                source.MessageRaised += Source_MessageRaised;
+                source.ProjectFinished += Source_ProjectFinished;
+                source.ProjectStarted += Source_ProjectStarted;
+                source.StatusEventRaised += Source_StatusEventRaised;
+                source.TargetFinished += Source_TargetFinished;
+                source.TargetStarted += Source_TargetStarted;
+                source.TaskFinished += Source_TaskFinished;
+                source.TaskStarted += Source_TaskStarted;
+                source.WarningRaised += Source_WarningRaised;
             }
             #endregion
 
@@ -737,6 +736,11 @@ namespace Microsoft.Build.UnitTests.Logging
             private static TaskCommandLineEventArgs s_taskCommandLine = new TaskCommandLineEventArgs("commandLine", "taskName", MessageImportance.Low);
 
             /// <summary>
+            /// Task Parameter Event
+            /// </summary>
+            private static TaskParameterEventArgs s_taskParameter = new TaskParameterEventArgs(TaskParameterMessageKind.TaskInput, "ItemName", null, true, DateTime.MinValue);
+
+            /// <summary>
             /// Build Warning Event
             /// </summary>
             private static BuildWarningEventArgs s_buildWarning = new BuildWarningEventArgs("SubCategoryForSchemaValidationErrors", "MSB4000", "file", 1, 2, 3, 4, "message", "help", "sender")
@@ -885,6 +889,11 @@ namespace Microsoft.Build.UnitTests.Logging
                     return s_taskCommandLine;
                 }
             }
+
+            /// <summary>
+            /// Event which can be raised in multiple tests.
+            /// </summary>
+            internal static TaskParameterEventArgs TaskParameter => s_taskParameter;
 
             /// <summary>
             /// Event which can be raised in multiple tests.

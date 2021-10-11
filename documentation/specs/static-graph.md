@@ -1,10 +1,20 @@
+# Static Graph
+
 - [Static Graph](#static-graph)
-  - [Overview](#overview)
-    - [Motivations](#motivations)
+  - [What is static graph for?](#what-is-static-graph-for)
+    - [Weakness of the old model: project-level scheduling](#weakness-of-the-old-model-project-level-scheduling)
+    - [Weakness of the old model: incrementality](#weakness-of-the-old-model-incrementality)
+    - [Weakness of the old model: caching and distributability](#weakness-of-the-old-model-caching-and-distributability)
+  - [What is static graph?](#what-is-static-graph)
+  - [Design documentation](#design-documentation)
+    - [Design goals](#design-goals)
   - [Project Graph](#project-graph)
+    - [Constructing the project graph](#constructing-the-project-graph)
     - [Build dimensions](#build-dimensions)
       - [Multitargeting](#multitargeting)
-    - [Building a project graph](#building-a-project-graph)
+    - [Executing targets on a graph](#executing-targets-on-a-graph)
+      - [Command line](#command-line)
+      - [APIs](#apis)
     - [Inferring which targets to run for a project within the graph](#inferring-which-targets-to-run-for-a-project-within-the-graph)
       - [Multitargeting details](#multitargeting-details)
     - [Underspecified graphs](#underspecified-graphs)
@@ -12,19 +22,90 @@
   - [Isolated builds](#isolated-builds)
     - [Isolated graph builds](#isolated-graph-builds)
     - [Single project isolated builds](#single-project-isolated-builds)
-    - [Single project isolated builds: implementation details](#single-project-isolated-builds-implementation-details)
-      - [APIs](#apis)
-      - [Command line](#command-line)
+      - [APIs](#apis-1)
+      - [Command line](#command-line-1)
+      - [Exempting references from isolation constraints](#exempting-references-from-isolation-constraints)
   - [I/O Tracking](#io-tracking)
     - [Detours](#detours)
     - [Isolation requirement](#isolation-requirement)
     - [Tool servers](#tool-servers)
+  - [Examples](#examples)
 
-# Static Graph
+## What is static graph for?
 
-## Overview
+As a repo gets bigger and more complex, weaknesses in MSBuild's scheduling and incrementality models become more apparent. MSBuild's static graph features are intended to ameliorate these weaknesses while remaining as compatible as possible with existing projects and SDKs.
 
-### Motivations
+MSBuild projects can refer to other projects by using the `MSBuild` task to execute targets in another project and return values. In `Microsoft.Common.targets`, `ProjectReference` items are transformed into `MSBuild` task executions in order to provide a user-friendly interface: "reference the output of these projects".
+
+### Weakness of the old model: project-level scheduling
+
+Because references to other projects aren't known until a target in the referencing project calls the `MSBuild` task, the MSBuild engine cannot start working on building referenced projects until the referencing project yields. For example, if project `A` depended on `B`, `C`, and `D` and was being built with more-than-3 way parallelism, an ideal build would run `B`, `C`, and `D` in parallel with the parts of `A` that could execute before the references were available.
+
+Today, the order of operations of this build are:
+
+1. `A` completes evaluation and starts building, doing isolated work until it gets to `ResolveProjectReferences`.
+1. In parallel, `B`, `C`, and `D` run the requested targets.
+1. `A` resumes building and completes.
+
+With graph-aware scheduling, this becomes:
+
+1. `A`, `B`, `C`, and `D` evaluate in parallel.
+1. `B`, `C`, and `D` build to completion in parallel.
+1. `A` builds, and instantly gets cached results for the `MSBuild` task calls in `ResolveProjectReferences`
+
+### Weakness of the old model: incrementality
+
+[Incremental build](https://docs.microsoft.com/visualstudio/msbuild/incremental-builds) (that is, "redo only the parts of the build that would produce different outputs compared to the last build") is the most powerful tool to reduce build times and increase developer inner-loop speed.
+
+MSBuild supports incremental builds by allowing a target to be skipped if the target's outputs are up to date with its inputs. This allows tools like the compiler to be skipped when possible. But since the incrementality is at the target level, MSBuild must fully evaluate the project and walk through all targets, running those that are out of date or that don't specify inputs and outputs.
+
+Consider a simple solution with a library and an application that depends on the library. Suppose you build, then make a change in the application's source code, then build again.
+
+The second build will:
+
+1. Build the library project, skipping all targets that define inputs and outputs.
+1. Build the application project.
+
+But using higher-level knowledge, we can see a more-optimal build:
+
+1. Skip everything involving the library project, because _none_ of its inputs have changed.
+1. Build only the application project.
+
+Visual Studio offers a ["fast up-to-date check"](https://github.com/dotnet/project-system/blob/cd275918ef9f181f6efab96715a91db7aabec832/docs/up-to-date-check.md) system that gets closer to the latter, but MSBuild itself does not.
+
+### Weakness of the old model: caching and distributability
+
+For very large builds, including many Microsoft products, the fact that MSBuild can build in parallel only on a single machine is a major impediment, even if incrementality is addressed.
+
+Ideally, a build could span multiple computers, and each could use results generated on another machine as inputs to its own build projects. In addition, if all of a project's inputs remain unchanged, the system would ideally reuse the outputs of the project, even if they were built long ago on another computer.
+
+Microsoft has an internal build system, [CloudBuild](https://www.microsoft.com/research/publication/cloudbuild-microsofts-distributed-and-caching-build-service/), that supports this and has proven that it is effective, but is heuristic-based and requires maintenance.
+
+MSBuild static graph features make it easier to implement a system like CloudBuild by building operations like graph construction and output caching into MSBuild itself.
+
+## What is static graph?
+
+MSBuild's static graph extends the MSBuild engine and APIs with new functionality to improve on these weaknesses:
+
+- The ability to [construct a directed acyclic graph of MSBuild projects](#project-graph) given an entry point (solution or project).
+- The ability to consider that graph when scheduling projects for build.
+- The ability to cache MSBuild's internal build results (metadata about outputs, not the outputs themselves) across build invocations.
+- The ability to [enforce restrictions on builds](#isolated-builds) to ensure that the graph is correct and complete.
+
+Static graph functionality can be used in three ways:
+
+- On the command line with `-graph` (and equivalent API).
+  - This gets the scheduling improvements for well-specified projects, but allows underspecified projects to complete without error.
+- On the command line with `-graph -isolate` (and equivalent API).
+  - This gets the scheduling improvements and also enforces that the graph is correct and complete. In this mode, MSBuild will produce an error if there is an `MSBuild` task invocation that was not known to the graph ahead of time.
+- As part of a higher-order build system that uses [single project isolated builds](#single-project-isolated-builds) to provide caching and/or distribution on top of the built-in functionality. The only known implementation of this system is Microsoft-internal currently.
+
+"Correct and complete" here means that the static graph can be used to accurately predict all targets that need to be built for all projects in the graph, and all of the references between projects. This is required for the higher-order build system scenario, because an unknown reference couldn't be satisfied at runtime (as it is in regular MSBuild and `-graph` with no `-isolate` scenarios).
+
+## Design documentation
+
+### Design goals
+
 - Stock projects can build with "project-level build" and if clean onboard to MS internal build engines with cache/distribution
 - Stock projects will be "project-level build" clean.
 - Add determinism to MSBuild w.r.t. project dependencies. Today MSBuild discovers projects just in time, as it finds MSBuild tasks. This means there’s no guarantee that the same graph is produced two executions in a row, other than hopefully sane project files. With the static graph, you’d know the shape of the build graph before the build starts.
@@ -34,10 +115,14 @@
 
 ## Project Graph
 
+### Constructing the project graph
 Calculating the project graph will be very similar to the MS internal build engine's existing Traversal logic. For a given evaluated project, all project references will be identified and recursively evaluated (with deduping).
 Project references are identified via the `ProjectReference` item.
 
 A node in the graph is a tuple of the project file and global properties. Each (project, global properties) combo can be evaluated in parallel.
+
+Transitive project references are opt-in per project. Once a project opts-in, transitivity is applied for all ProjectReference items.
+A project opt-ins by setting the property `AddTransitiveProjectReferencesInStaticGraph` to true.
 
 ### Build dimensions
 
@@ -76,10 +161,10 @@ Multitargeting supporting SDKs MUST implement the following properties and seman
 - Node edges
   - When project A references multitargeting project B, and B is identified as an outer build, the graph node for project A will reference both the outer build of B, and all the inner builds of B. The edges to the inner builds are speculative, as at build time only one inner build gets referenced. However, the graph cannot know at evaluation time which inner build will get chosen.
   - When multitargeting project B is a root, then the outer build node for B will reference the inner builds of B.
-  - For multitargeting projects, the `ProjectReference` item gets applied only to inner builds. An outer build cannot have its own distinct `ProjectReference`s, it is the inner builds that reference other project files, not the outer build. This constraint might get relaxed in the future via additional configuration, to allow outer build specific references. 
+  - For multitargeting projects, the `ProjectReference` item gets applied only to inner builds. An outer build cannot have its own distinct `ProjectReference`s, it is the inner builds that reference other project files, not the outer build. This constraint might get relaxed in the future via additional configuration, to allow outer build specific references.
 
 These specific rules represent the minimal rules required to represent multitargeting in `Microsoft.Net.Sdk`. As we adopt SDKs whose multitargeting complexity that cannot be expressed with the above rules, we'll extend the rules.
-For example, `InnerBuildProperty` could become `InnerBuildProperties` for SDKs where there's multiple multitargeting global properties. 
+For example, `InnerBuildProperty` could become `InnerBuildProperties` for SDKs where there's multiple multitargeting global properties.
 
 For example, here is a trimmed down `Microsoft.Net.Sdk` multitargeting project:
 ```xml
@@ -101,7 +186,7 @@ To summarize, there are two main patterns for build dimensions which are handled
 1. The project multitargets, in which case the SDK needs to specify the multitargeting build dimensions.
 2. A different set of global properties are used to choose the dimension like with Configuration or Platform. The project graph supports this via multiple entry points.
 
-### Building a project graph
+### Executing targets on a graph
 When building a graph, project references should be built before the projects that reference them, as opposed to the existing msbuild scheduler which builds projects just in time.
 
 For example if project A depends on project B, then project B should build first, then project A. Existing msbuild scheduling would start building project A, reach an MSBuild task for project B, yield project A, build project B, then resume project A once unblocked.
@@ -109,6 +194,13 @@ For example if project A depends on project B, then project B should build first
 Building in this way should make better use of parallelism as all CPU cores can be saturated immediately, rather than waiting for projects to get to the phase in their execution where they build their project references. More subtly, less execution state needs to be held in memory at any given time as there are no paused builds waiting to be unblocked. Knowing the shape of the graph may be able to better inform the scheduler to prevent scheduling projects that could run in parallel onto the same node.
 
 Note that graph cycles are disallowed, even if they're using disconnected targets. This is a breaking change, as today you can have two projects where each project depends on a target from the other project, but that target doesn't depend on the default target or anything in its target graph.
+
+#### Command line
+`msbuild /graph` - msbuild will create a static graph from the entry point project and build it in topological order with the specified targets. Targets to call on each node are inferred via the rules in [this section](#inferring-which-targets-to-run-for-a-project-within-the-graph).
+
+#### APIs
+
+[BuildManager.PendBuildRequest(GraphBuildRequestData requestData)](https://github.com/microsoft/msbuild/blob/37c5a9fec416b403212a63f95f15b03dbd5e8b5d/src/Build/BackEnd/BuildManager/BuildManager.cs#L676)
 
 ### Inferring which targets to run for a project within the graph
 In the classic traversal, the referencing project chooses which targets to call on the referenced projects and may call into a project multiple times with different target lists and global properties (examples in [project reference protocol](../ProjectReference-Protocol.md)). When building a graph, where projects are built before the projects that reference them, we have to determine the target list to execute on each project statically.
@@ -297,56 +389,50 @@ Because referenced projects and their entry targets are guaranteed to be in the 
 ### Isolated graph builds
 When building a graph in isolated mode, the graph is used to traverse and build the projects in the right order, but each individual project is built in isolation. The build result cache will just be in memory exactly as it is today, but on cache miss it will error. This enforces that both the graph and target mappings are complete and correct.
 
-Furthermore, running in this mode enforces that each (project, global properties) pair is executed only once and must execute all targets needed by all projects which reference that node. This gives it a concrete start and end time, which leads to some perf optimizations, like garbage collecting all project state (except the build results) once it finishes building. This can greatly reduce the memory overhead for large builds.
+Furthermore, running in this mode enforces that each (project, global properties) pair is executed only once and must execute all targets needed by all projects which reference that node. This gives it a concrete start and end time, which leads to some potential perf optimizations, like garbage collecting all project state (except the build results) once it finishes building. This can greatly reduce the memory overhead for large builds.
 
 This discrete start and end time also allows for easy integration with [I/O Tracking](#io-tracking) to observe all inputs and outputs for a project. Note however that I/O during target execution, particular target execution which may not normally happen as part of a project's individual build execution, would be attributed to the project reference project rather the project with the project reference. This differs from today's behavior, but seems like a desirable difference anyway.
 
 ### Single project isolated builds
 When building a single project in isolation, all project references' build results must be provided to the project externally. Specifically, the results will need to be [deserialized](#deserialization) from files and loaded into the build result cache in memory.
 
+When MSBuild runs in isolation mode, it fails the build when it detects:
+1. `MSBuild` task calls which cannot be served from the cache. Cache misses are illegal.
+2. `MSBuild` task calls to project files which were not defined in the `ProjectReference` item.
+
 Because of this, single project isolated builds is quite restrictive and is not intended to be used directly by end-users. Instead the scenario is intended for higher-order build engines which support caching and [distribution](#distribution).
 
-There is also the possibility for these higher-order build engines and even Visual Studio to enable extremely fast incremental builds for a project. For example, when all project references' build results are provided (and validated as up to date by that higher-order build engine), there is no need to evaluate or execute any targets on any other project.
+There is also the possibility for these higher-order build engines and even Visual Studio to enable faster incremental builds for a project. For example, when a project's references' build results are provided via file caches (and validated as up to date by that higher-order build engine), there is no need to evaluate or execute any targets for any reference.
 
-These incremental builds can even be extended to multiple projects by keeping a project graph in memory as well as the last build result for each node and whether that build result is valid. The higher-order build engine can then itself traverse the graph and do single project isolated builds for projects which are not currently up to date.
+These incremental builds could be extended to the entire graph by keeping a project graph in memory as well as the last build result cache files for each node and whether a node's results are up to date. The higher-order build engine can then itself traverse the graph and do single project isolated builds only for projects which are not currently up to date.
 
-### Single project isolated builds: implementation details
-
-<!-- workflow -->
-Single project builds can be achieved by providing MSBuild with input and output cache files.
-
-The input cache files contain the cached results of all of the current project's references. This way, when the current project executes, it will naturally build its references via [MSBuild task](https://docs.microsoft.com/en-us/visualstudio/msbuild/msbuild-task) calls. The engine, instead of executing these tasks, will serve them from the provided input caches. 
-
-The output cache file tells MSBuild where it should serialize the results of the current project. This output cache would become an input cache for all other projects that depend on the current project.
-The output cache file can be ommited in which case the build would just reuse prior results but not write out any new results. This could be useful when one wants to replay a build from previous caches.
-
-The presence of either input or output caches turns on the isolated build constraints. The engine will fail the build on:
-- `MSBuild` task calls to project files which were not defined in the `ProjectReference` item at evaluation time.
-- `MSBuild` task calls which cannot be served from the cache
-
-<!-- cache structure -->
-These cache files contain the serialized state of MSBuild's [ConfigCache](https://github.com/Microsoft/msbuild/blob/master/src/Build/BackEnd/Components/Caching/ConfigCache.cs) and [ResultsCache](https://github.com/Microsoft/msbuild/blob/master/src/Build/BackEnd/Components/Caching/ResultsCache.cs). These two caches have been traditionally used by the engine to cache build results.
-
-Cache structure: `(project path, global properties) -> results`
-
-<!-- cache lifetime -->
-The caches are applicable for the entire duration of the MSBuild.exe process. The input and output caches have the same lifetime as the `ConfigCache` and the `ResultsCache`. The `ConfigCache` and the `ResultsCache` are owned by the [BuildManager](https://github.com/Microsoft/msbuild/blob/master/src/Build/BackEnd/BuildManager/BuildManager.cs), and their lifetimes are one `BuildManager.BeginBuild` / `BuildManager.EndBuild` session. Since MSBuild.exe uses one BuildManager with one BeginBuild / EndBuild session, the cache lifetime is the same as the entire process lifetime.
-
-<!-- constraints -->
-The following are cache file constraints enforced by the engine.
-
-Input cache files constraints:
-- A ConfigCache / ResultsCache mapping must be unique between all input caches (multiple input caches cannot provide information for the same cache entry)
-- For each input cache, `ConfigCache.Entries.Size == ResultsCache.Entries.Size`
-- For each input cache, there is exactly one mapping from ConfigCache to ResultsCache
-
-Output cache file constraints:
-- the output cache file contains results only for additional work performed in the current BeginBuild / EndBuild session. Entries from input caches are not transferred to the output cache.
+Details on how isolation and cache files are implemented in MSBuild can be found [here](./static-graph-implementation-details.md).
 
 #### APIs
-Caches are provided via [BuildParameters](https://github.com/Microsoft/msbuild/blob/2d4dc592a638b809944af10ad1e48e7169e40808/src/Build/BackEnd/BuildManager/BuildParameters.cs#L746-L764). They are applied in `BuildManager.BeginBuild`
-#### Command line 
+Cache file information is provided via [BuildParameters](https://github.com/Microsoft/msbuild/blob/2d4dc592a638b809944af10ad1e48e7169e40808/src/Build/BackEnd/BuildManager/BuildParameters.cs#L746-L764). Input caches are applied in `BuildManager.BeginBuild`. Output cache files are written in `BuildManager.EndBuild`. Thus, the scope of the caches are one BuildManager BeginBuild/EndBuild session.
+
+Isolation constraints are turned on via [BuildParameters.IsolateProjects](https://github.com/microsoft/msbuild/blob/b111470ae61eba02c6102374c2b7d62aebe45f5b/src/Build/BackEnd/BuildManager/BuildParameters.cs#L742). Isolation constraints are also automatically turned on if either input or output cache files are used.
+
+#### Command line
 Caches are provided to MSBuild.exe via the multi value `/inputResultsCaches` and the single value `/outputResultsCache`.
+Isolation constraints are turned on via `/isolate` (they are also implicitly activated when either input or output caches are used).
+
+#### Exempting references from isolation constraints
+In certain situations one may want to exempt a reference from isolation constraints. A few potential cases:
+- debugging / onboarding to isolation constraints
+- exempting references whose project files are generated at build times with random names (for example, each WPF project, before the Build target, generates and builds a helper .csproj with a random file name)
+- relaxing constraints for MSBuild task calling patterns that static graph cannot express (for exemple, if a project is calculating references, or the targets to call on references, at runtime via an arbitrary algorithm)
+
+A project is exempt from isolation constraints by adding its full path to the `GraphIsolationExemptReference` item. For example, if project A.csproj references project B.csproj, the following snippet exempts B.csproj from isolation constraints while A.csproj is built:
+```xml
+<ItemGroup>
+  <GraphIsolationExemptReference Include="/Full/Path/To/B.csproj" />
+</ItemGroup>
+```
+
+A reference is exempt only in projects that add the reference in `GraphIsolationExemptReference`. If multiple projects need to exempt the same reference, all of them need to add the reference to `GraphIsolationExemptReference`.
+
+For now, self-builds (a project building itself with different global properties) are also exempt from isolation constraints, but this behaviour is of dubious value and might be changed in the future.
 
 ## I/O Tracking
 To help facilitate caching of build outputs by a higher-order build engine, MSBuild needs to track all I/O that happens as part of a build.
@@ -381,3 +467,78 @@ To support this scenario, a new MSBuild Task API could be introduced which allow
 Similarly for a theoretical server mode for MSBuild, MSBuild would need to report its own I/O rather than the higher-order build engine detouring the process externally. For example, if the higher-order build engine connected to an existing running MSBuild process to make build requests, it could not detour that process and so MSBuild would need to report all I/O done as part of a particular build request.
 
 **OPEN ISSUE:** As described above in an open issue, tool servers are the only scenario which would not be supportable by just externally detouring the MSBuild process. The amount of investment required to enable tool servers is quite high and spans across multiple codebases: MSBuild needs to detour itself, MSBuild need to expose a new Tasks API, the `Csc` task needs to opt into that API, and the higher-order build engine needs to opt-in to MSBuild reporting its own I/O, as well as detecting that the feature is supported in the version of MSBuild it's using. Tool servers may add substantial performance gain, but the investment is also substantial.
+
+## Examples
+
+To illustrate the difference between `-graph` and `-graph -isolate`, consider these two projects, which are minimal except for a new target in the referenced project that is consumed in the referencing project.
+
+`Referenced\Referenced.csproj`:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <UnusualOutput>Configuration\Unusual.txt</UnusualOutput>
+  </PropertyGroup>
+
+  <Target Name="UnusualThing" Returns="$(UnusualOutput)" />
+</Project>
+```
+
+`Referencing\Referencing.csproj`:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Referenced\Referenced.csproj" />
+  </ItemGroup>
+
+  <Target Name="GetUnusualThing" BeforeTargets="BeforeBuild">
+    <MSBuild Projects="..\Referenced\Referenced.csproj"
+             Targets="UnusualThing">
+      <Output TaskParameter="TargetOutputs"
+              ItemName="Content" />
+    </MSBuild>
+  </Target>
+</Project>
+```
+
+This project can successfully build with `-graph`
+
+```sh-session
+$ dotnet msbuild Referencing\Referencing.csproj -graph
+"Static graph loaded in 0.253 seconds: 2 nodes, 1 edges"
+  Referenced -> S:\Referenced\bin\Debug\netcoreapp3.1\Referenced.dll
+  Referencing -> S:\Referencing\bin\Debug\netcoreapp3.1\Referencing.dll
+```
+
+But fails with `-graph -isolate`
+
+```sh-session
+$ dotnet msbuild Referencing\Referencing.csproj -graph -isolate
+"Static graph loaded in 0.255 seconds: 2 nodes, 1 edges"
+  Referenced -> S:\Referenced\bin\Debug\netcoreapp3.1\Referenced.dll
+S:\Referencing\Referencing.csproj(12,5): error : MSB4252: Project "S:\Referencing\Referencing.csproj" with global properties
+S:\Referencing\Referencing.csproj(12,5): error :     (IsGraphBuild=true)
+S:\Referencing\Referencing.csproj(12,5): error :     is building project "S:\Referenced\Referenced.csproj" with global properties
+S:\Referencing\Referencing.csproj(12,5): error :     (IsGraphBuild=true)
+S:\Referencing\Referencing.csproj(12,5): error :     with the (UnusualThing) target(s) but the build result for the built project is not in the engine cache. In isolated builds this could mean one of the following:
+S:\Referencing\Referencing.csproj(12,5): error :     - the reference was called with a target which is not specified in the ProjectReferenceTargets item in project "S:\Referencing\Referencing.csproj"
+S:\Referencing\Referencing.csproj(12,5): error :     - the reference was called with global properties that do not match the static graph inferred nodes
+S:\Referencing\Referencing.csproj(12,5): error :     - the reference was not explicitly specified as a ProjectReference item in project "S:\Referencing\Referencing.csproj"
+S:\Referencing\Referencing.csproj(12,5): error :
+```
+
+This part of the error is the problem here:
+
+> the reference was called with a target which is not specified in the ProjectReferenceTargets item in project "S:\Referencing\Referencing.csproj"
+
+This is unacceptable in an isolated build because it means that the cached outputs of `Referenced.csproj` will be incomplete: they won't have the results of the `GetUnusualThing` target, because it's nonstandandard (and thus not one of the "well understood to be called on `ProjectReference`s targets that are handled by default).
+
+TODO: write docs for SDK authors/build engineers on how to teach the graph about this sort of thing.

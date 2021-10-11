@@ -2,49 +2,43 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
+using System.CodeDom;
+using System.CodeDom.Compiler;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Resources;
-using System.Resources.Extensions;
-using System.Reflection;
+#if FEATURE_RESXREADER_LIVEDESERIALIZATION
+using System.ComponentModel.Design;
+#endif
+using System.Configuration;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Formatters.Binary;
-
-using Microsoft.Build.Framework;
-using Microsoft.Build.Shared;
-#if FEATURE_COM_INTEROP
-using Microsoft.Win32;
-#endif
-using System.CodeDom;
-using System.CodeDom.Compiler;
-using System.Xml;
+using System.IO;
+using System.Linq;
+using System.Resources;
+using System.Resources.Extensions;
+using System.Reflection;
 using System.Runtime.InteropServices;
-#if FEATURE_SYSTEM_CONFIGURATION
-using System.Configuration;
-#endif
-using System.Security;
-#if FEATURE_RESX_RESOURCE_READER
-using System.ComponentModel.Design;
-#endif
 #if FEATURE_APPDOMAIN
 using System.Runtime.Remoting;
 #endif
-
-#if (!STANDALONEBUILD)
-using Microsoft.Internal.Performance;
-#endif
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Versioning;
-
-using Microsoft.Build.Utilities;
+using System.Security;
+using System.Text;
+using System.Xml;
 using System.Xml.Linq;
+
+using Microsoft.Build.Eventing;
+using Microsoft.Build.Framework;
+using Microsoft.Build.Shared;
 using Microsoft.Build.Shared.FileSystem;
 using Microsoft.Build.Tasks.ResourceHandling;
+using Microsoft.Build.Utilities;
+#if FEATURE_COM_INTEROP
+using Microsoft.Win32;
+#endif
 
 namespace Microsoft.Build.Tasks
 {
@@ -56,14 +50,8 @@ namespace Microsoft.Build.Tasks
     public sealed partial class GenerateResource : TaskExtension
     {
 
-#if !FEATURE_CODEDOM
-        private readonly string CSharpLanguageName = "CSharp";
-        private readonly string VisualBasicLanguageName = "VisualBasic";
-#endif
-
-
 #region Fields
-        
+
         // This cache helps us track the linked resource files listed inside of a resx resource file
         private ResGenDependencies _cache;
 
@@ -124,7 +112,7 @@ namespace Microsoft.Build.Tasks
         // DateTime.MinValue indicates "missing" iff _newestUncorrelatedInput != null
         private DateTime _newestUncorrelatedInputWriteTime;
 
-        // The targets may pass in the path to the SDKToolsPath. If so this should be used to generate the commandline 
+        // The targets may pass in the path to the SDKToolsPath. If so this should be used to generate the commandline
         // for logging purposes.  Also, when ExecuteAsTool is true, it determines where the system goes looking for resgen.exe
         private string _sdkToolsPath;
 
@@ -143,7 +131,7 @@ namespace Microsoft.Build.Tasks
 
         /// <summary>
         /// Table of aliases for types defined in resx / resw files
-        /// Ordinal comparer matches ResXResourceReader's use of a HashTable. 
+        /// Ordinal comparer matches ResXResourceReader's use of a HashTable.
         /// </summary>
         private Dictionary<string, string> _aliases = new Dictionary<string, string>(StringComparer.Ordinal);
 #endif // FEATURE_APPDOMAIN
@@ -154,7 +142,7 @@ namespace Microsoft.Build.Tasks
         private static int s_maximumCommandLength = 28000;
 #endif // FEATURE_RESGEN
 
-        // Contains the list of paths from which inputs will not be taken into account during up-to-date check.  
+        // Contains the list of paths from which inputs will not be taken into account during up-to-date check.
         private ITaskItem[] _excludedInputPaths;
 
 #if FEATURE_APPDOMAIN
@@ -250,7 +238,7 @@ namespace Microsoft.Build.Tasks
         /// Storage for names of *all files* written to disk.  This is part of the implementation
         /// for Clean, and contains the OutputResources items and the StateFile item.
         /// Includes any output files that were already up to date, but not any output files
-        /// that failed to be written due to an error. 
+        /// that failed to be written due to an error.
         /// </summary>
         [Output]
         public ITaskItem[] FilesWritten
@@ -287,8 +275,8 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Specifies the resource namespace or manifest prefix to use in the generated 
-        /// class source for the strongly typed resource. 
+        /// Specifies the resource namespace or manifest prefix to use in the generated
+        /// class source for the strongly typed resource.
         /// </summary>
         public string StronglyTypedManifestPrefix
         {
@@ -341,7 +329,7 @@ namespace Microsoft.Build.Tasks
         /// <summary>
         /// (default = false)
         /// When true, a new AppDomain is always created to evaluate the .resx files.
-        /// When false, a new AppDomain is created only when it looks like a user's 
+        /// When false, a new AppDomain is created only when it looks like a user's
         ///  assembly is referenced by the .resx.
         /// </summary>
         public bool NeverLockTypeAssemblies
@@ -361,9 +349,9 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Property to allow multitargeting of ResolveComReferences:  If true, tlbimp.exe and 
+        /// Property to allow multitargeting of ResolveComReferences:  If true, tlbimp.exe and
         /// aximp.exe from the appropriate target framework will be run out-of-proc to generate
-        /// the necessary wrapper assemblies.  
+        /// the necessary wrapper assemblies.
         /// </summary>
         public bool ExecuteAsTool
         {
@@ -394,8 +382,8 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Property used to set whether tracked incremental build will be used. If true, 
-        /// incremental build is turned on; otherwise, a rebuild will be forced.  
+        /// Property used to set whether tracked incremental build will be used. If true,
+        /// incremental build is turned on; otherwise, a rebuild will be forced.
         /// </summary>
         public bool MinimalRebuildFromTracking
         {
@@ -407,12 +395,12 @@ namespace Microsoft.Build.Tasks
 
             set
             {
-                // do nothing 
+                // do nothing
             }
         }
 
         /// <summary>
-        /// True if we should be tracking file access patterns - necessary for incremental 
+        /// True if we should be tracking file access patterns - necessary for incremental
         /// build support.
         /// </summary>
         public bool TrackFileAccess
@@ -424,12 +412,12 @@ namespace Microsoft.Build.Tasks
             }
             set
             {
-                // do nothing 
+                // do nothing
             }
         }
 
         /// <summary>
-        /// Names of the read tracking logs.  
+        /// Names of the read tracking logs.
         /// </summary>
         [SuppressMessage("Microsoft.Naming", "CA1702:CompoundWordsShouldBeCasedCorrectly", MessageId = "TLog", Justification = "Has now shipped as public API; plus it's unclear whether 'Tlog' or 'TLog' is the preferred casing")]
         public ITaskItem[] TLogReadFiles
@@ -453,7 +441,7 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Intermediate directory into which the tracking logs from running this task will be placed.  
+        /// Intermediate directory into which the tracking logs from running this task will be placed.
         /// </summary>
         public string TrackerLogDirectory
         {
@@ -468,9 +456,9 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Microsoft.Build.Utilities.ExecutableType of ResGen.exe.  Used to determine whether or not 
+        /// Microsoft.Build.Utilities.ExecutableType of ResGen.exe.  Used to determine whether or not
         /// Tracker.exe needs to be used to spawn ResGen.exe.  If empty, uses a heuristic to determine
-        /// a default architecture. 
+        /// a default architecture.
         /// </summary>
         public string ToolArchitecture
         {
@@ -486,13 +474,13 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Path to the appropriate .NET Framework location that contains FileTracker.dll.  If set, the user 
-        /// takes responsibility for making sure that the bitness of the FileTracker.dll that they pass matches 
+        /// Path to the appropriate .NET Framework location that contains FileTracker.dll.  If set, the user
+        /// takes responsibility for making sure that the bitness of the FileTracker.dll that they pass matches
         /// the bitness of the ResGen.exe that they intend to use. If not set, the task decides the appropriate
-        /// location based on the current .NET Framework version. 
+        /// location based on the current .NET Framework version.
         /// </summary>
         /// <comments>
-        /// Should only need to be used in partial or full checked in toolset scenarios. 
+        /// Should only need to be used in partial or full checked in toolset scenarios.
         /// </comments>
         public string TrackerFrameworkPath
         {
@@ -508,13 +496,13 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Path to the appropriate Windows SDK location that contains Tracker.exe.  If set, the user takes 
-        /// responsibility for making sure that the bitness of the Tracker.exe that they pass matches the 
-        /// bitness of the ResGen.exe that they intend to use. If not set, the task decides the appropriate 
-        /// location based on the current Windows SDK. 
+        /// Path to the appropriate Windows SDK location that contains Tracker.exe.  If set, the user takes
+        /// responsibility for making sure that the bitness of the Tracker.exe that they pass matches the
+        /// bitness of the ResGen.exe that they intend to use. If not set, the task decides the appropriate
+        /// location based on the current Windows SDK.
         /// </summary>
         /// <comments>
-        /// Should only need to be used in partial or full checked in toolset scenarios. 
+        /// Should only need to be used in partial or full checked in toolset scenarios.
         /// </comments>
         public string TrackerSdkPath
         {
@@ -626,19 +614,19 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Generate the parts of the resgen command line that are don't involve resgen.exe itself or the 
-        /// resources to be generated. 
+        /// Generate the parts of the resgen command line that are don't involve resgen.exe itself or the
+        /// resources to be generated.
         /// </summary>
         /// <comments>
-        /// Expects resGenCommand to be non-null -- otherwise, it doesn't get passed back to the caller, so it's 
+        /// Expects resGenCommand to be non-null -- otherwise, it doesn't get passed back to the caller, so it's
         /// useless anyway.
         /// </comments>
         /// <param name="resGenCommand"></param>
         private void GenerateResGenCommandLineWithoutResources(CommandLineBuilderExtension resGenCommand)
         {
             // Throw an internal error, since this method should only ever get called by other aspects of this task, not
-            // anything that the user touches. 
-            ErrorUtilities.VerifyThrowInternalNull(resGenCommand, "resGenCommand");
+            // anything that the user touches.
+            ErrorUtilities.VerifyThrowInternalNull(resGenCommand, nameof(resGenCommand));
 
             // append the /useSourcePath flag if requested.
             if (UseSourcePath)
@@ -675,12 +663,10 @@ namespace Microsoft.Build.Tasks
         public override bool Execute()
         {
             bool outOfProcExecutionSucceeded = true;
-#if (!STANDALONEBUILD)
-            using (new CodeMarkerStartEnd(CodeMarkerEvent.perfMSBuildGenerateResourceBegin, CodeMarkerEvent.perfMSBuildGenerateResourceEnd))
-#endif
+            MSBuildEventSource.Log.GenerateResourceOverallStart();
             {
                 // If we're extracting ResW files from assemblies (instead of building resources),
-                // our Sources can contain PDB's, pictures, and other non-DLL's.  Prune that list.  
+                // our Sources can contain PDB's, pictures, and other non-DLL's.  Prune that list.
                 // .NET Framework assemblies are not included.  However, other Microsoft ones
                 // such as MSTestFramework may be included (resolved from GetSDKReferenceFiles).
                 if (ExtractResWFiles && Sources != null)
@@ -704,7 +690,6 @@ namespace Microsoft.Build.Tasks
                     }
                     Sources = newSources.ToArray();
                 }
-
 
                 // If there are no sources to process, just return (with success) and report the condition.
                 if ((Sources == null) || (Sources.Length == 0))
@@ -751,7 +736,7 @@ namespace Microsoft.Build.Tasks
                 {
                     if (!ComputePathToResGen())
                     {
-                        // unable to compute the path to resgen.exe and that is necessary to 
+                        // unable to compute the path to resgen.exe and that is necessary to
                         // continue forward, so return now.
                         return false;
                     }
@@ -849,7 +834,7 @@ namespace Microsoft.Build.Tasks
                             this.StronglyTypedClassName = process.StronglyTypedClassName; // in case a default was chosen
                             this.StronglyTypedFileName = process.StronglyTypedFilename;   // in case a default was chosen
                             _stronglyTypedResourceSuccessfullyCreated = process.StronglyTypedResourceSuccessfullyCreated;
-                            if (null != process.UnsuccessfullyCreatedOutFiles)
+                            if (process.UnsuccessfullyCreatedOutFiles != null)
                             {
                                 foreach (string item in process.UnsuccessfullyCreatedOutFiles)
                                 {
@@ -879,7 +864,7 @@ namespace Microsoft.Build.Tasks
                                 {
                                     OutputResources = outputResources;
                                 }
-                                
+
                                 // Get portable library cache info (and if needed, marshal it to this AD).
                                 List<ResGenDependencies.PortableLibraryFile> portableLibraryCacheInfo = process.PortableLibraryCacheInfo;
                                 for (int i = 0; i < portableLibraryCacheInfo.Count; i++)
@@ -921,7 +906,7 @@ namespace Microsoft.Build.Tasks
                         }
                     }
                 }
-                
+
                 // And now we serialize the cache to save our resgen linked file resolution for later use.
                 WriteStateFile();
 
@@ -929,6 +914,8 @@ namespace Microsoft.Build.Tasks
 
                 RecordFilesWritten();
             }
+
+            MSBuildEventSource.Log.GenerateResourceOverallStop();
 
             return !Log.HasLoggedErrors && outOfProcExecutionSucceeded;
         }
@@ -968,7 +955,7 @@ namespace Microsoft.Build.Tasks
                 internetSecurityManager = (IInternetSecurityManager)Activator.CreateInstance(iismType);
             }
 
-            Int32 zone = 0;
+            int zone;
             internetSecurityManager.MapUrlToZone(Path.GetFullPath(filename), out zone, 0);
             if (zone < ZoneInternet)
             {
@@ -1067,7 +1054,7 @@ namespace Microsoft.Build.Tasks
 #endif // FEATURE_APPDOMAIN
 
         /// <summary>
-        /// Computes the path to ResGen.exe for use in logging and for passing to the 
+        /// Computes the path to ResGen.exe for use in logging and for passing to the
         /// nested ResGen task.
         /// </summary>
         /// <returns>True if the path is found (or it doesn't matter because we're executing in memory), false otherwise</returns>
@@ -1078,13 +1065,20 @@ namespace Microsoft.Build.Tasks
 
             if (String.IsNullOrEmpty(_sdkToolsPath))
             {
-                _resgenPath = ToolLocationHelper.GetPathToDotNetFrameworkSdkFile("resgen.exe", TargetDotNetFrameworkVersion.Version35);
+                // Important: the GenerateResource task is declared twice in Microsoft.Common.CurrentVersion.targets:
+                // https://github.com/dotnet/msbuild/blob/369631b4b21ef485f4d6f35e16b0c839a971b0e9/src/Tasks/Microsoft.Common.CurrentVersion.targets#L3177-L3178
+                // First for CLR >= 4.0, where SdkToolsPath is passed $(ResgenToolPath) which in turn is set to
+                // $(TargetFrameworkSDKToolsDirectory).
+                // But for CLR < 4.0 the SdkToolsPath is not passed, so we need to explicitly assume 3.5:
+                var version = TargetDotNetFrameworkVersion.Version35;
 
-                if (null == _resgenPath && ExecuteAsTool)
+                _resgenPath = ToolLocationHelper.GetPathToDotNetFrameworkSdkFile("resgen.exe", version);
+
+                if (_resgenPath == null && ExecuteAsTool)
                 {
                     Log.LogErrorWithCodeFromResources("General.PlatformSDKFileNotFound", "resgen.exe",
-                        ToolLocationHelper.GetDotNetFrameworkSdkInstallKeyValue(TargetDotNetFrameworkVersion.Version35),
-                        ToolLocationHelper.GetDotNetFrameworkSdkRootRegistryKey(TargetDotNetFrameworkVersion.Version35));
+                        ToolLocationHelper.GetDotNetFrameworkSdkInstallKeyValue(version),
+                        ToolLocationHelper.GetDotNetFrameworkSdkRootRegistryKey(version));
                 }
             }
             else
@@ -1098,7 +1092,7 @@ namespace Microsoft.Build.Tasks
                     ExecuteAsTool);
             }
 
-            if (null == _resgenPath && !ExecuteAsTool)
+            if (_resgenPath == null && !ExecuteAsTool)
             {
                 // if Resgen.exe is not installed, just use the filename
                 _resgenPath = String.Empty;
@@ -1106,7 +1100,7 @@ namespace Microsoft.Build.Tasks
             }
 
             // We may be passing this to the ResGen task (wrapper around resgen.exe), in which case
-            // we want to pass just the path -- ResGen will attach the "resgen.exe" onto the end 
+            // we want to pass just the path -- ResGen will attach the "resgen.exe" onto the end
             // itself.
             if (_resgenPath != null)
             {
@@ -1147,13 +1141,13 @@ namespace Microsoft.Build.Tasks
 #endif
         }
 
-
 #if FEATURE_RESGEN
         /// <summary>
-        /// Given an instance of the ResGen task with everything but the strongly typed 
+        /// Given an instance of the ResGen task with everything but the strongly typed
         /// resource-related parameters filled out, execute the task and return the result
         /// </summary>
-        /// <param name="resGen">The task to execute.</param>
+        /// <param name="inputsToProcess">Input files to give to resgen.exe.</param>
+        /// <param name="outputsToProcess">Output files to give to resgen.exe.</param>
         private bool TransformResourceFilesUsingResGen(List<ITaskItem> inputsToProcess, List<ITaskItem> outputsToProcess)
         {
             ErrorUtilities.VerifyThrow(inputsToProcess.Count != 0, "There should be resource files to process");
@@ -1162,7 +1156,7 @@ namespace Microsoft.Build.Tasks
             bool succeeded = true;
 
             // We need to do a whole lot of work to make sure that we're not overrunning the command line ... UNLESS
-            // we're running ResGen 4.0 or later, which supports response files. 
+            // we're running ResGen 4.0 or later, which supports response files.
             if (!_resgenPath.Equals(Path.GetDirectoryName(NativeMethodsShared.GetLongFilePath(ToolLocationHelper.GetPathToDotNetFrameworkSdkFile("resgen.exe", TargetDotNetFrameworkVersion.Version35))), StringComparison.OrdinalIgnoreCase))
             {
                 ResGen resGen = CreateResGenTaskWithDefaultParameters();
@@ -1188,7 +1182,6 @@ namespace Microsoft.Build.Tasks
             else
             {
                 int initialResourceIndex = 0;
-                int numberOfResourcesToAdd = 0;
                 bool doneProcessingResources = false;
                 CommandLineBuilderExtension resourcelessCommandBuilder = new CommandLineBuilderExtension();
                 string resourcelessCommand = null;
@@ -1202,7 +1195,7 @@ namespace Microsoft.Build.Tasks
 
                 while (!doneProcessingResources)
                 {
-                    numberOfResourcesToAdd = CalculateResourceBatchSize(inputsToProcess, outputsToProcess, resourcelessCommand, initialResourceIndex);
+                    int numberOfResourcesToAdd = CalculateResourceBatchSize(inputsToProcess, outputsToProcess, resourcelessCommand, initialResourceIndex);
                     ResGen resGen = CreateResGenTaskWithDefaultParameters();
 
                     resGen.InputFiles = inputsToProcess.GetRange(initialResourceIndex, numberOfResourcesToAdd).ToArray();
@@ -1257,10 +1250,10 @@ namespace Microsoft.Build.Tasks
                 i++;
             }
 
-            int numberOfResourcesToAdd = 0;
+            int numberOfResourcesToAdd;
             if (currentCommand.Length <= s_maximumCommandLength)
             {
-                // We've successfully added all the rest. 
+                // We've successfully added all the rest.
                 numberOfResourcesToAdd = i - initialResourceIndex;
             }
             else
@@ -1273,10 +1266,11 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Given an instance of the ResGen task with everything but the strongly typed 
+        /// Given an instance of the ResGen task with everything but the strongly typed
         /// resource-related parameters filled out, execute the task and return the result
         /// </summary>
-        /// <param name="resGen">The task to execute.</param>
+        /// <param name="inputsToProcess">Input files to give to resgen.exe.</param>
+        /// <param name="outputsToProcess">Output files to give to resgen.exe.</param>
         private bool GenerateStronglyTypedResourceUsingResGen(List<ITaskItem> inputsToProcess, List<ITaskItem> outputsToProcess)
         {
             ErrorUtilities.VerifyThrow(inputsToProcess.Count == 1 && outputsToProcess.Count == 1, "For STR, there should only be one input and one output.");
@@ -1301,7 +1295,7 @@ namespace Microsoft.Build.Tasks
                 _unsuccessfullyCreatedOutFiles.Add(outputFile.ItemSpec);
             }
 
-            // now need to set the defaults (if defaults were chosen) so that they can be 
+            // now need to set the defaults (if defaults were chosen) so that they can be
             // consumed by outside users
             StronglyTypedClassName = resGen.StronglyTypedClassName;
             StronglyTypedFileName = resGen.StronglyTypedFileName;
@@ -1310,10 +1304,9 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Factoring out the setting of the default parameters to the 
-        /// ResGen task. 
+        /// Factoring out the setting of the default parameters to the
+        /// ResGen task.
         /// </summary>
-        /// <param name="resGen"></param>
         private ResGen CreateResGenTaskWithDefaultParameters()
         {
             ResGen resGen = new ResGen();
@@ -1346,7 +1339,7 @@ namespace Microsoft.Build.Tasks
             if (_stronglyTypedLanguage != null)
             {
                 // Like Resgen.exe, only a single Sources is allowed if you are generating STR.
-                // Otherwise, each STR class overwrites the previous one. In theory we could generate separate 
+                // Otherwise, each STR class overwrites the previous one. In theory we could generate separate
                 // STR classes for each input, but then the class name and file name parameters would have to be vectors.
                 if (Sources.Length != 1)
                 {
@@ -1358,7 +1351,7 @@ namespace Microsoft.Build.Tasks
             {
                 if (StronglyTypedClassName != null || StronglyTypedNamespace != null || StronglyTypedFileName != null || StronglyTypedManifestPrefix != null)
                 {
-                    // We have no language to generate a STR, but nevertheless the user passed us a class, 
+                    // We have no language to generate a STR, but nevertheless the user passed us a class,
                     // namespace, and/or filename. Let them know that they probably wanted to pass a language too.
                     Log.LogErrorWithCodeFromResources("GenerateResource.STRClassNamespaceOrFilenameWithoutLanguage");
                     return false;
@@ -1402,7 +1395,7 @@ namespace Microsoft.Build.Tasks
                     // However, our cache will sometimes record all the info we need (for incremental builds).
                     string sourceFileName = Sources[i].ItemSpec;
                     ResGenDependencies.PortableLibraryFile library = _cache.TryGetPortableLibraryInfo(sourceFileName);
-                    if (library != null && library.AllOutputFilesAreUpToDate())
+                    if (library?.AllOutputFilesAreUpToDate() == true)
                     {
                         AppendCachedOutputTaskItems(library, cachedOutputFiles);
                     }
@@ -1426,7 +1419,7 @@ namespace Microsoft.Build.Tasks
                 }
                 else
                 {
-                    // check to see if the output resources file (and, if it is a .resx, any linked files) 
+                    // check to see if the output resources file (and, if it is a .resx, any linked files)
                     // is up to date compared to the input file
                     if (ShouldRebuildResgenOutputFile(Sources[i].ItemSpec, OutputResources[i].ItemSpec))
                     {
@@ -1449,11 +1442,11 @@ namespace Microsoft.Build.Tasks
                 }
             }
         }
-        
+
         /// <summary>
         /// Given a cached portable library that is up to date, create ITaskItems to represent the output of the task, as if we did real work.
         /// </summary>
-        /// <param name="library">The portable library cache entry to extract output files & metadata from.</param>
+        /// <param name="library">The portable library cache entry to extract output files and metadata from.</param>
         /// <param name="cachedOutputFiles">List of output files produced from the cache.</param>
         private void AppendCachedOutputTaskItems(ResGenDependencies.PortableLibraryFile library, List<ITaskItem> cachedOutputFiles)
         {
@@ -1537,15 +1530,15 @@ namespace Microsoft.Build.Tasks
             if (!String.Equals(extension, ".resx", StringComparison.OrdinalIgnoreCase) &&
                 !String.Equals(extension, ".resw", StringComparison.OrdinalIgnoreCase))
             {
-                // If source file is NOT a .resx, for example a .restext file, 
+                // If source file is NOT a .resx, for example a .restext file,
                 // timestamp checking is simple, because there's no linked files to examine, and no references.
                 return NeedToRebuildSourceFile(sourceFilePath, sourceTime, outputFilePath, outputTime);
             }
 
             // OK, we have a .resx file
 
-            // PERF: Regardless of whether the outputFile exists, if the source file is a .resx 
-            // go ahead and retrieve it from the cache. This is because we want the cache 
+            // PERF: Regardless of whether the outputFile exists, if the source file is a .resx
+            // go ahead and retrieve it from the cache. This is because we want the cache
             // to be populated so that incremental builds can be fast.
             // Note that this is a trade-off: clean builds will be slightly slower. However,
             // for clean builds we're about to read in this very same .resx file so reading
@@ -1567,8 +1560,8 @@ namespace Microsoft.Build.Tasks
                 return true;
             }
 
-            // if the .resources file is out of date even just with respect to the .resx or 
-            // the additional inputs, we don't need to go to the point of checking the linked files. 
+            // if the .resources file is out of date even just with respect to the .resx or
+            // the additional inputs, we don't need to go to the point of checking the linked files.
             if (NeedToRebuildSourceFile(sourceFilePath, sourceTime, outputFilePath, outputTime))
             {
                 // This already logged the reason
@@ -1605,8 +1598,8 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Returns true if the output does not exist, if the provided source is newer than the output, 
-        /// or if any of the set of additional inputs is newer than the output.  Otherwise, returns false. 
+        /// Returns true if the output does not exist, if the provided source is newer than the output,
+        /// or if any of the set of additional inputs is newer than the output.  Otherwise, returns false.
         /// </summary>
         private bool NeedToRebuildSourceFile(string sourceFilePath, DateTime sourceTime, string outputFilePath, DateTime outputTime)
         {
@@ -1636,7 +1629,7 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Add the strongly typed resource to the set of resources to process if it is out of date. 
+        /// Add the strongly typed resource to the set of resources to process if it is out of date.
         /// </summary>
         private void GetStronglyTypedResourceToProcess(ref List<ITaskItem> inputsToProcess, ref List<ITaskItem> outputsToProcess)
         {
@@ -1647,22 +1640,18 @@ namespace Microsoft.Build.Tasks
             {
                 if (StronglyTypedFileName == null)
                 {
-#if FEATURE_CODEDOM
                     CodeDomProvider provider = null;
 
                     if (ProcessResourceFiles.TryCreateCodeDomProvider(Log, StronglyTypedLanguage, out provider))
                     {
                         StronglyTypedFileName = ProcessResourceFiles.GenerateDefaultStronglyTypedFilename(provider, OutputResources[0].ItemSpec);
                     }
-#else
-                    StronglyTypedFileName = TryGenerateDefaultStronglyTypedFilename();
-#endif
                 }
             }
             catch (Exception e) when (ExceptionHandling.IsIoRelatedException(e))
             {
                 Log.LogErrorWithCodeFromResources("GenerateResource.CannotWriteSTRFile", StronglyTypedFileName, e.Message);
-                // Now that we've logged an error, we know we're not going to do anything more, so 
+                // Now that we've logged an error, we know we're not going to do anything more, so
                 // don't bother to correctly populate the inputs / outputs.
                 _unsuccessfullyCreatedOutFiles.Add(OutputResources[0].ItemSpec);
                 _stronglyTypedResourceSuccessfullyCreated = false;
@@ -1753,10 +1742,9 @@ namespace Microsoft.Build.Tasks
         /// <summary>
         /// Make the decision about whether a separate AppDomain is needed.
         /// If this algorithm is unsure about whether a separate AppDomain is
-        /// needed, it should always err on the side of returning 'true'. This 
+        /// needed, it should always err on the side of returning 'true'. This
         /// is because a separate AppDomain, while slow to create, is always safe.
         /// </summary>
-        /// <param name="sources">The list of .resx files.</param>
         /// <returns></returns>
         private bool NeedSeparateAppDomain()
         {
@@ -1770,15 +1758,15 @@ namespace Microsoft.Build.Tasks
             {
                 string extension = Path.GetExtension(source.ItemSpec);
 
-                if (String.Compare(extension, ".resources.dll", StringComparison.OrdinalIgnoreCase) == 0 ||
-                    String.Compare(extension, ".dll", StringComparison.OrdinalIgnoreCase) == 0 ||
-                    String.Compare(extension, ".exe", StringComparison.OrdinalIgnoreCase) == 0)
+                if (String.Equals(extension, ".resources.dll", StringComparison.OrdinalIgnoreCase) ||
+                    String.Equals(extension, ".dll", StringComparison.OrdinalIgnoreCase) ||
+                    String.Equals(extension, ".exe", StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
 
-                if (String.Compare(extension, ".resx", StringComparison.OrdinalIgnoreCase) == 0 ||
-                    String.Compare(extension, ".resw", StringComparison.OrdinalIgnoreCase) == 0)
+                if (String.Equals(extension, ".resx", StringComparison.OrdinalIgnoreCase) ||
+                    String.Equals(extension, ".resw", StringComparison.OrdinalIgnoreCase))
                 {
                     XmlReader reader = null;
                     string name = null;
@@ -1812,7 +1800,7 @@ namespace Microsoft.Build.Tasks
                                         {
                                             string resolvedTypeName = typeName;
 
-                                            // This type name might be an alias, so first resolve that if any.  
+                                            // This type name might be an alias, so first resolve that if any.
                                             int indexOfSeperator = typeName.IndexOf(",", StringComparison.Ordinal);
 
                                             if (indexOfSeperator != -1)
@@ -1851,7 +1839,7 @@ namespace Microsoft.Build.Tasks
                                             (
                                                 MessageImportance.Low,
                                                 "GenerateResource.SeparateAppDomainBecauseOfType",
-                                                (name == null) ? String.Empty : name,
+                                                name ?? String.Empty,
                                                 typeName,
                                                 source.ItemSpec,
                                                 ((IXmlLineInfo)reader).LineNumber
@@ -1868,7 +1856,7 @@ namespace Microsoft.Build.Tasks
                                     // There's no type attribute on this <data> -- if there's a MimeType, it's a serialized
                                     // object of unknown type, and we have to assume it will need a new app domain.
                                     // The possible mimetypes ResXResourceReader understands are:
-                                    //  
+                                    //
                                     // application/x-microsoft.net.object.binary.base64
                                     // application/x-microsoft.net.object.bytearray.base64
                                     // application/x-microsoft.net.object.binary.base64
@@ -1881,10 +1869,10 @@ namespace Microsoft.Build.Tasks
                                     // as well; ResxResourceReader will use that Type, which may not need a new app domain. So
                                     // if there's a type attribute, we don't look at mimetype.
                                     //
-                                    // If there is a mimetype and no type, we can't tell the type without deserializing and loading it, 
+                                    // If there is a mimetype and no type, we can't tell the type without deserializing and loading it,
                                     // so we assume a new appdomain is needed.
                                     //
-                                    // Actually, if application/x-microsoft.net.object.bytearray.base64 doesn't have a Type attribute, 
+                                    // Actually, if application/x-microsoft.net.object.bytearray.base64 doesn't have a Type attribute,
                                     // ResxResourceReader assumes System.String, but for safety we don't assume that here.
 
                                     string mimeType = reader.GetAttribute("mimetype");
@@ -1897,7 +1885,7 @@ namespace Microsoft.Build.Tasks
                                             (
                                                 MessageImportance.Low,
                                                 "GenerateResource.SeparateAppDomainBecauseOfMimeType",
-                                                (name == null) ? String.Empty : name,
+                                                name ?? String.Empty,
                                                 mimeType,
                                                 source.ItemSpec,
                                                 ((IXmlLineInfo)reader).LineNumber
@@ -1943,7 +1931,7 @@ namespace Microsoft.Build.Tasks
                                         MessageImportance.Low,
                                         "GenerateResource.SeparateAppDomainBecauseOfErrorDeserializingLineNumber",
                                         source.ItemSpec,
-                                        (name == null) ? String.Empty : name,
+                                        name ?? String.Empty,
                                         ((IXmlLineInfo)reader).LineNumber,
                                         e.Message
                                     );
@@ -1964,8 +1952,8 @@ namespace Microsoft.Build.Tasks
                         if (ExceptionHandling.IsCriticalException(e))
                             throw;
 
-                        // If there was any problem parsing the .resx then log a message and 
-                        // fall back to using a separate AppDomain. 
+                        // If there was any problem parsing the .resx then log a message and
+                        // fall back to using a separate AppDomain.
                         Log.LogMessageFromResources
                                     (
                                         MessageImportance.Low,
@@ -2006,7 +1994,7 @@ namespace Microsoft.Build.Tasks
                 {
                     if (!String.Equals(reader.Name, "value", StringComparison.OrdinalIgnoreCase))
                     {
-                        // <data> claimed it was serialized, but didn't have a <value>; 
+                        // <data> claimed it was serialized, but didn't have a <value>;
                         // return true to err on side of caution
                         return true;
                     }
@@ -2043,7 +2031,7 @@ namespace Microsoft.Build.Tasks
             {
                 object result = binaryFormatter.Deserialize(memoryStream);
 
-                return (result != null);
+                return result != null;
             }
         }
 
@@ -2115,15 +2103,15 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Remove any output resources that we didn't successfully create (due to error) from the 
+        /// Remove any output resources that we didn't successfully create (due to error) from the
         /// OutputResources list. Keeps the ordering of OutputResources the same.
         /// </summary>
         /// <remarks>
         /// Q: Why didn't we keep a "successfully created" list instead, like in the Copy task does, which
-        /// would save us doing the removal algorithm below? 
+        /// would save us doing the removal algorithm below?
         /// A: Because we want the ordering of OutputResources to be the same as the ordering passed in.
-        /// Some items (the up to date ones) would be added to the successful output list first, and the other items 
-        /// are added during processing, so the ordering would change. We could fix that up, but it's better to do 
+        /// Some items (the up to date ones) would be added to the successful output list first, and the other items
+        /// are added during processing, so the ordering would change. We could fix that up, but it's better to do
         /// the fix up only in the rarer error case. If there were no errors, the algorithm below skips.</remarks>
         private void RemoveUnsuccessfullyCreatedResourcesFromOutputResources()
         {
@@ -2175,7 +2163,7 @@ namespace Microsoft.Build.Tasks
             }
 
             // Add any state file
-            if (StateFile != null && StateFile.ItemSpec.Length > 0)
+            if (StateFile?.ItemSpec.Length > 0)
             {
                 // It's possible the file wasn't actually written (eg the path was invalid)
                 // We can't easily tell whether that happened here, and I think it's fine to add it anyway.
@@ -2188,43 +2176,18 @@ namespace Microsoft.Build.Tasks
             {
                 if (StronglyTypedFileName == null)
                 {
-#if FEATURE_CODEDOM
-                    CodeDomProvider provider = null;
-
+                    CodeDomProvider provider;
                     if (ProcessResourceFiles.TryCreateCodeDomProvider(Log, StronglyTypedLanguage, out provider))
                     {
                         StronglyTypedFileName = ProcessResourceFiles.GenerateDefaultStronglyTypedFilename(
                             provider, OutputResources[0].ItemSpec);
                     }
-#else
-                    StronglyTypedFileName = TryGenerateDefaultStronglyTypedFilename();
-#endif
                 }
 
                 _filesWritten.Add(new TaskItem(this.StronglyTypedFileName));
             }
         }
 
-#if !FEATURE_CODEDOM
-        private string TryGenerateDefaultStronglyTypedFilename()
-        {
-            string extension = null;
-            if (StronglyTypedLanguage == CSharpLanguageName)
-            {
-                extension = ".cs";
-            }
-            else if (StronglyTypedLanguage == VisualBasicLanguageName)
-            {
-                extension = ".vb";
-            }
-            if (extension != null)
-            {
-                return Path.ChangeExtension(OutputResources[0].ItemSpec, extension);
-            }
-            return null;
-        }
-#endif
-        
         /// <summary>
         /// Read the state file if able.
         /// </summary>
@@ -2235,7 +2198,7 @@ namespace Microsoft.Build.Tasks
             // just doesn't exist, then this method will return a brand new cache object.
 
             // This method eats IO Exceptions
-            _cache = ResGenDependencies.DeserializeCache((StateFile == null) ? null : StateFile.ItemSpec, UseSourcePath, Log);
+            _cache = ResGenDependencies.DeserializeCache(StateFile?.ItemSpec, UseSourcePath, Log);
             ErrorUtilities.VerifyThrow(_cache != null, "We did not create a cache!");
         }
 
@@ -2247,7 +2210,7 @@ namespace Microsoft.Build.Tasks
             if (_cache.IsDirty)
             {
                 // And now we serialize the cache to save our resgen linked file resolution for later use.
-                _cache.SerializeCache((StateFile == null) ? null : StateFile.ItemSpec, Log);
+                _cache.SerializeCache(StateFile?.ItemSpec, Log);
             }
         }
     }
@@ -2319,7 +2282,7 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         private bool _stronglyTypedClassIsPublic;
 
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
         /// <summary>
         /// Class that gets called by the ResxResourceReader to resolve references
         /// to assemblies within the .RESX.
@@ -2382,7 +2345,7 @@ namespace Microsoft.Build.Tasks
             }
         }
         private List<ITaskItem> _extractedResWFiles;
-        
+
         /// <summary>
         /// Record all the information about outputs here to avoid future incremental builds.
         /// </summary>
@@ -2400,7 +2363,7 @@ namespace Microsoft.Build.Tasks
         {
             get
             {
-                if (null == _unsuccessfullyCreatedOutFiles)
+                if (_unsuccessfullyCreatedOutFiles == null)
                 {
                     _unsuccessfullyCreatedOutFiles = new ArrayList();
                 }
@@ -2410,7 +2373,7 @@ namespace Microsoft.Build.Tasks
         private ArrayList _unsuccessfullyCreatedOutFiles;
 
         /// <summary>
-        /// Whether we successfully created the STR class 
+        /// Whether we successfully created the STR class
         /// </summary>
         internal bool StronglyTypedResourceSuccessfullyCreated
         {
@@ -2467,10 +2430,10 @@ namespace Microsoft.Build.Tasks
             _portableLibraryCacheInfo = new List<ResGenDependencies.PortableLibraryFile>();
             _usePreserializedResources = usePreserializedResources;
 
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
             // If references were passed in, we will have to give the ResxResourceReader an object
             // by which it can resolve types that are referenced from within the .RESX.
-            if ((_assemblyFiles != null) && (_assemblyFiles.Length > 0))
+            if ((_assemblyFiles?.Length > 0))
             {
                 _typeResolver = new AssemblyNamesTypeResolutionService(_assemblyFiles);
             }
@@ -2478,7 +2441,7 @@ namespace Microsoft.Build.Tasks
 
             try
             {
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
                 // Install assembly resolution event handler.
                 _eventHandler = new ResolveEventHandler(ResolveAssembly);
                 AppDomain.CurrentDomain.AssemblyResolve += _eventHandler;
@@ -2500,7 +2463,7 @@ namespace Microsoft.Build.Tasks
             }
             finally
             {
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
                 // Remove the event handler.
                 AppDomain.CurrentDomain.AssemblyResolve -= _eventHandler;
                 _eventHandler = null;
@@ -2508,7 +2471,7 @@ namespace Microsoft.Build.Tasks
             }
         }
 
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
         /// <summary>
         /// Callback to resolve assembly names to assemblies.
         /// </summary>
@@ -2539,7 +2502,7 @@ namespace Microsoft.Build.Tasks
                 }
 
                 // If none of the referenced assembly names matches exactly, try to find one that
-                // has the same base name.  This is here to fix bug where the 
+                // has the same base name.  This is here to fix bug where the
                 // serialized data inside the .RESX referred to the assembly just by the base name,
                 // omitting the version, culture, publickeytoken information.
                 for (int i = 0; i < _assemblyNames.Length; i++)
@@ -2548,7 +2511,7 @@ namespace Microsoft.Build.Tasks
 
                     if (candidateAssemblyName != null)
                     {
-                        if (String.Compare(requestedAssemblyName.Name, candidateAssemblyName.Name, StringComparison.CurrentCultureIgnoreCase) == 0)
+                        if (String.Equals(requestedAssemblyName.Name, candidateAssemblyName.Name, StringComparison.CurrentCultureIgnoreCase))
                         {
                             return Assembly.UnsafeLoadFrom(_assemblyFiles[i].ItemSpec);
                         }
@@ -2562,7 +2525,7 @@ namespace Microsoft.Build.Tasks
 
         private void PopulateAssemblyNames()
         {
-            // Populate the list of assembly names for all passed-in references if it hasn't 
+            // Populate the list of assembly names for all passed-in references if it hasn't
             // been populated already.
             if (_assemblyNames == null)
             {
@@ -2581,13 +2544,13 @@ namespace Microsoft.Build.Tasks
                         }
                         else
                         {
-                            // whoever passed us this reference wasn't polite enough to also 
-                            // give us a metadata with the fusion name.  Trying to load up every 
-                            // assembly here would take a lot of time, so just stick the assembly 
-                            // file name (which we assume generally maps to the simple name) into 
-                            // the list instead. If there's a fusion name that matches, we'll get 
+                            // whoever passed us this reference wasn't polite enough to also
+                            // give us a metadata with the fusion name.  Trying to load up every
+                            // assembly here would take a lot of time, so just stick the assembly
+                            // file name (which we assume generally maps to the simple name) into
+                            // the list instead. If there's a fusion name that matches, we'll get
                             // that first; otherwise there's a good chance that if the simple name
-                            // matches the file name, it's a good match.  
+                            // matches the file name, it's a good match.
                             _assemblyNames[i] = new AssemblyNameExtension(Path.GetFileNameWithoutExtension(assemblyFile.ItemSpec));
                         }
                     }
@@ -2602,7 +2565,7 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         /// <remarks>Uses the input and output file extensions to determine their format</remarks>
         /// <param name="inFile">Input resources file</param>
-        /// <param name="outFile">Output resources file</param>
+        /// <param name="outFileOrDir">Output resources file or directory</param>
         /// <returns>True if conversion was successful, otherwise false</returns>
         private bool ProcessFile(string inFile, string outFileOrDir)
         {
@@ -2637,6 +2600,12 @@ namespace Microsoft.Build.Tasks
             try
             {
                 ReadResources(inFile, _useSourcePath, outFileOrDir);
+            }
+            catch (InputFormatNotSupportedException)
+            {
+                _logger.LogErrorWithCodeFromResources(null, FileUtilities.GetFullPathNoThrow(inFile), 0, 0, 0, 0,
+                                                      "GenerateResource.CoreSupportsLimitedScenarios");
+                return false;
             }
             catch (MSBuildResXException msbuildResXException)
             {
@@ -2738,7 +2707,7 @@ namespace Microsoft.Build.Tasks
                             continue;
                         }
 
-                        // Always write the output file here - other logic prevents us from processing this 
+                        // Always write the output file here - other logic prevents us from processing this
                         // file for incremental builds if everything was up to date.
                         WriteResources(reader, currentOutputFile);
 
@@ -2754,7 +2723,7 @@ namespace Microsoft.Build.Tasks
                         }
                         ExtractedResWFiles.Add(newOutputFile);
                     }
-                    
+
                     library.OutputFiles = resWFilesForThisAssembly.ToArray();
                     _portableLibraryCacheInfo.Add(library);
                 }
@@ -2815,7 +2784,7 @@ namespace Microsoft.Build.Tasks
                 }
 
                 if (currentOutputDirectory != null &&
-                    currentOutputDirectoryAlreadyExisted == false)
+                    !currentOutputDirectoryAlreadyExisted)
                 {
                     // Do not annoy the user by removing an empty directory we did not create.
                     try
@@ -2882,7 +2851,7 @@ namespace Microsoft.Build.Tasks
             // reliably with cmd's dir command either (depending on whether you use absolute or relative paths
             // and whether there are quotes around the name).
             const int EffectiveMaxPath = 258;   // Everything <= EffectiveMaxPath should work well.
-            bool success = false;
+            bool success;
             try
             {
                 currentOutputFile = Path.GetFullPath(currentOutputFile);
@@ -2930,7 +2899,7 @@ namespace Microsoft.Build.Tasks
         /// <param name="filename">Full path to file to delete</param>
         private void RemoveCorruptedFile(string filename)
         {
-            _logger.LogWarningWithCodeFromResources("GenerateResource.CorruptOutput", FileUtilities.GetFullPathNoThrow(filename));
+            _logger.LogMessageFromResources("GenerateResource.CorruptOutput", FileUtilities.GetFullPathNoThrow(filename));
             try
             {
                 File.Delete(filename);
@@ -2953,8 +2922,7 @@ namespace Microsoft.Build.Tasks
         /// <returns>Resources format</returns>
         private Format GetFormat(string filename)
         {
-            string extension = String.Empty;
-
+            string extension;
             try
             {
                 extension = Path.GetExtension(filename);
@@ -2965,23 +2933,23 @@ namespace Microsoft.Build.Tasks
                 return Format.Error;
             }
 
-            if (String.Compare(extension, ".txt", StringComparison.OrdinalIgnoreCase) == 0 ||
-                String.Compare(extension, ".restext", StringComparison.OrdinalIgnoreCase) == 0)
+            if (String.Equals(extension, ".txt", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(extension, ".restext", StringComparison.OrdinalIgnoreCase))
             {
                 return Format.Text;
             }
-            else if (String.Compare(extension, ".resx", StringComparison.OrdinalIgnoreCase) == 0 ||
-                     String.Compare(extension, ".resw", StringComparison.OrdinalIgnoreCase) == 0)
+            else if (String.Equals(extension, ".resx", StringComparison.OrdinalIgnoreCase) ||
+                     String.Equals(extension, ".resw", StringComparison.OrdinalIgnoreCase))
             {
                 return Format.XML;
             }
-            else if (String.Compare(extension, ".resources.dll", StringComparison.OrdinalIgnoreCase) == 0 ||
-                     String.Compare(extension, ".dll", StringComparison.OrdinalIgnoreCase) == 0 ||
-                     String.Compare(extension, ".exe", StringComparison.OrdinalIgnoreCase) == 0)
+            else if (String.Equals(extension, ".resources.dll", StringComparison.OrdinalIgnoreCase) ||
+                     String.Equals(extension, ".dll", StringComparison.OrdinalIgnoreCase) ||
+                     String.Equals(extension, ".exe", StringComparison.OrdinalIgnoreCase))
             {
                 return Format.Assembly;
             }
-            else if (String.Compare(extension, ".resources", StringComparison.OrdinalIgnoreCase) == 0)
+            else if (String.Equals(extension, ".resources", StringComparison.OrdinalIgnoreCase))
             {
                 return Format.Binary;
             }
@@ -3011,7 +2979,7 @@ namespace Microsoft.Build.Tasks
         /// resources hashtable.
         /// </summary>
         /// <param name="filename">Filename to load</param>
-        /// <param name="shouldUseSourcePath">Whether to resolve paths in the 
+        /// <param name="shouldUseSourcePath">Whether to resolve paths in the
         /// resources file relative to the resources file location</param>
         /// <param name="outFileOrDir"> Output file or directory. </param>
         private void ReadResources(String filename, bool shouldUseSourcePath, String outFileOrDir)
@@ -3020,10 +2988,10 @@ namespace Microsoft.Build.Tasks
 
             if (format == Format.Assembly) // Multiple input .resources files within one assembly
             {
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
                 ReadAssemblyResources(filename, outFileOrDir);
 #else
-                _logger.LogError("Reading resources from Assembly not supported on .NET Core MSBuild");
+                throw new InputFormatNotSupportedException("Reading resources from Assembly not supported on .NET Core MSBuild");
 #endif
             }
             else
@@ -3040,7 +3008,7 @@ namespace Microsoft.Build.Tasks
                         // On full framework, the default is to use the longstanding
                         // deserialize/reserialize approach. On Core, always use the new
                         // preserialized approach.
-#if FEATURE_RESX_RESOURCE_READER
+#if FEATURE_RESXREADER_LIVEDESERIALIZATION
                         if (!_usePreserializedResources)
                         {
                             ResXResourceReader resXReader = null;
@@ -3079,12 +3047,12 @@ namespace Microsoft.Build.Tasks
                         break;
 
                     case Format.Binary:
-#if FEATURE_RESX_RESOURCE_READER
+#if FEATURE_RESXREADER_LIVEDESERIALIZATION
                         ReadResources(reader, new ResourceReader(filename), filename); // closes reader for us
-#else
-                        _logger.LogError("ResGen.exe not supported on .NET Core MSBuild");
-#endif
                         break;
+#else
+                        throw new InputFormatNotSupportedException("Reading resources from binary .resources not supported on .NET Core MSBuild");
+#endif
 
                     default:
                         // We should never get here, we've already checked the format
@@ -3113,7 +3081,7 @@ namespace Microsoft.Build.Tasks
             }
         }
 
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
         /// <summary>
         /// Reads resources from an assembly.
         /// </summary>
@@ -3283,11 +3251,13 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Checks the consistency of the CultureInfo and NeutralResourcesLanguageAttribute settings.  
+        /// Checks the consistency of the CultureInfo and NeutralResourcesLanguageAttribute settings.
         /// </summary>
         /// <param name="name">Assembly's file name</param>
         /// <param name="assemblyName">AssemblyName of this assembly</param>
         /// <param name="culture">Assembly's CultureInfo</param>
+        /// <param name="a">The actual Assembly</param>
+        /// <param name="mainAssembly">Whether this is the main assembly</param>
         private NeutralResourcesLanguageAttribute CheckAssemblyCultureInfo(String name, AssemblyName assemblyName, CultureInfo culture, Assembly a, bool mainAssembly)
         {
             NeutralResourcesLanguageAttribute neutralResourcesLanguageAttribute = null;
@@ -3336,6 +3306,7 @@ namespace Microsoft.Build.Tasks
         /// <summary>
         /// Write resources from the resources ArrayList to the specified output file
         /// </summary>
+        /// <param name="reader">Reader information</param>
         /// <param name="filename">Output resources file</param>
         private void WriteResources(ReaderInfo reader, String filename)
         {
@@ -3347,13 +3318,12 @@ namespace Microsoft.Build.Tasks
                     break;
 
                 case Format.XML:
-#if FEATURE_RESX_RESOURCE_READER
+#if FEATURE_RESXREADER_LIVEDESERIALIZATION
                     WriteResources(reader, new ResXResourceWriter(filename)); // closes writer for us
 #else
                     _logger.LogError(format.ToString() + " not supported on .NET Core MSBuild");
 #endif
                     break;
-
 
                 case Format.Assembly:
                     _logger.LogErrorFromResources("GenerateResource.CannotWriteAssembly", filename);
@@ -3385,17 +3355,21 @@ namespace Microsoft.Build.Tasks
             catch (PreserializedResourceWriterRequiredException)
             {
                 if (!_usePreserializedResources)
-                { 
-                    _logger.LogErrorFromResources("GenerateResource.PreserializedResourcesRequiresProperty");
+                {
+                    _logger.LogErrorWithCodeFromResources("GenerateResource.PreserializedResourcesRequiresProperty");
                 }
 
                 if (!HaveSystemResourcesExtensionsReference)
                 {
-                    _logger.LogErrorFromResources("GenerateResource.PreserializedResourcesRequiresExtensions");
+                    _logger.LogErrorWithCodeFromResources("GenerateResource.PreserializedResourcesRequiresExtensions");
                 }
 
                 // one of the above should have been logged as we would have used preserialized writer otherwise.
                 Debug.Assert(_logger.HasLoggedErrors);
+
+                // We may have partially written some string resources to a file, then bailed out
+                // because we encountered a non-string resource but don't meet the prereqs.
+                RemoveCorruptedFile(filename);
             }
         }
 
@@ -3418,8 +3392,13 @@ namespace Microsoft.Build.Tasks
 
                 PopulateAssemblyNames();
 
-                foreach (var assemblyName in _assemblyNames)
+                foreach (AssemblyNameExtension assemblyName in _assemblyNames)
                 {
+                    if (assemblyName == null)
+                    {
+                        continue;
+                    }
+
                     if (string.Equals(assemblyName.Name, "System.Resources.Extensions", StringComparison.OrdinalIgnoreCase))
                     {
                         _haveSystemResourcesExtensionsReference = true;
@@ -3435,13 +3414,13 @@ namespace Microsoft.Build.Tasks
         /// <summary>
         /// Create a strongly typed resource class
         /// </summary>
+        /// <param name="reader">Reader information</param>
         /// <param name="outFile">Output resource filename, for defaulting the class filename</param>
         /// <param name="inputFileName">Input resource filename, for error messages</param>
+        /// <param name="sourceFile">The generated strongly typed filename</param>
         private void CreateStronglyTypedResources(ReaderInfo reader, String outFile, String inputFileName, out String sourceFile)
         {
-#if FEATURE_CODEDOM
-            CodeDomProvider provider = null;
-
+            CodeDomProvider provider;
             if (!TryCreateCodeDomProvider(_logger, _stronglyTypedLanguage, out provider))
             {
                 sourceFile = null;
@@ -3498,16 +3477,11 @@ namespace Microsoft.Build.Tasks
                 // and it should get added to FilesWritten. So set a flag to indicate this.
                 _stronglyTypedResourceSuccessfullyCreated = true;
             }
-#else
-            sourceFile = null;
-            _logger.LogError("Generating strongly typed resource files not currently supported on .NET Core MSBuild");
-#endif
         }
 
-#if FEATURE_CODEDOM
         /// <summary>
         /// If no strongly typed resource class filename was specified, we come up with a default based on the
-        /// input file name and the default language extension. 
+        /// input file name and the default language extension.
         /// </summary>
         /// <comments>
         /// Broken out here so it can be called from GenerateResource class.
@@ -3521,13 +3495,14 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Tries to create a CodeDom provider for the specified strongly typed language.  If successful, returns true, 
-        /// otherwise returns false. 
+        /// Tries to create a CodeDom provider for the specified strongly typed language.  If successful, returns true,
+        /// otherwise returns false.
         /// </summary>
         /// <comments>
         /// Broken out here so it can be called from GenerateResource class.
-        /// Not a true "TryXXX" method, as it still throws if it encounters an exception it doesn't expect.  
+        /// Not a true "TryXXX" method, as it still throws if it encounters an exception it doesn't expect.
         /// </comments>
+        /// <param name="logger">Logger helper.</param>
         /// <param name="stronglyTypedLanguage">The language to create a provider for.</param>
         /// <param name="provider">The provider in question, if one is successfully created.</param>
         /// <returns>True if the provider was successfully created, false otherwise.</returns>
@@ -3539,14 +3514,12 @@ namespace Microsoft.Build.Tasks
             {
                 provider = CodeDomProvider.CreateProvider(stronglyTypedLanguage);
             }
+            catch (Exception e) when
 #if FEATURE_SYSTEM_CONFIGURATION
-            catch (ConfigurationException e)
-            {
-                logger.LogErrorWithCodeFromResources("GenerateResource.STRCodeDomProviderFailed", stronglyTypedLanguage, e.Message);
-                return false;
-            }
+             (e is ConfigurationException || e is SecurityException)
+#else
+             (e is SystemException && e.GetType().Name == "ConfigurationErrorsException") // TODO: catch specific exception type once it is public https://github.com/dotnet/corefx/issues/40456
 #endif
-            catch (SecurityException e)
             {
                 logger.LogErrorWithCodeFromResources("GenerateResource.STRCodeDomProviderFailed", stronglyTypedLanguage, e.Message);
                 return false;
@@ -3554,12 +3527,12 @@ namespace Microsoft.Build.Tasks
 
             return provider != null;
         }
-#endif
 
-#if FEATURE_RESX_RESOURCE_READER
+#if FEATURE_RESXREADER_LIVEDESERIALIZATION
         /// <summary>
         /// Read resources from an XML or binary format file
         /// </summary>
+        /// <param name="readerInfo">Reader info</param>
         /// <param name="reader">Appropriate IResourceReader</param>
         /// <param name="fileName">Filename, for error messages</param>
         private void ReadResources(ReaderInfo readerInfo, IResourceReader reader, String fileName)
@@ -3575,11 +3548,12 @@ namespace Microsoft.Build.Tasks
                 }
             }
         }
-#endif // FEATURE_RESX_RESOURCE_READER
+#endif // FEATURE_RESXREADER_LIVEDESERIALIZATION
 
         /// <summary>
         /// Read resources from a text format file
         /// </summary>
+        /// <param name="reader">Reader info</param>
         /// <param name="fileName">Input resources filename</param>
         private void ReadTextResources(ReaderInfo reader, String fileName)
         {
@@ -3608,8 +3582,8 @@ namespace Microsoft.Build.Tasks
                         ch = sr.Read();
                         continue;
                     }
-                    // Note that in Beta of version 1 we recommended users should put a [strings] 
-                    // section in their file.  Now it's completely unnecessary and can 
+                    // Note that in Beta of version 1 we recommended users should put a [strings]
+                    // section in their file.  Now it's completely unnecessary and can
                     // only cause bugs.  We will not parse anything using '[' stuff now
                     // and we should give a warning about seeing [strings] stuff.
                     // In V1.1 or V2, we can rip this out completely, I hope.
@@ -3645,7 +3619,7 @@ namespace Microsoft.Build.Tasks
                     // sign.  Deal with it.
                     if (name[name.Length - 1] == ' ')
                     {
-                        name.Length = name.Length - 1;
+                        name.Length--;
                     }
                     ch = sr.Read(); // move past =
                     // If it exists, move past the first space after the equals sign.
@@ -3716,7 +3690,7 @@ namespace Microsoft.Build.Tasks
                         }
 
                         // Consume endline...
-                        //   Endline can be \r\n or \n.  But do not treat a 
+                        //   Endline can be \r\n or \n.  But do not treat a
                         //   quoted newline (ie, @"\r" or @"\n" in text) as a
                         //   real new line.  They aren't the end of a line.
                         if (!quotedNewLine)
@@ -3751,11 +3725,11 @@ namespace Microsoft.Build.Tasks
             }
         }
 
-
         /// <summary>
         /// Write resources to an XML or binary format resources file.
         /// </summary>
         /// <remarks>Closes writer automatically</remarks>
+        /// <param name="reader">Reader information</param>
         /// <param name="writer">Appropriate IResourceWriter</param>
         private void WriteResources(ReaderInfo reader,
             IResourceWriter writer)
@@ -3796,19 +3770,22 @@ namespace Microsoft.Build.Tasks
         /// <summary>
         /// Write resources to a text format resources file
         /// </summary>
+        /// <param name="reader">Reader information</param>
         /// <param name="fileName">Output resources file</param>
         private void WriteTextResources(ReaderInfo reader, String fileName)
         {
             using (StreamWriter writer = FileUtilities.OpenWrite(fileName, false, Encoding.UTF8))
             {
-                foreach (LiveObjectResource entry in reader.resources)
+                foreach (IResource resource in reader.resources)
                 {
-                    String key = entry.Name;
-                    Object v = entry.Value;
+                    LiveObjectResource entry = resource as LiveObjectResource;
+
+                    String key = entry?.Name;
+                    Object v = entry?.Value;
                     String value = v as String;
                     if (value == null)
                     {
-                        _logger.LogErrorWithCodeFromResources(null, fileName, 0, 0, 0, 0, "GenerateResource.OnlyStringsSupported", key, v.GetType().FullName);
+                        _logger.LogErrorWithCodeFromResources(null, fileName, 0, 0, 0, 0, "GenerateResource.OnlyStringsSupported", key, v?.GetType().FullName);
                     }
                     else
                     {
@@ -3827,6 +3804,7 @@ namespace Microsoft.Build.Tasks
         /// <summary>
         /// Add a resource from a text file to the internal data structures
         /// </summary>
+        /// <param name="reader">Reader information</param>
         /// <param name="name">Resource name</param>
         /// <param name="value">Resource value</param>
         /// <param name="inputFileName">Input file for messages</param>
@@ -3851,13 +3829,13 @@ namespace Microsoft.Build.Tasks
             reader.resourcesHashTable.Add(entry.Name, entry);
         }
 
-
         /// <summary>
         /// Add a resource from an XML or binary format file to the internal data structures
         /// </summary>
-        /// <param name="name">Resource name</param>
-        /// <param name="value">Resource value</param>
-        /// <param name="inputFileName">Input file for messages</param>
+        /// <param name="reader">Reader information.</param>
+        /// <param name="name">Resource name.</param>
+        /// <param name="value">Resource value.</param>
+        /// <param name="inputFileName">Input file for messages.</param>
         private void AddResource(ReaderInfo reader, string name, object value, String inputFileName)
         {
             AddResource(reader, name, value, inputFileName, 0, 0);
@@ -3869,15 +3847,15 @@ namespace Microsoft.Build.Tasks
             public String cultureName;
             // We use a list to preserve the resource ordering (primarily for easier testing),
             // but also use a hash table to check for duplicate names.
-            public ArrayList resources;
-            public Hashtable resourcesHashTable;
+            public List<IResource> resources;
+            public Dictionary<string, IResource> resourcesHashTable;
             public String assemblySimpleName;  // The main assembly's simple name (ie, no .resources)
             public bool fromNeutralResources;  // Was this from the main assembly (or if the NRLA specified fallback to satellite, that satellite?)
 
             public ReaderInfo()
             {
-                resources = new ArrayList();
-                resourcesHashTable = new Hashtable(StringComparer.OrdinalIgnoreCase);
+                resources = new List<IResource>();
+                resourcesHashTable = new Dictionary<string, IResource>(StringComparer.OrdinalIgnoreCase);
             }
         }
 
@@ -3965,7 +3943,7 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// For flow of control & passing sufficient error context back 
+        /// For flow of control and passing sufficient error context back
         /// from ReadTextResources
         /// </summary>
         [Serializable]
@@ -4009,7 +3987,7 @@ namespace Microsoft.Build.Tasks
 #endregion // Code from ResGen.EXE
     }
 
-#if FEATURE_ASSEMBLY_LOADFROM
+#if !FEATURE_ASSEMBLYLOADCONTEXT
     /// <summary>
     /// This implemention of ITypeResolutionService is passed into the ResxResourceReader
     /// class, which calls back into the methods on this class in order to resolve types
@@ -4045,6 +4023,7 @@ namespace Microsoft.Build.Tasks
         /// Not implemented.  Not called by the ResxResourceReader.
         /// </summary>
         /// <param name="name"></param>
+        /// <param name="throwOnError"></param>
         /// <returns></returns>
         public Assembly GetAssembly(AssemblyName name, bool throwOnError)
         {
@@ -4093,7 +4072,7 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Returns the type with the specified name.  Searches for the type in all 
+        /// Returns the type with the specified name.  Searches for the type in all
         /// of the assemblies passed into the References parameter of the GenerateResource
         /// task.
         /// </summary>
@@ -4105,7 +4084,7 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Returns the type with the specified name.  Searches for the type in all 
+        /// Returns the type with the specified name.  Searches for the type in all
         /// of the assemblies passed into the References parameter of the GenerateResource
         /// task.
         /// </summary>
@@ -4118,7 +4097,7 @@ namespace Microsoft.Build.Tasks
         }
 
         /// <summary>
-        /// Returns the type with the specified name.  Searches for the type in all 
+        /// Returns the type with the specified name.  Searches for the type in all
         /// of the assemblies passed into the References parameter of the GenerateResource
         /// task.
         /// </summary>
@@ -4135,7 +4114,7 @@ namespace Microsoft.Build.Tasks
                 // first try to resolve in the GAC
                 Type result = Type.GetType(name, false, ignoreCase);
 
-                // did not find it in the GAC, check each assembly 
+                // did not find it in the GAC, check each assembly
                 if ((result == null) && (_referencePaths != null))
                 {
                     foreach (ITaskItem referencePath in _referencePaths)

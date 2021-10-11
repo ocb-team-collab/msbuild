@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Microsoft.Build.Shared;
 using Microsoft.Build.Execution;
 
@@ -125,8 +124,8 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         public SchedulableRequest(SchedulingData collection, BuildRequest request, SchedulableRequest parent)
         {
-            ErrorUtilities.VerifyThrowArgumentNull(collection, "collection");
-            ErrorUtilities.VerifyThrowArgumentNull(request, "request");
+            ErrorUtilities.VerifyThrowArgumentNull(collection, nameof(collection));
+            ErrorUtilities.VerifyThrowArgumentNull(request, nameof(request));
             ErrorUtilities.VerifyThrow((parent == null) || (parent._schedulingData == collection), "Parent request does not belong to the same collection.");
 
             _schedulingData = collection;
@@ -292,6 +291,11 @@ namespace Microsoft.Build.BackEnd
         }
 
         /// <summary>
+        /// Number of cores granted as part of running the build request.
+        /// </summary>
+        public int GrantedCores { get; set; }
+
+        /// <summary>
         /// Gets the amount of time we spent in the specified state.
         /// </summary>
         public TimeSpan GetTimeSpentInState(SchedulableRequestState desiredState)
@@ -305,7 +309,7 @@ namespace Microsoft.Build.BackEnd
         public void Yield(string[] activeTargets)
         {
             VerifyState(SchedulableRequestState.Executing);
-            ErrorUtilities.VerifyThrowArgumentNull(activeTargets, "activeTargets");
+            ErrorUtilities.VerifyThrowArgumentNull(activeTargets, nameof(activeTargets));
             _activeTargetsWhenBlocked = activeTargets;
             ChangeToState(SchedulableRequestState.Yielding);
         }
@@ -325,12 +329,12 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         /// <param name="blockingRequest">The request which is blocking this one.</param>
         /// <param name="activeTargets">The list of targets this request was currently building at the time it became blocked.</param>
-        /// <param name="blockerBlockingTarget">Target that we are blocked on which is being built by <paramref name="blockingRequest"/></param>
+        /// <param name="blockingTarget">Target that we are blocked on which is being built by <paramref name="blockingRequest"/></param>
         public void BlockByRequest(SchedulableRequest blockingRequest, string[] activeTargets, string blockingTarget = null)
         {
             VerifyOneOfStates(new SchedulableRequestState[] { SchedulableRequestState.Blocked, SchedulableRequestState.Executing });
-            ErrorUtilities.VerifyThrowArgumentNull(blockingRequest, "blockingRequest");
-            ErrorUtilities.VerifyThrowArgumentNull(activeTargets, "activeTargets");
+            ErrorUtilities.VerifyThrowArgumentNull(blockingRequest, nameof(blockingRequest));
+            ErrorUtilities.VerifyThrowArgumentNull(activeTargets, nameof(activeTargets));
             ErrorUtilities.VerifyThrow(BlockingTarget == null, "Cannot block again if we're already blocked on a target");
 
             // Note that the blocking request will typically be our parent UNLESS it is a request we blocked on because it was executing a target we wanted to execute.
@@ -366,7 +370,7 @@ namespace Microsoft.Build.BackEnd
         public void UnblockWithPartialResultForBlockingTarget(BuildResult result)
         {
             VerifyOneOfStates(new SchedulableRequestState[] { SchedulableRequestState.Blocked, SchedulableRequestState.Unscheduled });
-            ErrorUtilities.VerifyThrowArgumentNull(result, "result");
+            ErrorUtilities.VerifyThrowArgumentNull(result, nameof(result));
 
             BlockingRequestKey key = new BlockingRequestKey(result);
             DisconnectRequestWeAreBlockedBy(key);
@@ -379,7 +383,7 @@ namespace Microsoft.Build.BackEnd
         public void UnblockWithResult(BuildResult result)
         {
             VerifyOneOfStates(new SchedulableRequestState[] { SchedulableRequestState.Blocked, SchedulableRequestState.Unscheduled });
-            ErrorUtilities.VerifyThrowArgumentNull(result, "result");
+            ErrorUtilities.VerifyThrowArgumentNull(result, nameof(result));
 
             BlockingRequestKey key = new BlockingRequestKey(result);
             DisconnectRequestWeAreBlockedBy(key);
@@ -458,6 +462,8 @@ namespace Microsoft.Build.BackEnd
 
             ErrorUtilities.ThrowInternalError("State {0} is not one of the expected states.", _state);
         }
+
+        public bool IsProxyBuildRequest() => BuildRequest.IsProxyBuildRequest();
 
         /// <summary>
         /// Change to the specified state.  Update internal counters.
@@ -630,9 +636,7 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         internal void DisconnectRequestWeAreBlockedBy(BlockingRequestKey blockingRequestKey)
         {
-            ErrorUtilities.VerifyThrow(_requestsWeAreBlockedBy.ContainsKey(blockingRequestKey), "We are not blocked by the specified request.");
-
-            SchedulableRequest unblockingRequest = _requestsWeAreBlockedBy[blockingRequestKey];
+            ErrorUtilities.VerifyThrow(_requestsWeAreBlockedBy.TryGetValue(blockingRequestKey, out SchedulableRequest unblockingRequest), "We are not blocked by the specified request.");
             ErrorUtilities.VerifyThrow(unblockingRequest._requestsWeAreBlocking.Contains(this), "The request unblocking us doesn't think it is blocking us.");
 
             _requestsWeAreBlockedBy.Remove(blockingRequestKey);

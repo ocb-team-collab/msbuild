@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Xml;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Shared;
@@ -45,7 +44,7 @@ namespace Microsoft.Build.Construction
         /// </summary>
         public ProjectStringCache()
         {
-            ProjectRootElementCache.StrongCacheEntryRemoved += OnStrongCacheEntryRemoved;
+            ProjectRootElementCacheBase.StrongCacheEntryRemoved += OnStrongCacheEntryRemoved;
         }
 
         /// <summary>
@@ -58,6 +57,20 @@ namespace Microsoft.Build.Construction
                 lock (_locker)
                 {
                     return _strings.Count;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Obtain the number of documents contained in the cache.
+        /// </summary>
+        internal int DocumentCount
+        {
+            get
+            {
+                lock (_locker)
+                {
+                    return _documents.Count;
                 }
             }
         }
@@ -128,7 +141,7 @@ namespace Microsoft.Build.Construction
         {
             lock (_locker)
             {
-                ErrorUtilities.VerifyThrowArgumentNull(key, "key");
+                ErrorUtilities.VerifyThrowArgumentNull(key, nameof(key));
 
                 if (key.Length == 0)
                 {
@@ -155,7 +168,7 @@ namespace Microsoft.Build.Construction
         {
             lock (_locker)
             {
-                ErrorUtilities.VerifyThrowArgumentNull(document, "document");
+                ErrorUtilities.VerifyThrowArgumentNull(document, nameof(document));
 
                 VerifyState();
 
@@ -215,7 +228,7 @@ namespace Microsoft.Build.Construction
         /// </remarks>
         private void OnStrongCacheEntryRemoved(object sender, ProjectRootElement projectRootElement)
         {
-            ErrorUtilities.VerifyThrowArgumentNull(projectRootElement, "projectRootElement");
+            ErrorUtilities.VerifyThrowArgumentNull(projectRootElement, nameof(projectRootElement));
             Clear(projectRootElement.XmlDocument);
         }
 

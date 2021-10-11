@@ -78,6 +78,12 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         private const string ReferenceAssemblyDirectoryName = "ref";
 
+
+        /// <summary>
+        /// Array of mono lib directories used to resolve references
+        /// </summary>
+        private static readonly string[] MonoLibDirs = GetMonoLibDirs();
+
         /// <summary>
         /// A cache of <see cref="RoslynCodeTaskFactoryTaskInfo"/> objects and their corresponding compiled assembly.  This cache ensures that two of the exact same code task
         /// declarations are not compiled multiple times.
@@ -107,7 +113,6 @@ namespace Microsoft.Build.Tasks
         /// <inheritdoc cref="ITaskFactory.FactoryName"/>
         public string FactoryName => "Roslyn Code Task Factory";
 
-        /// <inheritdoc />
         /// <summary>
         /// Gets the <see cref="T:System.Type" /> of the compiled task.
         /// </summary>
@@ -462,11 +467,11 @@ namespace Microsoft.Build.Tasks
                     bool foundValidCodeLanguage = false;
 
                     // Attempt to map the user specified value as an alias to our vernacular for code languages
-                    foreach (string validLanguage in ValidCodeLanguages.Keys)
+                    foreach (KeyValuePair<string, ISet<string>> validLanguage in ValidCodeLanguages)
                     {
-                        if (ValidCodeLanguages[validLanguage].Contains(languageAttribute.Value))
+                        if (validLanguage.Value.Contains(languageAttribute.Value))
                         {
-                            taskInfo.CodeLanguage = validLanguage;
+                            taskInfo.CodeLanguage = validLanguage.Key;
                             foundValidCodeLanguage = true;
                             break;
                         }
@@ -539,15 +544,17 @@ namespace Microsoft.Build.Tasks
                     ? reference
                     : $"{reference}.dll";
 
-                string resolvedPath = new[]
+                string resolvedDir = new[]
                 {
-                    Path.Combine(ThisAssemblyDirectoryLazy.Value, ReferenceAssemblyDirectoryName, assemblyFileName),
-                    Path.Combine(ThisAssemblyDirectoryLazy.Value, assemblyFileName)
-                }.FirstOrDefault(File.Exists);
+                    Path.Combine(ThisAssemblyDirectoryLazy.Value, ReferenceAssemblyDirectoryName),
+                    ThisAssemblyDirectoryLazy.Value,
+                }
+                .Concat(MonoLibDirs)
+                .FirstOrDefault(p => File.Exists(Path.Combine(p, assemblyFileName)));
 
-                if (resolvedPath != null)
+                if (resolvedDir != null)
                 {
-                    resolvedAssemblyReferences.Add(resolvedPath);
+                    resolvedAssemblyReferences.Add(Path.Combine(resolvedDir, assemblyFileName));
                     continue;
                 }
 
@@ -722,6 +729,21 @@ namespace Microsoft.Build.Tasks
                 {
                     File.Delete(sourceCodePath);
                 }
+            }
+        }
+
+        private static string[] GetMonoLibDirs()
+        {
+            if(NativeMethodsShared.IsMono)
+            {
+                string monoLibDir = Path.GetDirectoryName(typeof(object).Assembly.Location);
+                string monoLibFacadesDir = Path.Combine(monoLibDir, "Facades");
+
+                return new[] { monoLibDir, monoLibFacadesDir };
+            }
+            else
+            {
+                return Array.Empty<string>();
             }
         }
     }

@@ -40,16 +40,16 @@ namespace Microsoft.Build.UnitTests
         private int _parallelismThreadCount = DefaultParallelismThreadCount;
 
         /// <summary>
-        /// Temporarily save off the value of MSBUILDALWAYSOVERWRITEREADONLYFILES, so that we can run 
+        /// Temporarily save off the value of MSBUILDALWAYSOVERWRITEREADONLYFILES, so that we can run
         /// the tests isolated from the current state of the environment, but put it back how it belongs
-        /// once we're done. 
+        /// once we're done.
         /// </summary>
         private readonly string _alwaysOverwriteReadOnlyFiles;
 
         /// <summary>
-        /// Temporarily save off the value of MSBUILDALWAYSRETRY, so that we can run 
+        /// Temporarily save off the value of MSBUILDALWAYSRETRY, so that we can run
         /// the tests isolated from the current state of the environment, but put it back how it belongs
-        /// once we're done. 
+        /// once we're done.
         /// </summary>
         private readonly string _alwaysRetry;
 
@@ -57,7 +57,7 @@ namespace Microsoft.Build.UnitTests
 
         /// <summary>
         /// There are a couple of environment variables that can affect the operation of the Copy
-        /// task.  Make sure none of them are set. 
+        /// task.  Make sure none of them are set.
         /// </summary>
         public Copy_Tests(ITestOutputHelper testOutputHelper)
         {
@@ -72,7 +72,7 @@ namespace Microsoft.Build.UnitTests
         }
 
         /// <summary>
-        /// Restore the environment variables we cleared out at the beginning of the test. 
+        /// Restore the environment variables we cleared out at the beginning of the test.
         /// </summary>
         public void Dispose()
         {
@@ -189,7 +189,7 @@ namespace Microsoft.Build.UnitTests
         }
 
         /// <summary>
-        /// If MSBUILDALWAYSOVERWRITEREADONLYFILES is set, then overwrite read-only even when 
+        /// If MSBUILDALWAYSOVERWRITEREADONLYFILES is set, then overwrite read-only even when
         /// OverwriteReadOnlyFiles is false
         /// </summary>
         [Fact]
@@ -256,7 +256,7 @@ namespace Microsoft.Build.UnitTests
         }
 
         /// <summary>
-        /// If MSBUILDALWAYSRETRY is set, keep retrying the copy. 
+        /// If MSBUILDALWAYSRETRY is set, keep retrying the copy.
         /// </summary>
         [Fact]
         [Trait("Category", "mono-osx-failing")]
@@ -451,8 +451,8 @@ namespace Microsoft.Build.UnitTests
                 string destinationContent2 = File.ReadAllText(destination2);
                 Assert.Equal("This is a source file2.", destinationContent2);
 
-                Assert.NotEqual(FileAttributes.ReadOnly, (File.GetAttributes(destination1) & FileAttributes.ReadOnly));
-                Assert.NotEqual(FileAttributes.ReadOnly, (File.GetAttributes(destination2) & FileAttributes.ReadOnly));
+                Assert.NotEqual(FileAttributes.ReadOnly, File.GetAttributes(destination1) & FileAttributes.ReadOnly);
+                Assert.NotEqual(FileAttributes.ReadOnly, File.GetAttributes(destination2) & FileAttributes.ReadOnly);
 
                 ((MockEngine)t.BuildEngine).AssertLogDoesntContain("MSB3026"); // Didn't do retries
             }
@@ -1011,7 +1011,7 @@ namespace Microsoft.Build.UnitTests
         }
 
         /// <summary>
-        /// CopiedFiles should only include files that were successfully copied 
+        /// CopiedFiles should only include files that were successfully copied
         /// (or skipped), not files for which there was an error.
         /// </summary>
         [Fact]
@@ -1549,7 +1549,7 @@ namespace Microsoft.Build.UnitTests
         }
 
         /// <summary>
-        /// DestinationFiles should only include files that were successfully copied 
+        /// DestinationFiles should only include files that were successfully copied
         /// (or skipped), not files for which there was an error.
         /// </summary>
         [Fact]
@@ -1606,7 +1606,7 @@ namespace Microsoft.Build.UnitTests
 
         /// <summary>
         /// If the destination path is too long, the task should not bubble up
-        /// the System.IO.PathTooLongException 
+        /// the System.IO.PathTooLongException
         /// </summary>
         [Fact]
         [SkipOnTargetFramework(TargetFrameworkMonikers.Netcoreapp)]
@@ -1650,7 +1650,7 @@ namespace Microsoft.Build.UnitTests
 
         /// <summary>
         /// If the source path is too long, the task should not bubble up
-        /// the System.IO.PathTooLongException 
+        /// the System.IO.PathTooLongException
         /// </summary>
         [Fact]
         [SkipOnTargetFramework(TargetFrameworkMonikers.Netcoreapp)]
@@ -1771,7 +1771,7 @@ namespace Microsoft.Build.UnitTests
                 UseHardlinksIfPossible = UseHardLinks,
                 UseSymboliclinksIfPossible = UseSymbolicLinks,
             };
-            
+
             var copyFunctor = new CopyFunctor(2, false /* do not throw on failure */);
             bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount, false);
 
@@ -1815,7 +1815,7 @@ namespace Microsoft.Build.UnitTests
             {
                 RetryDelayMilliseconds = 1,  // speed up tests!
             };
-            
+
             Assert.False(t.UseHardlinksIfPossible);
         }
 
@@ -1929,6 +1929,33 @@ namespace Microsoft.Build.UnitTests
             Assert.False(result);
             engine.AssertLogContains("MSB3026");
             engine.AssertLogContains("MSB3027");
+        }
+
+        [PlatformSpecific(TestPlatforms.Windows)]
+        internal virtual void ErrorIfLinkFailedCheck()
+        {
+            using (var env = TestEnvironment.Create())
+            {
+                var source = env.DefaultTestDirectory.CreateFile("source.txt", "This is a source file").Path;
+                var existing = env.DefaultTestDirectory.CreateFile("destination.txt", "This is an existing file.").Path;
+
+                File.SetAttributes(existing, FileAttributes.ReadOnly);
+
+                MockEngine engine = new MockEngine(_testOutputHelper);
+                Copy t = new Copy
+                {
+                    RetryDelayMilliseconds = 1,
+                    UseHardlinksIfPossible = UseHardLinks,
+                    UseSymboliclinksIfPossible = UseSymbolicLinks,
+                    ErrorIfLinkFails = true,
+                    BuildEngine = engine,
+                    SourceFiles = new ITaskItem[] { new TaskItem(source) },
+                    DestinationFiles = new ITaskItem[] { new TaskItem(existing) },
+                };
+
+                t.Execute().ShouldBeFalse();
+                engine.AssertLogContains("MSB3893");
+            }
         }
 
         /// <summary>
@@ -2055,6 +2082,30 @@ namespace Microsoft.Build.UnitTests
             {
                 Helpers.DeleteFiles(sourceFile, destFile);
             }
+        }
+
+        /// <summary>
+        /// Verifies that we error when ErrorIfLinkFailed is true when UseHardlinksIfPossible
+        /// and UseSymboliclinksIfPossible are false.
+        /// </summary>
+        [Fact]
+        public void InvalidErrorIfLinkFailed()
+        {
+            var engine = new MockEngine(true);
+            var t = new Copy
+            {
+                BuildEngine = engine,
+                SourceFiles = new ITaskItem[] { new TaskItem("c:\\source") },
+                DestinationFiles = new ITaskItem[] { new TaskItem("c:\\destination") },
+                UseHardlinksIfPossible = false,
+                UseSymboliclinksIfPossible = false,
+                ErrorIfLinkFails = true,
+            };
+
+            bool result = t.Execute();
+
+            Assert.False(result);
+            engine.AssertLogContains("MSB3892");
         }
     }
 
@@ -2322,6 +2373,12 @@ namespace Microsoft.Build.UnitTests
                 FileUtilities.DeleteWithoutTrailingBackslash(destFolder, true);
             }
         }
+
+        [Fact]
+        internal override void ErrorIfLinkFailedCheck()
+        {
+            base.ErrorIfLinkFailedCheck();
+        }
     }
 
     public class CopySymbolicLink_Tests : Copy_Tests
@@ -2342,7 +2399,9 @@ namespace Microsoft.Build.UnitTests
 
             if (NativeMethodsShared.IsWindows)
             {
+#pragma warning disable CA1416 // Suppress Warning saying that WindowsPrincipal might not be compatible on Windows (Which shouldn't be an issue...)
                 if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null)))
+#pragma warning restore CA1416 // Suppress Warning saying that WindowsPrincipal might not be compatible on Windows (Which shouldn't be an issue...)
                 {
                     isPrivileged = false;
                     Assert.True(true, "It seems that you don't have the permission to create symbolic links. Try to run this test again with higher privileges");
@@ -2410,6 +2469,12 @@ namespace Microsoft.Build.UnitTests
                     FileUtilities.DeleteWithoutTrailingBackslash(destFolder, true);
                 }
             }
+        }
+
+        [Fact]
+        internal override void ErrorIfLinkFailedCheck()
+        {
+            base.ErrorIfLinkFailedCheck();
         }
     }
 }

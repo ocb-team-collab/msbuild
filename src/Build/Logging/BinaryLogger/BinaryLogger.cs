@@ -3,7 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Shared;
-using Microsoft.Build.Shared.FileSystem;
+using Microsoft.Build.Utilities;
 
 namespace Microsoft.Build.Logging
 {
@@ -28,17 +28,34 @@ namespace Microsoft.Build.Logging
         // version 5:
         //   - new EvaluationFinished.ProfilerResult
         // version 6:
-        //   -  Ids and parent ids for the evaluation locations
+        //   - Ids and parent ids for the evaluation locations
         // version 7:
-        //   -  Include ProjectStartedEventArgs.GlobalProperties
-        internal const int FileFormatVersion = 7;
+        //   - Include ProjectStartedEventArgs.GlobalProperties
+        // version 8:
+        //   - This was used in a now-reverted change but is the same as 9.
+        // version 9:
+        //   - new record kinds: EnvironmentVariableRead, PropertyReassignment, UninitializedPropertyRead
+        // version 10:
+        //   - new record kinds:
+        //      * String - deduplicate strings by hashing and write a string record before it's used
+        //      * NameValueList - deduplicate arrays of name-value pairs such as properties, items and metadata
+        //                        in a separate record and refer to those records from regular records
+        //                        where a list used to be written in-place
+        // version 11:
+        //   - new record kind: TaskParameterEventArgs
+        // version 12:
+        //   - add GlobalProperties, Properties and Items on ProjectEvaluationFinished
+        // version 13:
+        //   - don't log Message where it can be recovered
+        //   - log arguments for LazyFormattedBuildEventArgs
+        internal const int FileFormatVersion = 13;
 
         private Stream stream;
         private BinaryWriter binaryWriter;
         private BuildEventArgsWriter eventArgsWriter;
         private ProjectImportsCollector projectImportsCollector;
         private string _initialTargetOutputLogging;
-        private string _initialLogImports;
+        private bool _initialLogImports;
 
         /// <summary>
         /// Describes whether to collect the project files (including imported project files) used during the build.
@@ -86,10 +103,12 @@ namespace Microsoft.Build.Logging
         public void Initialize(IEventSource eventSource)
         {
             _initialTargetOutputLogging = Environment.GetEnvironmentVariable("MSBUILDTARGETOUTPUTLOGGING");
-            _initialLogImports = Environment.GetEnvironmentVariable("MSBUILDLOGIMPORTS");
+            _initialLogImports = Traits.Instance.EscapeHatches.LogProjectImports;
 
             Environment.SetEnvironmentVariable("MSBUILDTARGETOUTPUTLOGGING", "true");
             Environment.SetEnvironmentVariable("MSBUILDLOGIMPORTS", "1");
+            Traits.Instance.EscapeHatches.LogProjectImports = true;
+            bool logPropertiesAndItemsAfterEvaluation = Traits.Instance.EscapeHatches.LogPropertiesAndItemsAfterEvaluation ?? true;
 
             ProcessParameters();
 
@@ -115,12 +134,17 @@ namespace Microsoft.Build.Logging
 
                 if (CollectProjectImports != ProjectImportsCollectionMode.None)
                 {
-                    projectImportsCollector = new ProjectImportsCollector(FilePath);
+                    projectImportsCollector = new ProjectImportsCollector(FilePath, CollectProjectImports == ProjectImportsCollectionMode.ZipFile);
                 }
 
                 if (eventSource is IEventSource3 eventSource3)
                 {
                     eventSource3.IncludeEvaluationMetaprojects();
+                }
+
+                if (logPropertiesAndItemsAfterEvaluation && eventSource is IEventSource4 eventSource4)
+                {
+                    eventSource4.IncludeEvaluationPropertiesAndItems();
                 }
             }
             catch (Exception e)
@@ -132,12 +156,45 @@ namespace Microsoft.Build.Logging
             }
 
             stream = new GZipStream(stream, CompressionLevel.Optimal);
+
+            // wrapping the GZipStream in a buffered stream significantly improves performance
+            // and the max throughput is reached with a 32K buffer. See details here:
+            // https://github.com/dotnet/runtime/issues/39233#issuecomment-745598847
+            stream = new BufferedStream(stream, bufferSize: 32768);
             binaryWriter = new BinaryWriter(stream);
             eventArgsWriter = new BuildEventArgsWriter(binaryWriter);
 
+            if (projectImportsCollector != null)
+            {
+                eventArgsWriter.EmbedFile += EventArgsWriter_EmbedFile;
+            }
+
             binaryWriter.Write(FileFormatVersion);
 
+            LogInitialInfo();
+
             eventSource.AnyEventRaised += EventSource_AnyEventRaised;
+        }
+
+        private void EventArgsWriter_EmbedFile(string filePath)
+        {
+            if (projectImportsCollector != null)
+            {
+                projectImportsCollector.AddFile(filePath);
+            }
+        }
+
+        private void LogInitialInfo()
+        {
+            LogMessage("BinLogFilePath=" + FilePath);
+            LogMessage("CurrentUICulture=" + System.Globalization.CultureInfo.CurrentUICulture.Name);
+        }
+
+        private void LogMessage(string text)
+        {
+            var args = new BuildMessageEventArgs(text, helpKeyword: null, senderName: "BinaryLogger", MessageImportance.Normal);
+            args.BuildEventContext = BuildEventContext.Invalid;
+            Write(args);
         }
 
         /// <summary>
@@ -146,25 +203,17 @@ namespace Microsoft.Build.Logging
         public void Shutdown()
         {
             Environment.SetEnvironmentVariable("MSBUILDTARGETOUTPUTLOGGING", _initialTargetOutputLogging);
-            Environment.SetEnvironmentVariable("MSBUILDLOGIMPORTS", _initialLogImports);
+            Environment.SetEnvironmentVariable("MSBUILDLOGIMPORTS", _initialLogImports ? "1" : "");
+            Traits.Instance.EscapeHatches.LogProjectImports = _initialLogImports;
 
             if (projectImportsCollector != null)
             {
-                projectImportsCollector.Close();
-
                 if (CollectProjectImports == ProjectImportsCollectionMode.Embed)
                 {
-                    var archiveFilePath = projectImportsCollector.ArchiveFilePath;
-
-                    // It is possible that the archive couldn't be created for some reason.
-                    // Only embed it if it actually exists.
-                    if (FileSystems.Default.FileExists(archiveFilePath))
-                    {
-                        eventArgsWriter.WriteBlob(BinaryLogRecordKind.ProjectImportArchive, File.ReadAllBytes(archiveFilePath));
-                        File.Delete(archiveFilePath);
-                    }
+                    eventArgsWriter.WriteBlob(BinaryLogRecordKind.ProjectImportArchive, projectImportsCollector.GetAllBytes());
                 }
 
+                projectImportsCollector.Close();
                 projectImportsCollector = null;
             }
 

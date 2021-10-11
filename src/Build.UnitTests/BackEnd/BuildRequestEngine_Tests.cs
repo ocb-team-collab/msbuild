@@ -3,26 +3,20 @@
 
 using System;
 using System.Xml;
-using System.Text;
-using System.Collections;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.IO;
 using System.Threading;
-using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
 using Microsoft.Build.BackEnd;
-using Microsoft.Build.Shared;
 using Microsoft.Build.Unittest;
 using TaskItem = Microsoft.Build.Execution.ProjectItemInstance.TaskItem;
 using Xunit;
 
 namespace Microsoft.Build.UnitTests.BackEnd
 {
-    using ILoggingService = Microsoft.Build.BackEnd.Logging.ILoggingService;
     using NodeLoggingContext = Microsoft.Build.BackEnd.Logging.NodeLoggingContext;
 
     public class BuildRequestEngine_Tests : IDisposable
@@ -79,6 +73,8 @@ namespace Microsoft.Build.UnitTests.BackEnd
             public event BuildRequestCompletedDelegate OnBuildRequestCompleted;
 
             public event BuildRequestBlockedDelegate OnBuildRequestBlocked;
+
+            public event ResourceRequestDelegate OnResourceRequest;
 
             public void BuildRequest(NodeLoggingContext context, BuildRequestEntry entry)
             {
@@ -169,18 +165,17 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             public void RaiseRequestComplete(BuildRequestEntry entry)
             {
-                if (null != OnBuildRequestCompleted)
-                {
-                    OnBuildRequestCompleted(entry);
-                }
+                OnBuildRequestCompleted?.Invoke(entry);
             }
 
             public void RaiseRequestBlocked(BuildRequestEntry entry, int blockingId, string blockingTarget)
             {
-                if (null != OnBuildRequestBlocked)
-                {
-                    OnBuildRequestBlocked(entry, blockingId, blockingTarget, null);
-                }
+                OnBuildRequestBlocked?.Invoke(entry, blockingId, blockingTarget, null);
+            }
+
+            public void RaiseResourceRequest(ResourceRequest request)
+            {
+                OnResourceRequest?.Invoke(request);
             }
 
             public void ContinueRequest()
@@ -190,6 +185,10 @@ namespace Microsoft.Build.UnitTests.BackEnd
                     throw new InvalidOperationException("ThrowExceptionOnContinue set.");
                 }
                 _continueEvent.Set();
+            }
+
+            public void ContinueRequestWithResources(ResourceResponse response)
+            {
             }
 
             public void CancelRequest()
@@ -268,6 +267,9 @@ namespace Microsoft.Build.UnitTests.BackEnd
         private AutoResetEvent _engineExceptionEvent;
         private Exception _engineException_Exception;
 
+        private AutoResetEvent _engineResourceRequestEvent;
+        private ResourceRequest _engineResourceRequest_Request;
+
         private IBuildRequestEngine _engine;
         private IConfigCache _cache;
         private int _nodeRequestId;
@@ -284,6 +286,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             _newRequestEvent = new AutoResetEvent(false);
             _newConfigurationEvent = new AutoResetEvent(false);
             _engineExceptionEvent = new AutoResetEvent(false);
+            _engineResourceRequestEvent = new AutoResetEvent(false);
 
             _engine = (IBuildRequestEngine)_host.GetComponent(BuildComponentType.RequestEngine);
             _cache = (IConfigCache)_host.GetComponent(BuildComponentType.ConfigCache);
@@ -305,6 +308,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             _newRequestEvent.Dispose();
             _newConfigurationEvent.Dispose();
             _engineExceptionEvent.Dispose();
+            _engineResourceRequestEvent.Dispose();
 
             _host = null;
         }
@@ -317,6 +321,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             engine.OnRequestResumed += this.Engine_RequestResumed;
             engine.OnStatusChanged += this.Engine_EngineStatusChanged;
             engine.OnEngineException += this.Engine_Exception;
+            engine.OnResourceRequest += this.Engine_ResourceRequest;
         }
 
         /// <summary>
@@ -590,6 +595,16 @@ namespace Microsoft.Build.UnitTests.BackEnd
         {
             _engineException_Exception = e;
             _engineExceptionEvent.Set();
+        }
+
+        /// <summary>
+        /// Callback for event raised when resources are requested.
+        /// </summary>
+        /// <param name="request">The resource request</param>
+        private void Engine_ResourceRequest(ResourceRequest request)
+        {
+            _engineResourceRequest_Request = request;
+            _engineResourceRequestEvent.Set();
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <Import Project="..\Shared\FileSystemSources.proj" />
   <Import Project="..\Shared\DebuggingSources.proj" />
@@ -7,6 +7,9 @@
     <OutputType>Exe</OutputType>
     <TargetFrameworks>$(RuntimeOutputTargetFrameworks)</TargetFrameworks>
     <PlatformTarget>$(RuntimeOutputPlatformTarget)</PlatformTarget>
+    <!-- MSBuild.csproj no longer uses apphost. This fixes an issue where certain tests would find
+         MSBuild.exe AND MSBuild.dll when they should only find MSBuild.dll. -->
+    <UseAppHost>false</UseAppHost>
 
     <!-- Set RuntimeIdentifiers so that NuGet will restore for both AnyCPU as well as x86 and x64.
          This is important for the MSBuild.VSSetup project, which "references" both the x86 and x64
@@ -36,7 +39,8 @@
     <NoPackageAnalysis>true</NoPackageAnalysis>
     <AddAppConfigToBuildOutputs>false</AddAppConfigToBuildOutputs>
 
-    <DebugType Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">full</DebugType><!-- Work around arcade stomping on symbols for same-program-different-arches. -->
+    <DebugType Condition="'$(Platform)' == 'x64'">full</DebugType><!-- Setting DebugType here goes hand in hand with eng\AfterSigning.targets. This is to prompt the x64 build to produce a 'full' .pdb that's `more compatible` then 'portable' and 'embedded' .pdbs. This doesn't get set on 32 bit architecture, which will default to 'embedded' and 'pdb2pdb' will convert those as needed. See https://github.com/microsoft/msbuild/pull/5070 for context. -->
+    <DefineConstants>$(DefineConstants);MSBUILDENTRYPOINTEXE</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -58,9 +62,6 @@
       <Link>AssemblyNameComparer.cs</Link>
     </Compile>
     <Compile Include="..\Shared\CollectionHelpers.cs" />
-    <Compile Include="..\Shared\Constants.cs">
-      <ExcludeFromStyleCop>true</ExcludeFromStyleCop>
-    </Compile>
     <Compile Include="..\Shared\FileDelegates.cs">
       <Link>FileDelegates.cs</Link>
       <ExcludeFromStyleCop>true</ExcludeFromStyleCop>
@@ -129,15 +130,16 @@
     <Compile Include="..\Shared\INodePacketHandler.cs" />
     <Compile Include="..\Shared\ITranslatable.cs" />
     <Compile Include="..\Shared\ITranslator.cs" />
+    <Compile Include="..\Shared\TranslatorHelpers.cs" />
     <Compile Include="..\Shared\BinaryTranslator.cs" />
     <Compile Include="..\Shared\CommunicationsUtilities.cs" />
     <Compile Include="..\Shared\InterningBinaryReader.cs" />
-    <Compile Include="..\Shared\OpportunisticIntern.cs" />
     <Compile Include="..\Shared\TaskHostConfiguration.cs" />
     <Compile Include="..\Shared\TaskHostTaskComplete.cs" />
     <Compile Include="..\Shared\OutOfProcTaskHostTaskResult.cs" />
     <Compile Include="..\Shared\TaskHostTaskCancelled.cs" />
     <Compile Include="..\Shared\TaskLoader.cs" />
+    <Compile Include="..\Shared\MSBuildLoadContext.cs" Condition="'$(TargetFrameworkIdentifier)'!='.NETFramework'" />
     <Compile Include="..\Shared\TypeLoader.cs" />
     <Compile Include="..\Shared\LoadedType.cs">
       <ExcludeFromStyleCop>true</ExcludeFromStyleCop>
@@ -192,10 +194,10 @@
     <Compile Include="OutOfProcTaskHostNode.cs" />
     <Compile Include="OutOfProcTaskAppDomainWrapperBase.cs" />
     <Compile Include="OutOfProcTaskAppDomainWrapper.cs" />
+    <Compile Include="PerformanceLogEventListener.cs" />
     <Compile Include="XMake.cs">
       <ExcludeFromStyleCop>true</ExcludeFromStyleCop>
     </Compile>
-    <None Include="project.json" />
     <!-- This is to enable CodeMarkers in MSBuild.exe -->
     <!-- Win32 RC Files -->
     <RCResourceFile Include="native.rc" />
@@ -214,21 +216,20 @@
     <Content Include="MSBuild.rsp" Pack="false">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <None Include="Microsoft.Build.CommonTypes.xsd">
-      <SubType>Designer</SubType>
+    <XsdsForVS Include="**\*.xsd" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+    <XsdsForVS Include="Update-MSBuildXsds.ps1" />
+    <None Include="@(XsdsForVS)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="Microsoft.Build.Core.xsd">
-      <SubType>Designer</SubType>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Configuration.ConfigurationManager" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
     <!-- File for Assemblies we depend on -->
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml" />
-    <Reference Include="System.Configuration" />
     <PackageReference Include="LargeAddressAware" PrivateAssets="All" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFrameworkIdentifier)' != '.NETFramework'">
@@ -240,6 +241,14 @@
     <ProjectReference Include="..\Framework\Microsoft.Build.Framework.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Tasks\Microsoft.Build.Tasks.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyXsds"
+          BeforeTargets="AfterBuild">
+    <Copy SourceFiles="@(XsdsForVS)"
+          DestinationFiles="@(XsdsForVS->'$([MSBuild]::NormalizeDirectory('$(ArtifactsDir)', 'xsd'))%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="$(SkipCopyUnchangedFiles)"
+          />
+  </Target>
 
   <!-- Include MSBuild.deps.json and MSBuild.runtimeconfig.json in ContentWithTargetPath so they will be copied to the output folder of projects
        that reference this one. -->
@@ -261,14 +270,11 @@
        the bin folder. -->
   <Target Name="AddRefAssemblies"
           DependsOnTargets="ResolveAssemblyReferences"
-          BeforeTargets="AssignTargetPaths">
+          BeforeTargets="AssignTargetPaths"
+          Condition="'$(MonoBuild)' != 'true'">
     <ItemGroup>
-      <Content Include="$(NuGetPackageRoot)\netstandard.library\2.0.3\build\netstandard2.0\ref\netstandard.dll"
-               Link="ref\netstandard.dll"
-               CopyToOutputDirectory="PreserveNewest" />
-      <Content Include="$(NuGetPackageRoot)\netstandard.library\2.0.3\build\netstandard2.0\ref\mscorlib.dll"
-               Link="ref\mscorlib.dll"
-               CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="$(NuGetPackageRoot)\netstandard.library\2.0.3\build\netstandard2.0\ref\netstandard.dll" Link="ref\netstandard.dll" CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="$(NuGetPackageRoot)\netstandard.library\2.0.3\build\netstandard2.0\ref\mscorlib.dll" Link="ref\mscorlib.dll" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 
@@ -294,9 +300,12 @@
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.Common.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.Common.tasks" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.Managed.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
+      <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.Managed.Before.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
+      <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.Managed.After.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.CSharp.CrossTargeting.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.CSharp.CurrentVersion.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.CSharp.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
+      <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.NET.props" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.NETFramework.CurrentVersion.props" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.NETFramework.CurrentVersion.targets" TargetFramework="%(_TargetFrameworks.Identity)" />
       <_OurFiles Include="$(OutputPath)%(_TargetFrameworks.Identity)\Microsoft.NETFramework.props" TargetFramework="%(_TargetFrameworks.Identity)" />

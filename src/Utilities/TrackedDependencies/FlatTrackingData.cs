@@ -223,8 +223,6 @@ namespace Microsoft.Build.Utilities
             InternalConstruct(null, tlogFiles, tlogFilesToIgnore, false, missingFileTimeUtc, excludedInputPaths);
         }
 
-
-
         /// <summary>
         /// Constructor
         /// </summary>
@@ -361,10 +359,7 @@ namespace Microsoft.Build.Utilities
                 {
                     // The tracking logs are not available, they may have been deleted at some point.
                     // Be safe and remove any references from the cache.
-                    if (DependencyTableCache.DependencyTable.ContainsKey(tLogRootingMarker))
-                    {
-                        DependencyTableCache.DependencyTable.Remove(tLogRootingMarker);
-                    }
+                    DependencyTableCache.DependencyTable.Remove(tLogRootingMarker);
                 }
                 return;
             }
@@ -482,11 +477,7 @@ namespace Microsoft.Build.Utilities
                 // sure that we essentially force a rebuild of this particular root. 
                 if (encounteredInvalidTLogContents)
                 {
-                    if (DependencyTableCache.DependencyTable.ContainsKey(tLogRootingMarker))
-                    {
-                        DependencyTableCache.DependencyTable.Remove(tLogRootingMarker);
-                    }
-
+                    DependencyTableCache.DependencyTable.Remove(tLogRootingMarker);
                     DependencyTable = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
                 }
                 else
@@ -613,7 +604,7 @@ namespace Microsoft.Build.Utilities
         [SuppressMessage("Microsoft.Naming", "CA1702:CompoundWordsShouldBeCasedCorrectly", MessageId = "TLog", Justification = "Has now shipped as public API; plus it's unclear whether 'Tlog' or 'TLog' is the preferred casing")]
         public void SaveTlog(DependencyFilter includeInTLog)
         {
-            if (TlogFiles != null && TlogFiles.Length > 0)
+            if (TlogFiles?.Length > 0)
             {
                 string tLogRootingMarker = DependencyTableCache.FormatNormalizedTlogRootingMarker(TlogFiles);
 
@@ -621,10 +612,7 @@ namespace Microsoft.Build.Utilities
                 {
                     // The tracking logs in the cache will be invalidated by this write
                     // remove the cached entries to be sure
-                    if (DependencyTableCache.DependencyTable.ContainsKey(tLogRootingMarker))
-                    {
-                        DependencyTableCache.DependencyTable.Remove(tLogRootingMarker);
-                    }
+                    DependencyTableCache.DependencyTable.Remove(tLogRootingMarker);
                 }
 
                 string firstTlog = TlogFiles[0].ItemSpec;
@@ -677,7 +665,6 @@ namespace Microsoft.Build.Utilities
 
             return fileModifiedTimeUtc;
         }
-
 
         #endregion
 
@@ -848,7 +835,6 @@ namespace Microsoft.Build.Utilities
             // Read the output table, skipping missing files
             FlatTrackingData outputs = new FlatTrackingData(writeTLogNames, true);
 
-
             // If we failed we need to clean the Tlogs
             if (!trackedOperationsSucceeded)
             {
@@ -872,7 +858,7 @@ namespace Microsoft.Build.Utilities
 
                 // In addition to temporary file removal, an optional set of files to remove may be been supplied
 
-                if (trackedFilesToRemoveFromTLogs != null && trackedFilesToRemoveFromTLogs.Length > 0)
+                if (trackedFilesToRemoveFromTLogs?.Length > 0)
                 {
                     IDictionary<string, ITaskItem> trackedFilesToRemove = new Dictionary<string, ITaskItem>(StringComparer.OrdinalIgnoreCase);
 

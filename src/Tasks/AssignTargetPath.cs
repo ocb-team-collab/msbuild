@@ -66,18 +66,24 @@ namespace Microsoft.Build.Tasks
                     (String.Compare(
                         fullRootPath, 0,
                         currentDirectory, 0,
-                        (fullRootPath.Length - 1) /* don't compare trailing slash */,
+                        fullRootPath.Length - 1 /* don't compare trailing slash */,
                         StringComparison.OrdinalIgnoreCase) == 0);
 
                 for (int i = 0; i < Files.Length; ++i)
                 {
-                    string link = Files[i].GetMetadata(ItemMetadataNames.link);
                     AssignedFiles[i] = new TaskItem(Files[i]);
 
-                    // If file has a link, use that.
-                    string targetPath = link;
+                    // If TargetPath is already set, it takes priority.
+                    // https://github.com/dotnet/msbuild/issues/2795
+                    string targetPath =  ChangeWaves.AreFeaturesEnabled(ChangeWaves.Wave16_10) ? Files[i].GetMetadata(ItemMetadataNames.targetPath) : null;
 
-                    if (string.IsNullOrEmpty(link))
+                    // If TargetPath not already set, fall back to default behavior.
+                    if (string.IsNullOrEmpty(targetPath))
+                    {
+                        targetPath = Files[i].GetMetadata(ItemMetadataNames.link);
+                    }
+
+                    if (string.IsNullOrEmpty(targetPath))
                     {
                         if (// if the file path is relative
                             !Path.IsPathRooted(Files[i].ItemSpec) &&

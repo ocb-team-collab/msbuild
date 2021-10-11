@@ -109,7 +109,7 @@ namespace Microsoft.Build.Tasks.Xaml
         private const string switchAttribute = "SWITCH";
 
         #endregion
-        
+
         #region Properties
 
         /// <summary>
@@ -416,10 +416,7 @@ namespace Microsoft.Build.Tasks.Xaml
             }
 
             // generate the list of parameters in order
-            if (!switchRelationsList.ContainsKey(switchRelationsToAdd.SwitchValue))
-            {
-                switchRelationsList.Remove(switchRelationsToAdd.SwitchValue);
-            }
+            switchRelationsList.Remove(switchRelationsToAdd.SwitchValue);
 
             // build the dependencies and the values for a parameter
             XmlNode child = node.FirstChild;
@@ -463,18 +460,17 @@ namespace Microsoft.Build.Tasks.Xaml
                         }
                         else
                         {
-                            if (!switchRelationsToAdd.ExternalRequires.ContainsKey(tool))
+                            if (!switchRelationsToAdd.ExternalRequires.TryGetValue(tool, out List<string> switches))
                             {
-                                var switches = new List<string> { Switch };
+                                switches = new List<string> { Switch };
                                 switchRelationsToAdd.ExternalRequires.Add(tool, switches);
                             }
                             else
                             {
-                                switchRelationsToAdd.ExternalRequires[tool].Add(Switch);
+                                switches.Add(Switch);
                             }
                         }
                     }
-
                     else if (String.Equals(child.Name, includedPlatformType, StringComparison.OrdinalIgnoreCase))
                     {
                         foreach (XmlAttribute attrib in child.Attributes)
@@ -530,7 +526,7 @@ namespace Microsoft.Build.Tasks.Xaml
         }
 
         /// <summary>
-        /// Gets all the attributes assigned in the xml file for this parameter or all of the nested switches for 
+        /// Gets all the attributes assigned in the xml file for this parameter or all of the nested switches for
         /// this parameter group
         /// </summary>
         private static SwitchRelations ObtainAttributes(XmlNode node, SwitchRelations switchGroup)
@@ -573,7 +569,7 @@ namespace Microsoft.Build.Tasks.Xaml
         }
 
         /// <summary>
-        /// An XML document can have many root nodes, but usually we want the single root 
+        /// An XML document can have many root nodes, but usually we want the single root
         /// element. Callers can test each root node in turn with this method, until it returns
         /// true.
         /// </summary>
@@ -583,13 +579,13 @@ namespace Microsoft.Build.Tasks.Xaml
         {
             // "A Document node can have the following child node types: XmlDeclaration,
             // Element (maximum of one), ProcessingInstruction, Comment, and DocumentType."
-            return (
+            return
                    (node.NodeType != XmlNodeType.Comment) &&
                    (node.NodeType != XmlNodeType.Whitespace) &&
                    (node.NodeType != XmlNodeType.XmlDeclaration) &&
                    (node.NodeType != XmlNodeType.ProcessingInstruction) &&
                    (node.NodeType != XmlNodeType.DocumentType)
-                   );
+                   ;
         }
     }
 }

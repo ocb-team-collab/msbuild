@@ -3,12 +3,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Text;
-using System.Xml;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Execution;
-using Microsoft.Build.Evaluation;
 using Microsoft.Build.Shared;
 using TaskItem = Microsoft.Build.Execution.ProjectItemInstance.TaskItem;
 using System.Collections;
@@ -141,6 +137,11 @@ namespace Microsoft.Build.BackEnd.Logging
             {
                 _backingItems = backingItems;
             }
+
+            // For performance reasons we need to expose the raw items to BinaryLogger
+            // as we know we're not going to mutate anything. This allows us to bypass DeepClone
+            // for each item
+            internal IEnumerable<TaskItem> BackingItems => _backingItems;
 
             /// <summary>
             /// Returns an enumerator that provides copies of the items

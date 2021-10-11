@@ -161,6 +161,11 @@
         <target state="translated">MSB3021: Soubor {0} nelze zkopírovat do umístění {1}. {2}</target>
         <note>{StrBegin="MSB3021: "}</note>
       </trans-unit>
+      <trans-unit id="Copy.ErrorIfLinkFailsSetWithoutLinkOption">
+        <source>MSB3892: ErrorIfLinkFails requires UseHardlinksIfPossible or UseSymbolicLinksIfPossible to be set.</source>
+        <target state="translated">MSB3892: ErrorIfLinkFails vyžaduje, aby byly nastavené UseHardlinksIfPossible nebo UseSymbolicLinksIfPossible.</target>
+        <note>{StrBegin="MSB3892: "} LOCALIZATION: Do not localize "ErrorIfLinkFails", "UseHardLinksIfPossible", or "UseSymbolicLinksIfPossible".</note>
+      </trans-unit>
       <trans-unit id="Copy.ExactlyOneTypeOfDestination">
         <source>MSB3022: Both "{0}" and "{1}" were specified as input parameters in the project file. Please choose one or the other.</source>
         <target state="translated">MSB3022: V souboru projektu byly jako vstupní parametry zadány položky {0} a {1}. Zvolte buď jednu, nebo druhou položku.</target>
@@ -175,6 +180,11 @@
         <source>Creating hard link to copy "{0}" to "{1}".</source>
         <target state="translated">Vytváří se pevný odkaz pro kopírování {0} do {1}.</target>
         <note>LOCALIZATION: {0} and {1} are paths.</note>
+      </trans-unit>
+      <trans-unit id="Copy.LinkFailed">
+        <source>MSB3893: Could not use a link to copy "{0}" to "{1}".</source>
+        <target state="translated">MSB3893: Nedá se použít odkaz pro kopírování {0} do {1}.</target>
+        <note>{StrBegin="MSB3893: "} LOCALIZATION: {0} and {1} are paths.</note>
       </trans-unit>
       <trans-unit id="Copy.RetryingAsFileCopy">
         <source>Could not use a link to copy "{0}" to "{1}". Copying the file instead. {2}</source>
@@ -499,6 +509,11 @@
         <target state="translated">Globální vlastnosti:</target>
         <note />
       </trans-unit>
+      <trans-unit id="General.StateFileAlreadyPresent">
+        <source>MSB3667: There is already a file at "{0}". If you are trying to create a precomputed cache, ensure that you are building a single project that depends on your assemblies rather than building your assemblies themselves. If you are running the ResolveAssemblyReference task normally, do not set the "AssemblyInformationCacheOutputPath" parameter of the ResolveAssemblyReference task.</source>
+        <target state="translated">MSB3667: V {0} už nějaký soubor existuje. Pokud se pokoušíte vytvořit předvypočítanou mezipaměť, ujistěte se, že sestavujete jeden projekt, který závisí na sestaveních, nikoli sestavení samotná. Pokud spouštíte úlohu ResolveAssemblyReference běžným způsobem, nenastavujte v úloze ResolveAssemblyReference parametr AssemblyInformationCacheOutputPath.</target>
+        <note>{StrBegin="MSB3667: "}</note>
+      </trans-unit>
       <trans-unit id="General.UndefineProperties">
         <source>Removing Properties:</source>
         <target state="translated">Odstraňování vlastností:</target>
@@ -764,6 +779,31 @@
         <target state="translated">MSB3160: Upozornění ověření Xml v souboru {0}: {1}</target>
         <note>{StrBegin="MSB3160: "}</note>
       </trans-unit>
+      <trans-unit id="GenerateLauncher.CopyError">
+        <source>MSB3961: An error occurred trying to copy '{0}' to '{1}': {2}</source>
+        <target state="translated">MSB3961: Při pokusu o zkopírování položky {0} do umístění {1} došlo k chybě: {2}</target>
+        <note>{StrBegin="MSB3961: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.General">
+        <source>MSB3962: An error occurred generating a launcher: {0}</source>
+        <target state="translated">MSB3962: Při generování spouštěče došlo k chybě: {0}</target>
+        <note>{StrBegin="MSB3962: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.InvalidInput">
+        <source>MSB3963: Not enough data was provided to generate a launcher. Please provide a value for: 'EntryPoint'.</source>
+        <target state="translated">MSB3963: Nebyl k dispozici dostatek dat k vygenerování spouštěče. Zadejte prosím hodnotu EntryPoint.</target>
+        <note>{StrBegin="MSB3963: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.MissingLauncherExe">
+        <source>MSB3964: Could not find required file '{0}'.</source>
+        <target state="translated">MSB3964: Nepovedlo se najít požadovaný soubor {0}.</target>
+        <note>{StrBegin="MSB3964: "}</note>
+      </trans-unit>
+      <trans-unit id="GenerateLauncher.NoOutputPath">
+        <source>MSB3965: No output path specified in build settings.</source>
+        <target state="translated">MSB3965: V nastavení sestavení nebyla zadána žádná výstupní cesta.</target>
+        <note>{StrBegin="MSB3965: "}</note>
+      </trans-unit>
       <trans-unit id="GenerateManifest.AllowPartiallyTrustedCallers">
         <source>MSB3177: Reference '{0}' does not allow partially trusted callers.</source>
         <target state="translated">MSB3177: Odkaz {0} nepovoluje částečně důvěryhodné volající.</target>
@@ -969,6 +1009,11 @@
         <target state="translated">MSB3190: Funkce ClickOnce nepodporuje požadovanou úroveň provedení {0}.</target>
         <note>{StrBegin="MSB3190: "}</note>
       </trans-unit>
+      <trans-unit id="GenerateResource.CoreSupportsLimitedScenarios">
+        <source>MSB3824: In order to build with .NET Core, resource inputs must be in .txt or .resx format.</source>
+        <target state="translated">MSB3824: Aby bylo možné provést sestavení pomocí .NET Core, musí být vstupy prostředků ve formátu .txt nebo .resx.</target>
+        <note>{StrBegin="MSB3824: "}</note>
+      </trans-unit>
       <trans-unit id="GenerateResource.InputDoesntExist">
         <source>Input file "{0}" does not exist.</source>
         <target state="translated">Vstupní soubor {0} neexistuje.</target>
@@ -1001,12 +1046,12 @@
       </trans-unit>
       <trans-unit id="GenerateResource.PreserializedResourcesRequiresExtensions">
         <source>MSB3822: Non-string resources require the System.Resources.Extensions assembly at runtime, but it was not found in this project's references.</source>
-        <target state="new">MSB3822: Non-string resources require the System.Resources.Extensions assembly at runtime, but it was not found in this project's references.</target>
+        <target state="translated">MSB3822: Neřetězcové prostředky vyžadují při spuštění sestavení System.Resources.Extensions, v odkazech na tento projekt ale nebylo nalezeno.</target>
         <note>{StrBegin="MSB3822: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.PreserializedResourcesRequiresProperty">
         <source>MSB3823: Non-string resources require the property GenerateResourceUsePreserializedResources to be set to true.</source>
-        <target state="new">MSB3823: Non-string resources require the property GenerateResourceUsePreserializedResources to be set to true.</target>
+        <target state="translated">MSB3823: Neřetězcové prostředky vyžadují, aby vlastnost GenerateResourceUsePreserializedResources byla nastavena na hodnotu true.</target>
         <note>{StrBegin="MSB3823: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.ResourceNotFound">
@@ -1025,9 +1070,9 @@
         <note>{StrBegin="MSB3554: "}</note>
       </trans-unit>
       <trans-unit id="GenerateResource.CorruptOutput">
-        <source>MSB3555: Output file "{0}" is possibly corrupt.</source>
-        <target state="translated">MSB3555: Výstupní soubor {0} je zřejmě poškozen.</target>
-        <note>{StrBegin="MSB3555: "}</note>
+        <source>Output file "{0}" is possibly corrupt and will be deleted and recreated.</source>
+        <target state="translated">Výstupní soubor {0} je pravděpodobně poškozený a bude odstraněn a znovu vytvořen.</target>
+        <note />
       </trans-unit>
       <trans-unit id="GenerateResource.OnlyStringsSupported">
         <source>MSB3556: Only strings can be written to a .txt file, resource "{0}" is type {1}.</source>
@@ -1290,6 +1335,11 @@
         <source>Found the Microsoft Windows SDK installed at "{0}".</source>
         <target state="translated">Byla nalezena instalace sady Microsoft Windows SDK v umístění {0}.</target>
         <note />
+      </trans-unit>
+      <trans-unit id="GetReferenceAssemblyPaths.OutOfDateSDK">
+        <source>MSB3971: The reference assemblies for "{0}" were not found. You might be using an older .NET SDK to target .NET 5.0 or higher. Update Visual Studio and/or your .NET SDK.</source>
+        <target state="translated">MSB3971: Referenční sestavení pro {0} se nenašla. Je možné, že používáte starší sadu .NET SDK, se kterou cílíte na .NET 5.0 nebo novější. Aktualizujte Visual Studio nebo sadu .NET SDK.</target>
+        <note>{StrBegin="MSB3971: "}</note>
       </trans-unit>
       <trans-unit id="MakeDir.Comment">
         <source>Creating directory "{0}".</source>
@@ -1693,7 +1743,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoRedistAssembliesToGenerateExclusionList">
         <source>MSB3256: No assemblies were read in from the redist lists. A TargetFramework profile exclusion list could not be generated. </source>
-        <target state="translated">MSB3256: Ze seznamů redistribuce nebyla přečtena žádná sestavení. Nelze vygenerovat seznam vyloučení profilu TargetFramework. </target>
+        <target state="translated">MSB3256: Ze seznamů redistribučního balíčku nebyla přečtena žádná sestavení. Nelze vygenerovat seznam vyloučení profilu TargetFramework. </target>
         <note>{StrBegin="MSB3256: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.PrimaryReferenceOutsideOfFramework">
@@ -1713,7 +1763,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoProfilesFound">
         <source>MSB3260: Could not find any target framework profile redist files in the FullFrameworkFolders locations.</source>
-        <target state="translated">MSB3260: V umístěních uvedených v parametru FullFrameworkFolders nelze najít žádné soubory redistribuce profilu cílové architektury.</target>
+        <target state="translated">MSB3260: V umístěních uvedených v parametru FullFrameworkFolders nelze najít žádné soubory redistribučního balíčku profilu cílové architektury.</target>
         <note>{StrBegin="MSB3260: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.FrameworkDirectoryOnProfiles">
@@ -1787,8 +1837,10 @@
         <note>{StrBegin="MSB3276: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.FoundConflicts">
-        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.  These reference conflicts are listed in the build log when log verbosity is set to detailed.</source>
-        <target state="translated">MSB3277: Byly zjištěny konflikty mezi různými verzemi sestavení {0}. Tyto problémy nebylo možné vyřešit. Tyto konflikty odkazů jsou uvedeny v protokolu sestavení, jestliže je protokolování nastaveno jako podrobné.</target>
+        <source>MSB3277: Found conflicts between different versions of "{0}" that could not be resolved.
+{1}</source>
+        <target state="translated">MSB3277: Našly se konflikty mezi různými verzemi {0}, které se nepovedlo přeložit.
+{1}</target>
         <note>{StrBegin="MSB3277: "}</note>
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.LogAttributeFormat">
@@ -1916,7 +1968,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.RemappedReference">
         <source>Due to a remapping entry in the currently targeted framework redist list, reference "{0}" was remapped to "{1}".</source>
-        <target state="translated">Na základě položky pro změnu mapování v redistribučním seznamu aktuálního cílového rozhraní byl odkaz {0} přemapován na odkaz {1}.</target>
+        <target state="translated">Na základě položky pro změnu mapování v seznamu redistribučního balíčku aktuálního cílového rozhraní byl odkaz {0} přemapován na odkaz {1}.</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.UnificationByFrameworkRetarget">
@@ -1976,7 +2028,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.TargetFrameworkRedistLogHeader">
         <source>Redist List File Paths:</source>
-        <target state="translated">Cesty k souborům v seznamu redistribuce:</target>
+        <target state="translated">Cesty k souborům v seznamu redistribučního balíčku:</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.TargetFrameworkExclusionListLogHeader">
@@ -1991,7 +2043,7 @@
       </trans-unit>
       <trans-unit id="ResolveAssemblyReference.NoSubSetRedistListName">
         <source>The redist list file "{0}" has a null or empty Redist name in the FileList element. Make sure the Redist Name is not null or empty.</source>
-        <target state="translated">Název redistribuce v elementu FileList v souboru seznamu redistribuce {0} má hodnotu Null nebo je prázdný. Název redistribuce nesmí mít hodnotu Null ani nesmí být prázdný.</target>
+        <target state="translated">Název redistribučního balíčku v elementu FileList v souboru seznamu redistribučního balíčku {0} je null nebo prázdný. Název redistribučního balíčku nesmí být null ani prázdný.</target>
         <note />
       </trans-unit>
       <trans-unit id="ResolveComReference.TreatingTlbOfActiveXAsNonEmbedded">
@@ -2278,6 +2330,11 @@
         <target state="translated">MSB3473: Cesta k objektu {0} je neplatná. {1}</target>
         <note>{StrBegin="MSB3473: "}</note>
       </trans-unit>
+      <trans-unit id="SGen.TaskNotSupported">
+        <source>MSB3474: The task "{0}" is not supported on the .NET Core version of MSBuild. Use the Microsoft XML Serializer Generator package instead. See https://go.microsoft.com/fwlink/?linkid=858594 for more information.</source>
+        <target state="translated">MSB3474: Úloha {0} se ve verzi MSBuildu .NET Core nepodporuje. Použijte místo ní balíček Microsoft XML Serializer Generator. Další informace najdete na adrese https://go.microsoft.com/fwlink/?linkid=858594.</target>
+        <note>{StrBegin="MSB3474: "}</note>
+      </trans-unit>
       <trans-unit id="SignFile.CertNotInStore">
         <source>MSB3481: The signing certificate could not be located. Ensure that it is in the current user's personal store.</source>
         <target state="translated">MSB3481: Nebyl nalezen podpisový certifikát. Zkontrolujte, zda je uložen v osobním úložišti aktuálního uživatele.</target>
@@ -2428,6 +2485,11 @@
         <target state="translated">Rozzipování ze souboru {0} do souboru {1} neproběhlo, protože parametr {2} byl v projektu nastaven na hodnotu {3} a velikosti souborů a časová razítka se shodují.</target>
         <note />
       </trans-unit>
+      <trans-unit id="Unzip.DidNotUnzipBecauseOfFilter">
+        <source>Did not unzip file "{0}" because it didn't match the include filter or because it matched the exclude filter.</source>
+        <target state="translated">Soubor {0} se nerozzipoval, protože neodpovídá filtru zahrnutí nebo odpovídá filtru vyloučení.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="Unzip.ErrorCouldNotCreateDestinationDirectory">
         <source>MSB3931: Failed to unzip to directory "{0}" because it could not be created.  {1}</source>
         <target state="translated">MSB3931: Rozzipování do adresáře {0} se nepodařilo, protože ho nebylo možné vytvořit. {1}</target>
@@ -2458,6 +2520,16 @@
         <target state="translated">MSB3932: Soubor {0} se nepodařilo rozzipovat, protože neexistuje nebo není přístupný.</target>
         <note>{StrBegin="MSB3932: "}</note>
       </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternInvalidPath">
+        <source>MSB3937: Failed to parse pattern "{0}" because it contains an invalid path character.</source>
+        <target state="translated">MSB3937: Nepovedlo se parsovat vzor {0}, protože obsahuje neplatný znak cesty.</target>
+        <note>{StrBegin="MSB3937: "}</note>
+      </trans-unit>
+      <trans-unit id="Unzip.ErrorParsingPatternPropertyReferences">
+        <source>MSB3938: Failed to parse pattern "{0}" because it contains a property reference which isn't supported.</source>
+        <target state="translated">MSB3938: Nepovedlo se parsovat vzor {0}, protože obsahuje odkaz na vlastnost, která se nepodporuje.</target>
+        <note>{StrBegin="MSB3938: "}</note>
+      </trans-unit>
       <trans-unit id="Unzip.FileComment">
         <source>Unzipping file "{0}" to "{1}".</source>
         <target state="translated">Soubor {0} se rozzipovává do {1}.</target>
@@ -2482,6 +2554,31 @@
         <source>MSB3952: File hash mismatch. Expected {0} to have a {1} file hash of {2}, but it was {3}.</source>
         <target state="translated">MSB3952: Neodpovídající hodnota hash souboru. Očekávalo se, že {0} bude mít hodnotu hash souboru {1} {2}, ale byla {3}.</target>
         <note>{StrBegin="MSB3952: "}</note>
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertToInferredType">
+        <source>Could not convert the value for parameter "{0}" to the inferred type "{1}". The value will be treated as a string. {2}</source>
+        <target state="translated">Hodnota parametru „{0}“ se nemohla převést na odvozený typ „{1}“. Hodnota se zpracuje jako řetězec. {2}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotConvertValue">
+        <source>MSB3716: The parameter value "{0}" could not be converted to "{1}". {2}</source>
+        <target state="translated">MSB3716: Hodnota parametru „{0}“ se nemohla převést na „{1}“. {2}</target>
+        <note>{StrBegin="MSB3716: "}</note>
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.CouldNotInferParameterType">
+        <source>Could not infer the type of parameter "{0}" because the attribute type is unknown. The value will be treated as a string.</source>
+        <target state="translated">Nepovedlo se odvodit typ parametru „{0}“, protože typ atributu je neznámý. Hodnota se zpracuje jako řetězec.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.MultipleConstructorsFound">
+        <source>Multiple attribute constructors were found for type inferencing.</source>
+        <target state="translated">Pro typ odvození se našlo víc konstruktorů atributů.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WriteCodeFragment.ParameterTypeNotFound">
+        <source>MSB3715: The type "{0}" was not found.</source>
+        <target state="translated">MSB3715: Typ „{0}“ ne nenašel.</target>
+        <note>{StrBegin="MSB3715: "}</note>
       </trans-unit>
       <trans-unit id="WriteLinesToFile.ErrorOrWarning">
         <source>MSB3491: Could not write lines to file "{0}". {1}</source>
@@ -2512,6 +2609,11 @@
         <source>MSB3762: No references were passed to the task. References to at least mscorlib and Windows.Foundation are required.</source>
         <target state="translated">MSB3762: Úloze nebyly předány žádné odkazy. Je vyžadován odkaz alespoň na knihovny mscorlib a Windows.Foundation.</target>
         <note>{StrBegin="MSB3762: "}</note>
+      </trans-unit>
+      <trans-unit id="Xaml.DuplicatePropertyName">
+        <source>MSB3724: Unable to create Xaml task.  Duplicate property name '{0}'.</source>
+        <target state="translated">MSB3724: Nepovedlo se vytvořit úlohu XAML. Duplicitní název vlastnosti {0}</target>
+        <note>{StrBegin="MSB3724: "}</note>
       </trans-unit>
       <trans-unit id="Xaml.TaskCreationFailed">
         <source>MSB3686: Unable to create Xaml task.  Compilation failed.  {0}</source>
@@ -2577,6 +2679,11 @@
         <source>MSB3701: Unable to load arguments for the XslTransformation task. {0}</source>
         <target state="translated">MSB3701: Nelze načíst argumenty pro úlohu XslTransformation. {0}</target>
         <note>{StrBegin="MSB3701: "}</note>
+      </trans-unit>
+      <trans-unit id="XslTransform.PrecompiledXsltError">
+        <source>MSB3705: XslCompiledDllPath is not supported when building with .NET Core.</source>
+        <target state="translated">MSB3705: XslCompiledDllPath se při sestavování pomocí .NET Core nepodporuje.</target>
+        <note>{StrBegin="MSB3705: "}</note>
       </trans-unit>
       <trans-unit id="XslTransform.XsltArgumentsError">
         <source>MSB3702: Unable to process the XsltParameters argument for the XslTransformation task. {0}</source>
@@ -3000,7 +3107,7 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ExpandRedistFrom">
         <source>Looking for redist files under "{0}".</source>
-        <target state="translated">Probíhá hledání souborů pro redistribuci v rámci {0}.</target>
+        <target state="translated">Probíhá hledání souborů redistribučního balíčku v rámci {0}.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.NotExpanding">
@@ -3015,17 +3122,17 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.AddingRedistFile">
         <source>Adding file "{0}" from redist folder with target path "{1}".</source>
-        <target state="translated">Probíhá přidání souboru {0} ze složky pro redistribuci s cílovou cestou {1}.</target>
+        <target state="translated">Přidává se soubor {0} ze složky redistribučního balíčku s cílovou cestou {1}.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictRedistSameSDK">
         <source>There was a conflict between two redist files going to the same target path "{0}" within the "{1}" SDK. Choosing "{2}" over "{3}" because it was resolved first.</source>
-        <target state="translated">V rámci sady SDK {1} došlo ke konfliktu mezi dvěma soubory pro redistribuci, které oba směřují do stejné cílové cesty {0}. Bude upřednostněn soubor {2} před souborem {3}, protože byl vyřešen jako první.</target>
+        <target state="translated">V rámci sady SDK {1} došlo ke konfliktu mezi dvěma soubory redistribučního balíčku, které oba směřují do stejné cílové cesty {0}. Bude upřednostněn soubor {2} před souborem {3}, protože byl vyřešen jako první.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictRedistDifferentSDK">
         <source>There was a conflict between two files from the redist folder files going to the same target path "{0}" between the "{1}" and "{2}" SDKs. Choosing "{3}" over "{4}" because it was resolved first.</source>
-        <target state="translated">Došlo ke konfliktu mezi dvěma soubory ze složky pro redistribuci, které oba směřují do stejné cílové cesty {0}. K tomuto konfliktu došlo mezi sadami SDK {1} a {2}. Bude upřednostněn soubor {3} před souborem {4}, protože byl vyřešen jako první.</target>
+        <target state="translated">Došlo ke konfliktu mezi dvěma soubory ze složky redistribučního balíčku, které oba směřují do stejné cílové cesty {0}. K tomuto konfliktu došlo mezi sadami SDK {1} a {2}. Bude upřednostněn soubor {3} před souborem {4}, protože byl vyřešen jako první.</target>
         <note />
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.ConflictReferenceSameSDK">
@@ -3080,12 +3187,12 @@
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.CannotHaveEmptyTargetConfiguration">
         <source>MSB3797: The targeted configuration for the resolved sdk reference "{0}" was empty. Cannot find reference or redist files without a targeted configuration.</source>
-        <target state="translated">MSB3797: Cílová konfigurace pro odkaz na převedenou sadu SDK {0} je prázdná. Bez určení cílové konfigurace nelze nalézt odkazy nebo soubory pro redistribuci.</target>
+        <target state="translated">MSB3797: Cílová konfigurace pro odkaz na převedenou sadu SDK {0} je prázdná. Bez určení cílové konfigurace nelze nalézt odkazy nebo soubory redistribučního balíčku.</target>
         <note>{StrBegin="MSB3797: "}</note>
       </trans-unit>
       <trans-unit id="GetSDKReferenceFiles.CannotHaveEmptyTargetArchitecture">
         <source>MSB3798: The targeted architecture for the resolved sdk reference "{0}" was empty. Cannot find reference or redist files without a targeted architecture.</source>
-        <target state="translated">MSB3798: Cílová architektura pro vyřešený odkaz na sadu SDK {0} je prázdná. Bez určení cílové architektury nelze nalézt odkazy nebo soubory pro redistribuci.</target>
+        <target state="translated">MSB3798: Cílová architektura pro vyřešený odkaz na sadu SDK {0} je prázdná. Bez určení cílové architektury se nedají najít odkazy ani soubory redistribučního balíčku.</target>
         <note>{StrBegin="MSB3798: "}</note>
       </trans-unit>
       <trans-unit id="FindInvalidProjectReferences.WarnWhenVersionIsIncompatible">
@@ -3124,9 +3231,9 @@
         <note>{StrBegin="MSB3492: "}</note>
       </trans-unit>
       <trans-unit id="WriteLinesToFile.SkippingUnchangedFile">
-        <source>MSB3493: Skipping write to file "{0}" because content would not change.</source>
-        <target state="translated">MSB3493: Zápis do souboru {0} se přeskočí, protože obsah by se nezměnil.</target>
-        <note>{StrBegin="MSB3493: "}</note>
+        <source>Skipping write to file "{0}" because content would not change.</source>
+        <target state="translated">Zápis do souboru {0} se přeskočí, protože obsah by se nezměnil.</target>
+        <note />
       </trans-unit>
       <trans-unit id="Telemetry.IllegalEventDataString">
         <source>The property "{0}" in the telemetry event data property list "{1}" is malformed.  Please only pass in a semicolon-delimited list of constant string values separated by "=", e.g., "Property1=Value1;Property2=Value2".</source>

@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#if FEATURE_SYSTEM_CONFIGURATION
-
 using System.Configuration;
-using Microsoft.Win32;
 using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
@@ -572,9 +569,9 @@ namespace Microsoft.Build.UnitTests.Definition
 
             var reader = GetStandardConfigurationReader();
             Dictionary<string, Toolset> toolsets = new Dictionary<string, Toolset>(StringComparer.OrdinalIgnoreCase);
-            string msbuildOverrideTasksPath = null;
-            string defaultOverrideToolsVersion = null;
-            reader.ReadToolsets(toolsets, new PropertyDictionary<ProjectPropertyInstance>(), new PropertyDictionary<ProjectPropertyInstance>(), true, out msbuildOverrideTasksPath, out defaultOverrideToolsVersion);
+            reader.ReadToolsets(toolsets, new PropertyDictionary<ProjectPropertyInstance>(),
+                                new PropertyDictionary<ProjectPropertyInstance>(), true,
+                                out string msbuildOverrideTasksPath, out string defaultOverrideToolsVersion);
 
             Dictionary<string, ProjectImportPathMatch> pathsTable = toolsets["2.0"].ImportPropertySearchPathsTable;
             if (NativeMethodsShared.IsWindows)
@@ -683,4 +680,3 @@ namespace Microsoft.Build.UnitTests.Definition
 
     }
 }
-#endif

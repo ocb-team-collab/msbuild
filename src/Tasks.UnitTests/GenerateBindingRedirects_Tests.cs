@@ -3,21 +3,17 @@
 
 using System;
 using System.Collections;
-using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using Microsoft.Build.Framework;
-using Microsoft.Build.Shared;
 using Microsoft.Build.UnitTests;
-using Microsoft.Build.UnitTests.Shared;
 using Microsoft.Build.Utilities;
 using Shouldly;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Microsoft.Build.Tasks.Unittest
+namespace Microsoft.Build.Tasks.UnitTests
 {
     public class GenerateBindingRedirectsTests : IDisposable
     {

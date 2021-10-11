@@ -17,9 +17,7 @@ namespace Microsoft.Build.Tasks
     /// This class defines an "Exec" MSBuild task, which simply invokes the specified process with the specified arguments, waits
     /// for it to complete, and then returns True if the process completed successfully, and False if an error occurred.
     /// </summary>
-    /// <comments>
-    /// UNDONE: ToolTask has a "UseCommandProcessor" flag that duplicates much of the code in this class. Remove the duplication.
-    /// </comments>
+    // UNDONE: ToolTask has a "UseCommandProcessor" flag that duplicates much of the code in this class. Remove the duplication.
     public class Exec : ToolTaskExtension
     {
         #region Constructors
@@ -43,11 +41,6 @@ namespace Microsoft.Build.Tasks
 
         #region Fields
 
-        private const string UseUtf8Always = "ALWAYS";
-        private const string UseUtf8Never = "NEVER";
-        private const string UseUtf8Detect = "DETECT";
-        private const string UseUtf8System = "SYSTEM";
-
         // Are the encodings for StdErr and StdOut streams valid
         private bool _encodingParametersValid = true;
         private string _workingDirectory;
@@ -60,6 +53,9 @@ namespace Microsoft.Build.Tasks
         private Encoding _standardErrorEncoding;
         private Encoding _standardOutputEncoding;
         private string _command;
+
+        // '^' before _any_ character escapes that character, don't escape it.
+        private static readonly char[] _charactersToEscape = { '(', ')', '=', ';', '!', ',', '&', ' '};
 
         #endregion
 
@@ -131,14 +127,6 @@ namespace Microsoft.Build.Tasks
         protected override Encoding StandardErrorEncoding => _standardErrorEncoding;
 
         /// <summary>
-        /// Whether or not to use UTF8 encoding for the cmd file and console window.
-        /// Values: Always, Never, Detect
-        /// If set to Detect, the current code page will be used unless it cannot represent 
-        /// the Command string. In that case, UTF-8 is used.
-        /// </summary>
-        public string UseUtf8Encoding { get; set; }
-
-        /// <summary>
         /// Project visible property specifying the encoding of the captured task standard output stream
         /// </summary>
         [Output]
@@ -203,7 +191,7 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         private void CreateTemporaryBatchFile()
         {
-            var encoding = BatchFileEncoding();
+            var encoding = EncodingUtilities.BatchFileEncoding(Command + WorkingDirectory, UseUtf8Encoding);
 
             // Temporary file with the extension .Exec.bat
             _batchFile = FileUtilities.GetTemporaryFile(".exec.cmd");
@@ -341,17 +329,23 @@ namespace Microsoft.Build.Tasks
         {
             if (IgnoreExitCode)
             {
-                Log.LogMessageFromResources(MessageImportance.Normal, "Exec.CommandFailedNoErrorCode", Command, ExitCode);
+                // Don't log when EchoOff and IgnoreExitCode.
+                if (!EchoOff)
+                {
+                    Log.LogMessageFromResources(MessageImportance.Normal, "Exec.CommandFailedNoErrorCode", Command, ExitCode);
+                }
                 return true;
             }
 
+            // Don't emit expanded form of Command when EchoOff is set.
+            string commandForLog = EchoOff ? "..." : Command;
             if (ExitCode == NativeMethods.SE_ERR_ACCESSDENIED)
             {
-                Log.LogErrorWithCodeFromResources("Exec.CommandFailedAccessDenied", Command, ExitCode);
+                Log.LogErrorWithCodeFromResources("Exec.CommandFailedAccessDenied", commandForLog, ExitCode);
             }
             else
             {
-                Log.LogErrorWithCodeFromResources("Exec.CommandFailed", Command, ExitCode);
+                Log.LogErrorWithCodeFromResources("Exec.CommandFailed", commandForLog, ExitCode);
             }
             return false;
         }
@@ -610,19 +604,63 @@ namespace Microsoft.Build.Tasks
                     }
                     commandLine.AppendSwitch("/C"); // run then terminate
 
-                    // If for some crazy reason the path has a & character and a space in it
-                    // then get the short path of the temp path, which should not have spaces in it
-                    // and then escape the &
-                    if (batchFileForCommandLine.Contains("&") && !batchFileForCommandLine.Contains("^&"))
+                    if (ChangeWaves.AreFeaturesEnabled(ChangeWaves.Wave16_10))
                     {
-                        batchFileForCommandLine = NativeMethodsShared.GetShortFilePath(batchFileForCommandLine);
-                        batchFileForCommandLine = batchFileForCommandLine.Replace("&", "^&");
+                        StringBuilder fileName = null;
+
+                        // Escape special characters that need to be escaped.
+                        for (int i = 0; i < batchFileForCommandLine.Length; i++)
+                        {
+                            char c = batchFileForCommandLine[i];
+
+                            if (ShouldEscapeCharacter(c) && (i == 0 || batchFileForCommandLine[i - 1] != '^'))
+                            {
+                                // Avoid allocating a new string until we know we have something to escape.
+                                if (fileName == null)
+                                {
+                                    fileName = StringBuilderCache.Acquire(batchFileForCommandLine.Length);
+                                    fileName.Append(batchFileForCommandLine, 0, i);
+                                }
+
+                                fileName.Append('^');
+                            }
+
+                            fileName?.Append(c);
+                        }
+
+                        if (fileName != null)
+                        {
+                            batchFileForCommandLine = StringBuilderCache.GetStringAndRelease(fileName);
+                        }
+                    }
+                    else
+                    {
+                        // If for some crazy reason the path has a & character and a space in it
+                        // then get the short path of the temp path, which should not have spaces in it
+                        // and then escape the &
+                        if (batchFileForCommandLine.Contains("&") && !batchFileForCommandLine.Contains("^&"))
+                        {
+                            batchFileForCommandLine = NativeMethodsShared.GetShortFilePath(batchFileForCommandLine);
+                            batchFileForCommandLine = batchFileForCommandLine.Replace("&", "^&");
+                        }
                     }
                 }
 
                 commandLine.AppendFileNameIfNotNull(batchFileForCommandLine);
             }
-            
+        }
+
+        private bool ShouldEscapeCharacter(char c)
+        {
+            for (int i = 0; i < _charactersToEscape.Length; i++)
+            {
+                if (c == _charactersToEscape[i])
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         #endregion
@@ -650,94 +688,5 @@ namespace Microsoft.Build.Tasks
         protected override MessageImportance StandardOutputLoggingImportance => MessageImportance.High;
 
         #endregion
-
-        private static readonly Encoding s_utf8WithoutBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-
-        /// <summary>
-        /// Find the encoding for the batch file.
-        /// </summary>
-        /// <remarks>
-        /// The "best" encoding is the current OEM encoding, unless it's not capable of representing
-        /// the characters we plan to put in the file. If it isn't, we can fall back to UTF-8.
-        ///
-        /// Why not always UTF-8? Because tools don't always handle it well. See
-        /// https://github.com/Microsoft/msbuild/issues/397
-        /// </remarks>
-        private Encoding BatchFileEncoding()
-        {
-            if (!NativeMethodsShared.IsWindows)
-            {
-                return s_utf8WithoutBom;
-            }
-
-            var defaultEncoding = EncodingUtilities.CurrentSystemOemEncoding;
-
-            // When Windows is configured to use UTF-8 by default, the above returns
-            // a UTF-8-with-BOM encoding, which cmd.exe can't interpret. Force the no-BOM
-            // encoding if the returned encoding would have emitted one (preamble is nonempty).
-            // See https://github.com/Microsoft/msbuild/issues/4268
-            if (defaultEncoding is UTF8Encoding e && e.GetPreamble().Length > 0)
-            {
-                defaultEncoding = s_utf8WithoutBom;
-            }
-
-            string useUtf8 = string.IsNullOrEmpty(UseUtf8Encoding) ? UseUtf8Detect : UseUtf8Encoding;
-
-#if FEATURE_OSVERSION
-            // UTF8 is only supported in Windows 7 (6.1) or greater.
-            var windows7 = new Version(6, 1);
-
-            if (Environment.OSVersion.Version < windows7)
-            {
-                useUtf8 = UseUtf8Never;
-            }
-#endif
-
-            switch (useUtf8.ToUpperInvariant())
-            {
-                case UseUtf8Always:
-                    return s_utf8WithoutBom;
-                case UseUtf8Never:
-                case UseUtf8System:
-                    return defaultEncoding;
-                default:
-                    return CanEncodeString(defaultEncoding.CodePage, Command + WorkingDirectory)
-                        ? defaultEncoding
-                        : s_utf8WithoutBom;
-            }
-        }
-
-        /// <summary>
-        /// Checks to see if a string can be encoded in a specified code page.
-        /// </summary>
-        /// <remarks>Internal for testing purposes.</remarks>
-        /// <param name="codePage">Code page for encoding.</param>
-        /// <param name="stringToEncode">String to encode.</param>
-        /// <returns>True if the string can be encoded in the specified code page.</returns>
-        internal static bool CanEncodeString(int codePage, string stringToEncode)
-        {
-            // We have a System.String that contains some characters. Get a lossless representation
-            // in byte-array form.
-            var unicodeEncoding = new UnicodeEncoding();
-            var unicodeBytes = unicodeEncoding.GetBytes(stringToEncode);
-
-            // Create an Encoding using the desired code page, but throws if there's a
-            // character that can't be represented.
-            var systemEncoding = Encoding.GetEncoding(codePage, EncoderFallback.ExceptionFallback,
-                DecoderFallback.ExceptionFallback);
-
-            try
-            {
-                var oemBytes = Encoding.Convert(unicodeEncoding, systemEncoding, unicodeBytes);
-
-                // If Convert didn't throw, we can represent everything in the desired encoding.
-                return true;
-            }
-            catch (EncoderFallbackException)
-            {
-                // If a fallback encoding was attempted, we need to go to Unicode.
-                return false;
-            }
-        }
     }
 }

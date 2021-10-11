@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft. All rights reserved.
+// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Xml;
-using Microsoft.Build.BackEnd;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Framework.Profiler;
@@ -27,7 +26,7 @@ namespace Microsoft.Build.UnitTests
         public void ProfilerResultRoundTrip(ProfilerResult profilerResult)
         {
             var writeTranslator = TranslationHelpers.GetWriteTranslator();
-            ProfilerResult deserializedResult;
+            ProfilerResult deserializedResult = default;
 
             writeTranslator.TranslateDotNet(ref profilerResult);
 
@@ -62,7 +61,6 @@ namespace Microsoft.Build.UnitTests
                 {EvaluationLocation.CreateLocationForGlob(null, EvaluationPass.InitialProperties, "1", "myFile", 42, "glob description"),
                 new ProfiledLocation(TimeSpan.MaxValue, TimeSpan.MinValue, 2)}
             }) };
-
         }
     }
 }

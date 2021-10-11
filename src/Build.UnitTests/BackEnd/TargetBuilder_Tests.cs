@@ -3,12 +3,8 @@
 
 using System;
 using System.Xml;
-using System.Text;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Build.Framework;
 using Microsoft.Build.BackEnd;
@@ -16,6 +12,7 @@ using Microsoft.Build.Collections;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Shared;
+using Shouldly;
 
 using ILoggingService = Microsoft.Build.BackEnd.Logging.ILoggingService;
 using ProjectLoggingContext = Microsoft.Build.BackEnd.Logging.ProjectLoggingContext;
@@ -199,6 +196,43 @@ namespace Microsoft.Build.UnitTests.BackEnd
             Assert.Equal(TargetResultCode.Failure, resultsCache.GetResultForRequest(entry.Request)["Error"].ResultCode);
             Assert.Equal(TargetResultCode.Success, resultsCache.GetResultForRequest(entry.Request)["Bar"].ResultCode);
             Assert.Equal(TargetResultCode.Success, resultsCache.GetResultForRequest(entry.Request)["Baz"].ResultCode);
+        }
+
+        [Fact]
+        public void TestLoggingForSkippedTargetInputsAndOutputs()
+        {
+            string projectContents = @"
+<Project>
+  <Target Name=""Build"" Inputs=""a.txt;b.txt"" Outputs=""c.txt"">
+    <Message Text=""test"" Importance=""High"" />
+  </Target>
+</Project>";
+
+            using (var env = TestEnvironment.Create())
+            {
+                var files = env.CreateTestProjectWithFiles(projectContents, new[] { "a.txt", "b.txt", "c.txt" });
+                var fileA = new FileInfo(files.CreatedFiles[0]);
+                var fileB = new FileInfo(files.CreatedFiles[1]);
+                var fileC = new FileInfo(files.CreatedFiles[2]);
+
+                var now = DateTime.UtcNow;
+                fileA.LastWriteTimeUtc = now - TimeSpan.FromSeconds(10);
+                fileB.LastWriteTimeUtc = now - TimeSpan.FromSeconds(10);
+                fileC.LastWriteTimeUtc = now;
+
+                var logger = files.BuildProjectExpectSuccess();
+                var logText = logger.FullLog.Replace("\r\n", "\n");
+
+                var expected = @"
+Skipping target ""Build"" because all output files are up-to-date with respect to the input files.
+Input files: 
+    a.txt
+    b.txt
+Output files: c.txt
+Done building target ""Build"" in project ""build.proj"".".Replace("\r\n", "\n");
+
+                logText.ShouldContainWithoutWhitespace(expected);
+            }
         }
 
         /// <summary>
@@ -691,6 +725,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "BuildTask" });
+            Assert.False(result.ResultsByTarget["Build"].AfterTargetsHaveFailed);
         }
 
         /// <summary>
@@ -716,6 +751,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "AfterTask" });
+            Assert.False(result.ResultsByTarget["Build"].AfterTargetsHaveFailed);
         }
 
         /// <summary>
@@ -744,6 +780,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "BuildTask" });
+            Assert.False(result.ResultsByTarget["Build"].AfterTargetsHaveFailed);
         }
 
         /// <summary>
@@ -786,6 +823,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "BuildTask", "AfterTask", "Error2" });
+            Assert.False(result.ResultsByTarget["PostBuild"].AfterTargetsHaveFailed);
         }
 
         /// <summary>
@@ -811,6 +849,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "BuildTask", "AfterTask" });
+            Assert.False(result.ResultsByTarget["Build"].AfterTargetsHaveFailed);
         }
 
         /// <summary>
@@ -836,6 +875,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "BuildTask", "AfterTask" });
+            Assert.False(result.ResultsByTarget["Build;Me"].AfterTargetsHaveFailed);
         }
 
         /// <summary>
@@ -866,7 +906,74 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "BuildTask", "AfterTask", "AfterTask2" });
+            Assert.False(result.ResultsByTarget["Build"].AfterTargetsHaveFailed);
         }
+
+        /// <summary>
+        /// Test a failing after target
+        /// </summary>
+        [Fact]
+        public void TestAfterTargetsWithFailure()
+        {
+            string projectBody = @"
+<Target Name='Build'>
+    <BuildTask/>
+</Target>
+
+<Target Name='After' AfterTargets='Build'>
+    <ErrorTask1/>
+</Target>
+";
+
+            BuildResult result = BuildSimpleProject(projectBody, new string[] { "Build" }, failTaskNumber: 2 /* Fail on After */);
+            result.ResultsByTarget["Build"].ResultCode.ShouldBe(TargetResultCode.Success);
+            result.ResultsByTarget["Build"].AfterTargetsHaveFailed.ShouldBe(true);
+        }
+
+        /// <summary>
+        /// Test a transitively failing after target
+        /// </summary>
+        [Fact]
+        public void TestAfterTargetsWithTransitiveFailure()
+        {
+            string projectBody = @"
+<Target Name='Build'>
+    <BuildTask/>
+</Target>
+
+<Target Name='After1' AfterTargets='Build'>
+    <BuildTask/>
+</Target>
+
+<Target Name='After2' AfterTargets='After1'>
+    <ErrorTask1/>
+</Target>
+";
+
+            BuildResult result = BuildSimpleProject(projectBody, new string[] { "Build" }, failTaskNumber: 3 /* Fail on After2 */);
+            result.ResultsByTarget["Build"].ResultCode.ShouldBe(TargetResultCode.Success);
+            result.ResultsByTarget["Build"].AfterTargetsHaveFailed.ShouldBe(true);
+        }
+
+        /// <summary>
+        /// Test a project that has a cycle in AfterTargets
+        /// </summary>
+        [Fact]
+        public void TestAfterTargetsWithCycleDoesNotHang()
+        {
+            string projectBody = @"
+<Target Name='Build' AfterTargets='After2' />
+
+<Target Name='After1' AfterTargets='Build' />
+
+<Target Name='After2' AfterTargets='After1' />
+";
+
+            BuildResult result = BuildSimpleProject(projectBody, new string[] { "Build" }, failTaskNumber: int.MaxValue /* no task failure needed here */);
+            result.ResultsByTarget["Build"].ResultCode.ShouldBe(TargetResultCode.Success);
+            result.ResultsByTarget["Build"].AfterTargetsHaveFailed.ShouldBe(false);
+        }
+
 
         /// <summary>
         /// Test after target on a skipped target
@@ -1080,6 +1187,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             BuildResult result = builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
             AssertTaskExecutionOrder(new string[] { "BuildTask", "BeforeErrorTargetTask", "ErrorTargetTask", "AfterErrorTargetTask" });
+            Assert.False(result.ResultsByTarget["Build"].AfterTargetsHaveFailed);
         }
 
         /// <summary>
@@ -1177,6 +1285,34 @@ namespace Microsoft.Build.UnitTests.BackEnd
             Project project = new Project(new XmlTextReader(reader), null, null);
             bool success = project.Build(_mockLogger);
             Assert.False(success);
+        }
+
+        /// <summary>
+        /// Tests a circular dependency target.
+        /// </summary>
+        [Fact]
+        public void TestCircularDependencyTarget()
+        {
+            string projectContents = @"
+<Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">
+    <Target Name=""TargetA"" AfterTargets=""Build"" DependsOnTargets=""TargetB"">
+        <Message Text=""TargetA""></Message>
+    </Target>
+    <Target Name=""TargetB"" DependsOnTargets=""TargetC"">
+        <Message Text=""TargetB""></Message>
+    </Target>
+    <Target Name=""TargetC"" DependsOnTargets=""TargetA"">
+        <Message Text=""TargetC""></Message>
+    </Target>
+</Project>
+      ";
+            string errorMessage = @"There is a circular dependency in the target dependency graph involving target ""TargetA"". Since ""TargetC"" has ""DependsOn"" dependence on ""TargetA"", the circular is ""TargetA<-TargetC<-TargetB<-TargetA"".";
+
+            StringReader reader = new StringReader(projectContents);
+            Project project = new Project(new XmlTextReader(reader), null, null);
+            project.Build(_mockLogger).ShouldBeFalse();
+            _mockLogger.ErrorCount.ShouldBe(1);
+            _mockLogger.Errors[0].Message.ShouldBe(errorMessage);
         }
 
         /// <summary>
@@ -1315,6 +1451,21 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// Empty impl
         /// </summary>
         void IRequestBuilderCallback.ExitMSBuildCallbackState()
+        {
+        }
+
+        /// <summary>
+        /// Empty impl
+        /// </summary>
+        int IRequestBuilderCallback.RequestCores(object monitorLockObject, int requestedCores, bool waitForCores)
+        {
+            return 0;
+        }
+
+        /// <summary>
+        /// Empty impl
+        /// </summary>
+        void IRequestBuilderCallback.ReleaseCores(int coresToRelease)
         {
         }
 
@@ -1485,6 +1636,27 @@ namespace Microsoft.Build.UnitTests.BackEnd
         }
 
         /// <summary>
+        /// Builds a project using TargetBuilder and returns the result.
+        /// </summary>
+        /// <param name="projectBody">The project contents.</param>
+        /// <param name="targets">The targets to build.</param>
+        /// <param name="failTaskNumber">The task ordinal to fail on.</param>
+        /// <returns>The result of building the specified project/tasks.</returns>
+        private BuildResult BuildSimpleProject(string projectBody, string[] targets, int failTaskNumber)
+        {
+            ProjectInstance project = CreateTestProject(projectBody);
+
+            MockTaskBuilder taskBuilder = (MockTaskBuilder)_host.GetComponent(BuildComponentType.TaskBuilder);
+            taskBuilder.FailTaskNumber = failTaskNumber;
+
+            TargetBuilder builder = (TargetBuilder)_host.GetComponent(BuildComponentType.TargetBuilder);
+            IConfigCache cache = (IConfigCache)_host.GetComponent(BuildComponentType.ConfigCache);
+            BuildRequestEntry entry = new BuildRequestEntry(CreateNewBuildRequest(1, targets), cache[1]);
+
+            return builder.BuildTargets(GetProjectLoggingContext(entry), entry, this, entry.Request.Targets.ToArray(), CreateStandardLookup(project), CancellationToken.None).Result;
+        }
+
+        /// <summary>
         /// The mock component host object.
         /// </summary>
         private class MockHost : MockLoggingService, IBuildComponentHost, IBuildComponent
@@ -1614,32 +1786,17 @@ namespace Microsoft.Build.UnitTests.BackEnd
             /// <returns>The component</returns>
             public IBuildComponent GetComponent(BuildComponentType type)
             {
-                switch (type)
+                return type switch
                 {
-                    case BuildComponentType.ConfigCache:
-                        return (IBuildComponent)_configCache;
-
-                    case BuildComponentType.LoggingService:
-                        return (IBuildComponent)_loggingService;
-
-                    case BuildComponentType.ResultsCache:
-                        return (IBuildComponent)_resultsCache;
-
-                    case BuildComponentType.RequestBuilder:
-                        return (IBuildComponent)_requestBuilder;
-
-                    case BuildComponentType.TaskBuilder:
-                        return (IBuildComponent)_taskBuilder;
-
-                    case BuildComponentType.TargetBuilder:
-                        return (IBuildComponent)_targetBuilder;
-
-                    case BuildComponentType.SdkResolverService:
-                        return (IBuildComponent)_sdkResolverService;
-
-                    default:
-                        throw new ArgumentException("Unexpected type " + type);
-                }
+                    BuildComponentType.ConfigCache => (IBuildComponent)_configCache,
+                    BuildComponentType.LoggingService => (IBuildComponent)_loggingService,
+                    BuildComponentType.ResultsCache => (IBuildComponent)_resultsCache,
+                    BuildComponentType.RequestBuilder => (IBuildComponent)_requestBuilder,
+                    BuildComponentType.TaskBuilder => (IBuildComponent)_taskBuilder,
+                    BuildComponentType.TargetBuilder => (IBuildComponent)_targetBuilder,
+                    BuildComponentType.SdkResolverService => (IBuildComponent)_sdkResolverService,
+                    _ => throw new ArgumentException("Unexpected type " + type),
+                };
             }
 
             /// <summary>

@@ -6,6 +6,7 @@ using System.CodeDom;
 using System.CodeDom.Compiler;
 using System.Collections;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
@@ -27,6 +28,11 @@ namespace Microsoft.Build.Tasks
     /// </comment>
     public class WriteCodeFragment : TaskExtension
     {
+        private const string TypeNameSuffix = "_TypeName";
+        private const string IsLiteralSuffix = "_IsLiteral";
+        private static readonly IEnumerable<string> NamespaceImports = new string[] { "System", "System.Reflection" };
+        private static readonly IReadOnlyDictionary<string, ParameterType> EmptyParameterTypes = new Dictionary<string, ParameterType>();
+
         /// <summary>
         /// Language of code to generate.
         /// Language name can be any language for which a CodeDom provider is
@@ -80,11 +86,7 @@ namespace Microsoft.Build.Tasks
                 return false;
             }
 
-#if FEATURE_CODEDOM
             var code = GenerateCode(out string extension);
-#else
-            var code = GenerateCodeCoreClr(out string extension);
-#endif
 
             if (Log.HasLoggedErrors)
             {
@@ -105,7 +107,7 @@ namespace Microsoft.Build.Tasks
                     OutputFile = new TaskItem(Path.Combine(OutputDirectory.ItemSpec, OutputFile.ItemSpec));
                 }
 
-                OutputFile = OutputFile ?? new TaskItem(FileUtilities.GetTemporaryFile(OutputDirectory.ItemSpec, extension));
+                OutputFile ??= new TaskItem(FileUtilities.GetTemporaryFile(OutputDirectory.ItemSpec, extension));
 
                 File.WriteAllText(OutputFile.ItemSpec, code); // Overwrites file if it already exists (and can be overwritten)
             }
@@ -120,7 +122,6 @@ namespace Microsoft.Build.Tasks
             return !Log.HasLoggedErrors;
         }
 
-#if FEATURE_CODEDOM
         /// <summary>
         /// Generates the code into a string.
         /// If it fails, logs an error and returns null.
@@ -139,14 +140,14 @@ namespace Microsoft.Build.Tasks
             {
                 provider = CodeDomProvider.CreateProvider(Language);
             }
-            catch (System.Configuration.ConfigurationException ex)
+            catch (SystemException e) when
+#if FEATURE_SYSTEM_CONFIGURATION
+            (e is ConfigurationException || e is SecurityException)
+#else
+            (e.GetType().Name == "ConfigurationErrorsException") //TODO: catch specific exception type once it is public https://github.com/dotnet/corefx/issues/40456
+#endif
             {
-                Log.LogErrorWithCodeFromResources("WriteCodeFragment.CouldNotCreateProvider", Language, ex.Message);
-                return null;
-            }
-            catch (SecurityException ex)
-            {
-                Log.LogErrorWithCodeFromResources("WriteCodeFragment.CouldNotCreateProvider", Language, ex.Message);
+                Log.LogErrorWithCodeFromResources("WriteCodeFragment.CouldNotCreateProvider", Language, e.Message);
                 return null;
             }
 
@@ -167,25 +168,36 @@ namespace Microsoft.Build.Tasks
             }
 
             // For convenience, bring in the namespaces, where many assembly attributes lie
-            globalNamespace.Imports.Add(new CodeNamespaceImport("System"));
-            globalNamespace.Imports.Add(new CodeNamespaceImport("System.Reflection"));
+            foreach (string name in NamespaceImports)
+            {
+                globalNamespace.Imports.Add(new CodeNamespaceImport(name));
+            }
 
             foreach (ITaskItem attributeItem in AssemblyAttributes)
             {
-                var attribute = new CodeAttributeDeclaration(new CodeTypeReference(attributeItem.ItemSpec));
-
                 // Some attributes only allow positional constructor arguments, or the user may just prefer them.
                 // To set those, use metadata names like "_Parameter1", "_Parameter2" etc.
                 // If a parameter index is skipped, it's an error.
                 IDictionary customMetadata = attributeItem.CloneCustomMetadata();
 
-                var orderedParameters = new List<CodeAttributeArgument>(new CodeAttributeArgument[customMetadata.Count + 1] /* max possible slots needed */);
-                var namedParameters = new List<CodeAttributeArgument>();
+                // Some metadata may indicate the types of parameters. Use that metadata to determine
+                // the parameter types. Those metadata items will be removed from the dictionary.
+                IReadOnlyDictionary<string, ParameterType> parameterTypes = ExtractParameterTypes(customMetadata);
+
+                var orderedParameters = new List<AttributeParameter?>(new AttributeParameter?[customMetadata.Count + 1] /* max possible slots needed */);
+                var namedParameters = new List<AttributeParameter>();
 
                 foreach (DictionaryEntry entry in customMetadata)
                 {
                     string name = (string)entry.Key;
                     string value = (string)entry.Value;
+
+                    // Get the declared type information for this parameter.
+                    // If a type is not declared, then we infer the type.
+                    if (!parameterTypes.TryGetValue(name, out ParameterType type))
+                    {
+                        type = new ParameterType { Kind = ParameterTypeKind.Inferred };
+                    }
 
                     if (name.StartsWith("_Parameter", StringComparison.OrdinalIgnoreCase))
                     {
@@ -202,18 +214,19 @@ namespace Microsoft.Build.Tasks
                         }
 
                         // "_Parameter01" and "_Parameter1" would overwrite each other
-                        orderedParameters[index - 1] = new CodeAttributeArgument(String.Empty, new CodePrimitiveExpression(value));
+                        orderedParameters[index - 1] = new AttributeParameter { Type = type, Value = value };
                     }
                     else
                     {
-                        namedParameters.Add(new CodeAttributeArgument(name, new CodePrimitiveExpression(value)));
+                        namedParameters.Add(new AttributeParameter { Name = name, Type = type, Value = value });
                     }
                 }
 
                 bool encounteredNull = false;
+                List<AttributeParameter> providedOrderedParameters = new();
                 for (int i = 0; i < orderedParameters.Count; i++)
                 {
-                    if (orderedParameters[i] == null)
+                    if (!orderedParameters[i].HasValue)
                     {
                         // All subsequent args should be null, else a slot was missed
                         encounteredNull = true;
@@ -226,12 +239,24 @@ namespace Microsoft.Build.Tasks
                         return null;
                     }
 
-                    attribute.Arguments.Add(orderedParameters[i]);
+                    providedOrderedParameters.Add(orderedParameters[i].Value);
                 }
 
-                foreach (CodeAttributeArgument namedParameter in namedParameters)
+                var attribute = new CodeAttributeDeclaration(new CodeTypeReference(attributeItem.ItemSpec));
+
+                // We might need the type of the attribute if we need to infer the
+                // types of the parameters. Search for it by the given type name,
+                // as well as within the namespaces that we automatically import.
+                Lazy<Type> attributeType = new(
+                    () => Type.GetType(attribute.Name, throwOnError: false) ?? NamespaceImports.Select(x => Type.GetType($"{x}.{attribute.Name}", throwOnError: false)).FirstOrDefault(),
+                    System.Threading.LazyThreadSafetyMode.None
+                );
+
+                if (
+                    !AddArguments(attribute, attributeType, providedOrderedParameters, isPositional: true)
+                    || !AddArguments(attribute, attributeType, namedParameters, isPositional: false))
                 {
-                    attribute.Arguments.Add(namedParameter);
+                    return null;
                 }
 
                 unit.AssemblyCustomAttributes.Add(attribute);
@@ -250,351 +275,339 @@ namespace Microsoft.Build.Tasks
             // as there's no point writing the file
             return haveGeneratedContent ? code : String.Empty;
         }
-#else
 
         /// <summary>
-        /// Generates the code into a string.
-        /// If it fails, logs an error and returns null.
-        /// If no meaningful code is generated, returns empty string.
-        /// Returns the default language extension as an out parameter.
+        /// Finds the metadata items that are used to indicate the types of
+        /// parameters, and removes those items from the given dictionary.
+        /// Returns a dictionary that maps parameter names to their declared types.
         /// </summary>
-        private string GenerateCodeCoreClr(out string extension)
+        private IReadOnlyDictionary<string, ParameterType> ExtractParameterTypes(IDictionary customMetadata)
         {
-            extension = null;
-            bool haveGeneratedContent = false;
-
-            var code = new StringBuilder();
-            switch (Language.ToLowerInvariant())
-            {
-                case "c#":
-                    if (AssemblyAttributes == null) return string.Empty; 
-
-                    extension = "cs";
-                    code.AppendLine("//------------------------------------------------------------------------------");
-                    code.AppendLine("// <auto-generated>");
-                    code.AppendLine("//     " + ResourceUtilities.GetResourceString("WriteCodeFragment.Comment"));
-                    code.AppendLine("// </auto-generated>");
-                    code.AppendLine("//------------------------------------------------------------------------------");
-                    code.AppendLine();
-                    code.AppendLine("using System;");
-                    code.AppendLine("using System.Reflection;");
-                    code.AppendLine();
-
-                    foreach (ITaskItem attributeItem in AssemblyAttributes)
-                    {
-                        string args = GetAttributeArguments(attributeItem, "=", QuoteSnippetStringCSharp);
-                        if (args == null) return null;
-
-                        code.AppendLine(string.Format($"[assembly: {attributeItem.ItemSpec}({args})]"));
-                        haveGeneratedContent = true;
-                    }
-
-                    break;
-                case "visual basic":
-                case "visualbasic":
-                case "vb":
-                    if (AssemblyAttributes == null) return string.Empty;
-
-                    extension = "vb";
-                    code.AppendLine("'------------------------------------------------------------------------------");
-                    code.AppendLine("' <auto-generated>");
-                    code.AppendLine("'     " + ResourceUtilities.GetResourceString("WriteCodeFragment.Comment"));
-                    code.AppendLine("' </auto-generated>");
-                    code.AppendLine("'------------------------------------------------------------------------------");
-                    code.AppendLine();
-                    code.AppendLine("Option Strict Off");
-                    code.AppendLine("Option Explicit On");
-                    code.AppendLine();
-                    code.AppendLine("Imports System");
-                    code.AppendLine("Imports System.Reflection");
-
-                    foreach (ITaskItem attributeItem in AssemblyAttributes)
-                    {
-                        string args = GetAttributeArguments(attributeItem, ":=", QuoteSnippetStringVisualBasic);
-                        if (args == null) return null;
-
-                        code.AppendLine(string.Format($"<Assembly: {attributeItem.ItemSpec}({args})>"));
-                        haveGeneratedContent = true;
-                    }
-                    break;
-                default:
-                    Log.LogErrorWithCodeFromResources("WriteCodeFragment.CouldNotCreateProvider", Language, string.Empty);
-                    return null;
-            }
-
-            // If we just generated infrastructure, don't bother returning anything
-            // as there's no point writing the file
-            return haveGeneratedContent ? code.ToString() : string.Empty; 
-        }
-
-        private string GetAttributeArguments(ITaskItem attributeItem, string namedArgumentString, Func<string, string> quoteString)
-        {
-            // Some attributes only allow positional constructor arguments, or the user may just prefer them.
-            // To set those, use metadata names like "_Parameter1", "_Parameter2" etc.
-            // If a parameter index is skipped, it's an error.
-            IDictionary customMetadata = attributeItem.CloneCustomMetadata();
-            
-            // Initialize count + 1 to access starting at 1
-            var orderedParameters = new List<string>(new string[customMetadata.Count + 1]);
-            var namedParameters = new List<string>();
+            Dictionary<string, ParameterType> parameterTypes = null;
+            List<string> keysToRemove = null;
 
             foreach (DictionaryEntry entry in customMetadata)
             {
-                string name = (string) entry.Key;
-                string value = entry.Value is string ? quoteString(entry.Value.ToString()) : entry.Value.ToString();
+                string key = (string)entry.Key;
+                string value = (string)entry.Value;
 
-                if (name.StartsWith("_Parameter", StringComparison.OrdinalIgnoreCase))
+                if (key.EndsWith(TypeNameSuffix, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!int.TryParse(name.Substring("_Parameter".Length), out int index))
+                    // Remove the suffix to get the corresponding parameter name.
+                    var parameterNameKey = key.Substring(0, key.Length - TypeNameSuffix.Length);
+
+                    // To remain as backward-compatible as possible, we will only treat this metadata
+                    // item as a type name if there's a corresponding metadata item for the parameter.
+                    // This is done to avoid the very small chance of treating "Foo_TypeName" as a
+                    // type indicator when it was previously being used as a named attribute parameter.
+                    if (customMetadata.Contains(parameterNameKey))
                     {
-                        Log.LogErrorWithCodeFromResources("General.InvalidValue", name, "WriteCodeFragment");
-                        return null;
-                    }
-
-                    if (index > orderedParameters.Count || index < 1)
-                    {
-                        Log.LogErrorWithCodeFromResources("WriteCodeFragment.SkippedNumberedParameter", index);
-                        return null;
-                    }
-
-                    // "_Parameter01" and "_Parameter1" would overwrite each other
-                    orderedParameters[index - 1] = value;
-                }
-                else
-                {
-                    namedParameters.Add($"{name}{namedArgumentString}{value}");
-                }
-            }
-
-            bool encounteredNull = false;
-            
-            for (int i = 0; i < orderedParameters.Count; i++)
-            {
-                if (orderedParameters[i] == null)
-                {
-                    // All subsequent args should be null, else a slot was missed
-                    encounteredNull = true;
-                    continue;
-                }
-
-                if (encounteredNull)
-                {
-                    Log.LogErrorWithCodeFromResources("WriteCodeFragment.SkippedNumberedParameter", i + 1 /* back to 1 based */);
-                    return null;
-                }
-            }
-
-            return string.Join(", ", orderedParameters.Concat(namedParameters).Where(p => !string.IsNullOrWhiteSpace(p)));
-        }
-
-        private const int MaxLineLength = 80;
-
-        // copied from Microsoft.CSharp.CSharpCodeProvider
-        private static string QuoteSnippetStringCSharp(string value)
-        {
-            // If the string is short, use C style quoting (e.g "\r\n")
-            // Also do it if it is too long to fit in one line
-            // If the string contains '\0', verbatim style won't work.
-            if (value.Length < 256 || value.Length > 1500 || (value.IndexOf('\0') != -1))
-                return QuoteSnippetStringCStyle(value);
-
-            // Otherwise, use 'verbatim' style quoting (e.g. @"foo")
-            return QuoteSnippetStringVerbatimStyle(value);
-        }
-
-        // copied from Microsoft.CSharp.CSharpCodeProvider
-        private static string QuoteSnippetStringCStyle(string value)
-        {
-            var b = new StringBuilder(value.Length + 5);
-
-            b.Append("\"");
-
-            int i = 0;
-            while (i < value.Length)
-            {
-                switch (value[i])
-                {
-                    case '\r':
-                        b.Append("\\r");
-                        break;
-                    case '\t':
-                        b.Append("\\t");
-                        break;
-                    case '\"':
-                        b.Append("\\\"");
-                        break;
-                    case '\'':
-                        b.Append("\\\'");
-                        break;
-                    case '\\':
-                        b.Append("\\\\");
-                        break;
-                    case '\0':
-                        b.Append("\\0");
-                        break;
-                    case '\n':
-                        b.Append("\\n");
-                        break;
-                    case '\u2028':
-                    case '\u2029':
-                        b.Append("\\n");
-                        break;
-
-                    default:
-                        b.Append(value[i]);
-                        break;
-                }
-
-                if (i > 0 && i%MaxLineLength == 0)
-                {
-                    //
-                    // If current character is a high surrogate and the following 
-                    // character is a low surrogate, don't break them. 
-                    // Otherwise when we write the string to a file, we might lose 
-                    // the characters.
-                    // 
-                    if (Char.IsHighSurrogate(value[i])
-                        && (i < value.Length - 1)
-                        && Char.IsLowSurrogate(value[i + 1]))
-                    {
-                        b.Append(value[++i]);
-                    }
-
-                    b.Append("\" +");
-                    b.Append(Environment.NewLine);
-                    b.Append('\"');
-                }
-                ++i;
-            }
-
-            b.Append("\"");
-
-            return b.ToString();
-        }
-
-        // copied from Microsoft.CSharp.CSharpCodeProvider
-        private static string QuoteSnippetStringVerbatimStyle(string value)
-        {
-            var b = new StringBuilder(value.Length + 5);
-
-            b.Append("@\"");
-
-            for (int i = 0; i < value.Length; i++)
-            {
-                if (value[i] == '\"')
-                    b.Append("\"\"");
-                else
-                    b.Append(value[i]);
-            }
-
-            b.Append("\"");
-
-            return b.ToString();
-        }
-
-        // copied from Microsoft.VisualBasic.VBCodeProvider
-        private static string QuoteSnippetStringVisualBasic(string value)
-        {
-            var b = new StringBuilder(value.Length + 5);
-
-            bool fInDoubleQuotes = true;
-
-            b.Append("\"");
-
-            int i = 0;
-            while (i < value.Length)
-            {
-                char ch = value[i];
-                switch (ch)
-                {
-                    case '\"':
-                    // These are the inward sloping quotes used by default in some cultures like CHS. 
-                    // VBC.EXE does a mapping ANSI that results in it treating these as syntactically equivalent to a
-                    // regular double quote.
-                    case '\u201C':
-                    case '\u201D':
-                    case '\uFF02':
-                        EnsureInDoubleQuotes(ref fInDoubleQuotes, b);
-                        b.Append(ch);
-                        b.Append(ch);
-                        break;
-                    case '\r':
-                        EnsureNotInDoubleQuotes(ref fInDoubleQuotes, b);
-                        if (i < value.Length - 1 && value[i + 1] == '\n')
+                        // Delay-create the collections to avoid allocations
+                        // when no parameter types are specified.
+                        if (parameterTypes == null)
                         {
-                            b.Append("&Global.Microsoft.VisualBasic.ChrW(13)&Global.Microsoft.VisualBasic.ChrW(10)");
-                            i++;
+                            parameterTypes = new();
+                            keysToRemove = new();
+                        }
+
+                        // Remove this metadata item so that
+                        // we don't use it as a parameter name.
+                        keysToRemove.Add(key);
+
+                        // The parameter will have an explicit type. The metadata value is the type name.
+                        parameterTypes[parameterNameKey] = new ParameterType {
+                            Kind = ParameterTypeKind.Typed,
+                            TypeName = value
+                        };
+                    }
+                }
+                else if (key.EndsWith(IsLiteralSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Remove the suffix to get the corresponding parameter name.
+                    var parameterNameKey = key.Substring(0, key.Length - IsLiteralSuffix.Length);
+
+                    // As mentioned above for the type name metadata, we will only treat
+                    // this metadata item as a literal flag if there's a corresponding
+                    // metadata item for the parameter for backward-compatibility reasons.
+                    if (customMetadata.Contains(parameterNameKey))
+                    {
+                        // Delay-create the collections to avoid allocations
+                        // when no parameter types are specified.
+                        if (parameterTypes == null)
+                        {
+                            parameterTypes = new();
+                            keysToRemove = new();
+                        }
+
+                        // Remove this metadata item so that
+                        // we don't use it as a parameter name.
+                        keysToRemove.Add(key);
+
+                        // If the value is true, the parameter value will be the exact code
+                        // that needs to be written to the generated file for that parameter.
+                        if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase))
+                        {
+                            parameterTypes[parameterNameKey] = new ParameterType {
+                                Kind = ParameterTypeKind.Literal
+                            };
+                        }
+                    }
+                }
+            }
+
+            // Remove any metadata items that we used
+            // for type names or literal flags.
+            if (keysToRemove != null)
+            {
+                foreach (var key in keysToRemove)
+                {
+                    customMetadata.Remove(key);
+                }
+            }
+
+            return parameterTypes ?? EmptyParameterTypes;
+        }
+
+        /// <summary>
+        /// Uses the given parameters to add CodeDom arguments to the given attribute.
+        /// Returns true if the arguments could be defined, or false if the values could
+        /// not be converted to the required type. An error is also logged for failures.
+        /// </summary>
+        private bool AddArguments(
+            CodeAttributeDeclaration attribute,
+            Lazy<Type> attributeType,
+            IReadOnlyList<AttributeParameter> parameters,
+            bool isPositional
+        )
+        {
+            Type[] constructorParameterTypes = null;
+
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                AttributeParameter parameter = parameters[i];
+                CodeExpression value;
+
+                switch (parameter.Type.Kind)
+                {
+                    case ParameterTypeKind.Literal:
+                        // The exact value provided by the metadata is what we use.
+                        // Note that this value is used verbatim, so its the user's
+                        // responsibility to ensure that it is in the correct language.
+                        value = new CodeSnippetExpression(parameter.Value);
+                        break;
+
+                    case ParameterTypeKind.Typed:
+                        if (string.Equals(parameter.Type.TypeName, "System.Type"))
+                        {
+                            // Types are a special case, because we can't convert a string to a
+                            // type, but because we're using the CodeDom, we don't need to
+                            // convert it. we can just create a type expression.
+                            value = new CodeTypeOfExpression(parameter.Value);
                         }
                         else
                         {
-                            b.Append("&Global.Microsoft.VisualBasic.ChrW(13)");
+                            // We've been told what type this parameter needs to be.
+                            // If we cannot convert the value to that type, then we need to fail.
+                            if (!TryConvertParameterValue(parameter.Type.TypeName, parameter.Value, out value))
+                            {
+                                return false;
+                            }
                         }
+
                         break;
-                    case '\t':
-                        EnsureNotInDoubleQuotes(ref fInDoubleQuotes, b);
-                        b.Append("&Global.Microsoft.VisualBasic.ChrW(9)");
-                        break;
-                    case '\0':
-                        EnsureNotInDoubleQuotes(ref fInDoubleQuotes, b);
-                        b.Append("&Global.Microsoft.VisualBasic.ChrW(0)");
-                        break;
-                    case '\n':
-                    case '\u2028':
-                    case '\u2029':
-                        EnsureNotInDoubleQuotes(ref fInDoubleQuotes, b);
-                        b.Append("&Global.Microsoft.VisualBasic.ChrW(10)");
-                        break;
+
                     default:
-                        EnsureInDoubleQuotes(ref fInDoubleQuotes, b);
-                        b.Append(value[i]);
+                        if (isPositional)
+                        {
+                            // For positional parameters, infer the type
+                            // using the constructor argument types.
+                            if (constructorParameterTypes is null)
+                            {
+                                constructorParameterTypes = FindPositionalParameterTypes(attributeType.Value, parameters);
+                            }
+
+                            value = ConvertParameterValueToInferredType(
+                                constructorParameterTypes[i],
+                                parameter.Value,
+                                $"#{i + 1}" /* back to 1 based */
+                            );
+                        }
+                        else
+                        {
+                            // For named parameters, use the type of the property if we can find it.
+                            value = ConvertParameterValueToInferredType(
+                                attributeType.Value?.GetProperty(parameter.Name)?.PropertyType,
+                                parameter.Value,
+                                parameter.Name
+                            );
+                        }
+
                         break;
+
                 }
 
-                if (i > 0 && i%MaxLineLength == 0)
-                {
-                    //
-                    // If current character is a high surrogate and the following 
-                    // character is a low surrogate, don't break them. 
-                    // Otherwise when we write the string to a file, we might lose 
-                    // the characters.
-                    // 
-                    if (Char.IsHighSurrogate(value[i])
-                        && (i < value.Length - 1)
-                        && Char.IsLowSurrogate(value[i + 1]))
-                    {
-                        b.Append(value[++i]);
-                    }
-
-                    if (fInDoubleQuotes)
-                        b.Append("\"");
-                    fInDoubleQuotes = true;
-
-                    b.Append("& _ ");
-                    b.Append(Environment.NewLine);
-                    b.Append('\"');
-                }
-                ++i;
+                attribute.Arguments.Add(new CodeAttributeArgument(parameter.Name, value));
             }
 
-            if (fInDoubleQuotes)
-                b.Append("\"");
-
-            return b.ToString();
+            return true;
         }
 
-        private static void EnsureNotInDoubleQuotes(ref bool fInDoubleQuotes, StringBuilder b)
+        /// <summary>
+        /// Finds the types that the parameters are likely to be, by finding a constructor
+        /// on the attribute that has the same number of parameters that have been provided.
+        /// Returns an array of types with a length equal to the number of positional parameters.
+        /// If no suitable constructor is found, the array will contain null types.
+        /// </summary>
+        private Type[] FindPositionalParameterTypes(Type attributeType, IReadOnlyList<AttributeParameter> positionalParameters)
         {
-            if (!fInDoubleQuotes) return;
-            b.Append("\"");
-            fInDoubleQuotes = false;
+            // The attribute type might not be known.
+            if (attributeType is not null)
+            {
+                // Find the constructors with the same number
+                // of parameters as we will be specifying.
+                List<Type[]> candidates = attributeType
+                    .GetConstructors()
+                    .Select(c => c.GetParameters().Select(p => p.ParameterType).ToArray())
+                    .Where(t => t.Length == positionalParameters.Count)
+                    .ToList();
+
+                if (candidates.Count == 1)
+                {
+                    return candidates[0];
+                }
+                else if (candidates.Count > 1)
+                {
+                    Log.LogMessageFromResources("WriteCodeFragment.MultipleConstructorsFound");
+
+                    // Before parameter types could be specified, all parameter values were
+                    // treated as strings. To be backward-compatible, we need to prefer 
+                    // the constructor that has all string parameters, if it exists.
+                    var allStringParameters = candidates.FirstOrDefault(c => c.All(t => t == typeof(string)));
+
+                    if (allStringParameters is not null)
+                    {
+                        return allStringParameters;
+                    }
+
+                    // There isn't a constructor where all parameters are strings, so we can pick any
+                    // of the constructors. This code path is very unlikely to be hit because we can only
+                    // infer parameter types for attributes in mscorlib (or System.Private.CoreLib).
+                    // The attribute type is loaded using `Type.GetType()`, and when you specify just a
+                    // type name and not an assembly-qualified type name, only types in this assembly
+                    // or mscorlib will be found.
+                    //
+                    // There are only about five attributes that would result in this code path being
+                    // reached due to those attributes having multiple constructors with the same number
+                    // of parameters. For that reason, it's not worth putting too much effort into picking
+                    // the best constructor. We will use the simple solution of sorting the constructors
+                    // (so that we always pick the same constructor, regardless of the order they are
+                    // returned from `Type.GetConstructors()`), and choose the first constructor.
+                    return candidates
+                        .OrderBy(c => string.Join(",", c.Select(t => t.FullName)))
+                        .First();
+                }
+            }
+
+            // If a matching constructor was not found, or we don't
+            // know the attribute type, then return an array of null
+            // types to indicate that each parameter type is unknown.
+            return positionalParameters.Select(x => default(Type)).ToArray();
         }
 
-        private static void EnsureInDoubleQuotes(ref bool fInDoubleQuotes, StringBuilder b)
+        /// <summary>
+        /// Attempts to convert the raw value provided in the metadata to the type with the specified name.
+        /// Returns true if conversion is successful. An error is logged and false is returned if the conversion fails.
+        /// </summary>
+        private bool TryConvertParameterValue(string typeName, string rawValue, out CodeExpression value)
         {
-            if (fInDoubleQuotes) return;
-            b.Append("&\"");
-            fInDoubleQuotes = true;
+            var parameterType = Type.GetType(typeName, throwOnError: false);
+
+            if (parameterType is null)
+            {
+                Log.LogErrorWithCodeFromResources("WriteCodeFragment.ParameterTypeNotFound", typeName);
+                value = null;
+                return false;
+            }
+
+            try
+            {
+                value = ConvertToCodeExpression(rawValue, parameterType);
+                return true;
+            }
+            catch (Exception ex) when (!ExceptionHandling.IsCriticalException(ex))
+            {
+                Log.LogErrorWithCodeFromResources("WriteCodeFragment.CouldNotConvertValue", rawValue, typeName, ex.Message);
+                value = null;
+                return false;
+            }
         }
-#endif
+
+        /// <summary>
+        /// Convert the raw value provided in the metadata to the type
+        /// that has been inferred based on the parameter position or name.
+        /// Returns the converted value as a CodeExpression if successful, or the raw value
+        /// as a CodeExpression if conversion fails. No errors are logged if the conversion fails.
+        /// </summary>
+        private CodeExpression ConvertParameterValueToInferredType(Type inferredType, string rawValue, string parameterName)
+        {
+            // If we don't know what type the parameter should be, then we 
+            // can't convert the type. We'll just treat is as a string.
+            if (inferredType is null)
+            {
+                Log.LogMessageFromResources("WriteCodeFragment.CouldNotInferParameterType", parameterName);
+                return new CodePrimitiveExpression(rawValue);
+            }
+
+            try
+            {
+                return ConvertToCodeExpression(rawValue, inferredType);
+            }
+            catch (Exception ex) when (!ExceptionHandling.IsCriticalException(ex))
+            {
+                // The conversion failed, but since we are inferring the type,
+                // we won't fail. We'll just treat the value as a string.
+                Log.LogMessageFromResources("WriteCodeFragment.CouldNotConvertToInferredType", parameterName, inferredType.Name, ex.Message);
+                return new CodePrimitiveExpression(rawValue);
+            }
+        }
+
+        /// <summary>
+        /// Converts the given value to a CodeExpression object where the value is the specified type.
+        /// Returns the CodeExpression if successful, or throws an exception if the conversion fails.
+        /// </summary>
+        private CodeExpression ConvertToCodeExpression(string value, Type targetType)
+        {
+            if (targetType == typeof(Type))
+            {
+                return new CodeTypeOfExpression(value);
+            }
+
+            if (targetType.IsEnum)
+            {
+                return new CodeFieldReferenceExpression(new CodeTypeReferenceExpression(targetType), value);
+            }
+
+            return new CodePrimitiveExpression(Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture));
+        }
+
+        private enum ParameterTypeKind
+        {
+            Inferred,
+            Typed,
+            Literal
+        }
+
+        private struct ParameterType
+        {
+            public ParameterTypeKind Kind { get; init; }
+            public string TypeName { get; init; }
+        }
+
+        private struct AttributeParameter
+        {
+            public ParameterType Type { get; init; }
+            public string Name { get; init; }
+            public string Value { get; init; }
+        }
     }
 }

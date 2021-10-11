@@ -7,34 +7,23 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using Microsoft.Build.BackEnd;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
-using Microsoft.Build.Internal;
+using static Microsoft.Build.Graph.UnitTests.GraphTestingUtilities;
 using Microsoft.Build.Shared;
 using Microsoft.Build.UnitTests;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Shouldly;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Microsoft.Build.Experimental.Graph.UnitTests
+namespace Microsoft.Build.Graph.UnitTests
 {
     [ActiveIssue("https://github.com/Microsoft/msbuild/issues/4368")]
     public class ProjectGraphTests : IDisposable
     {
         private TestEnvironment _env;
 
-        private static readonly ImmutableDictionary<string, string> EmptyGlobalProperties = new Dictionary<string, string> {{PropertyNames.IsGraphBuild, "true"}}.ToImmutableDictionary();
-
-        private static readonly string InnerBuildPropertyName = "InnerBuild";
-
-        private static readonly string MultitargetingSpecification = $@"<PropertyGroup>
-                                                                        <InnerBuildProperty>{InnerBuildPropertyName}</InnerBuildProperty>
-                                                                        <InnerBuildPropertyValues>InnerBuildProperties</InnerBuildPropertyValues>
-                                                                        <InnerBuildProperties>a;b</InnerBuildProperties>
-                                                                     </PropertyGroup>";
         private static readonly string ProjectReferenceTargetsWithMultitargeting = @"<ItemGroup>
                                                                                         <!-- Item order is important to ensure outer build targets are put in front of inner build ones -->
                                                                                         <ProjectReferenceTargets Include='A' Targets='AHelperInner;A' />
@@ -43,7 +32,7 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
         private static string[] NonOuterBuildTargets = {"AHelperOuter", "AHelperInner", "A"};
         private static string[] OuterBuildTargets = {"AHelperOuter"};
 
-        private static readonly string OuterBuildSpecificationWithProjectReferenceTargets = MultitargetingSpecification + ProjectReferenceTargetsWithMultitargeting;
+        private static readonly string OuterBuildSpecificationWithProjectReferenceTargets = MultitargetingSpecificationPropertyGroup + ProjectReferenceTargetsWithMultitargeting;
 
         public ProjectGraphTests(ITestOutputHelper outputHelper)
         {
@@ -75,6 +64,21 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
         }
 
         [Fact]
+        public void ConstructionMetricsAreAvailable()
+        {
+            var graph = Helpers.CreateProjectGraph(
+                _env,
+                new Dictionary<int, int[]>()
+                {
+                    {1, new[] {2, 3}}
+                });
+
+            graph.ConstructionMetrics.ConstructionTime.Ticks.ShouldBeGreaterThan(0);
+            graph.ConstructionMetrics.NodeCount.ShouldBe(3);
+            graph.ConstructionMetrics.EdgeCount.ShouldBe(2);
+        }
+
+        [Fact]
         public void ConstructWithSingleNodeWithProjectInstanceFactory()
         {
             using (var env = TestEnvironment.Create())
@@ -102,7 +106,6 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
         [Fact]
         public void ProjectGraphNodeConstructorNoNullArguments()
         {
-            _env.DoNotLaunchDebugger();
             Assert.Throws<InternalErrorException>(() => new ProjectGraphNode(null));
         }
 
@@ -124,13 +127,13 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
                 node.AddProjectReference(reference1, referenceItem1, edges);
                 node.AddProjectReference(reference2, referenceItem2, edges);
 
-                node.ProjectReferences.ShouldBeEquivalentTo(new []{reference1, reference2});
+                node.ProjectReferences.ShouldBeSameIgnoringOrder(new []{reference1, reference2});
                 node.ReferencingProjects.ShouldBeEmpty();
 
-                reference1.ReferencingProjects.ShouldBeEquivalentTo(new[] {node});
+                reference1.ReferencingProjects.ShouldBeSameIgnoringOrder(new[] {node});
                 reference1.ProjectReferences.ShouldBeEmpty();
 
-                reference2.ReferencingProjects.ShouldBeEquivalentTo(new[] {node});
+                reference2.ReferencingProjects.ShouldBeSameIgnoringOrder(new[] {node});
                 reference2.ProjectReferences.ShouldBeEmpty();
 
                 edges[(node, reference1)].ShouldBe(referenceItem1);
@@ -282,9 +285,9 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
                 TransientTestFile entryProject = CreateProjectFile(env, 1, new[] { 2 });
                 var proj2 = CreateProjectFile(env, 2, new[] { 3 });
                 var proj3 = CreateProjectFile(env, 3, new[] { 1 });
-                var projectsInCycle = new List<string>() {entryProject.Path, proj3.Path, proj2.Path, entryProject.Path};
+                var projectsInCycle = new List<string> {entryProject.Path, proj3.Path, proj2.Path, entryProject.Path};
                 string expectedErrorMessage = GraphBuilder.FormatCircularDependencyError(projectsInCycle);
-                Should.Throw<CircularDependencyException>(() => new ProjectGraph(entryProject.Path)).Message.ShouldContain(expectedErrorMessage.ToString());
+                Should.Throw<CircularDependencyException>(() => new ProjectGraph(entryProject.Path)).Message.ShouldContain(expectedErrorMessage);
             }
         }
 
@@ -316,10 +319,46 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
                 CreateProjectFile(env, 8);
                 CreateProjectFile(env, 9);
                 CreateProjectFile(env, 10);
-                var projectsInCycle = new List<string>(){proj2.Path, proj3.Path, proj7.Path, proj6.Path, proj2.Path };
+                var projectsInCycle = new List<string> {proj2.Path, proj3.Path, proj7.Path, proj6.Path, proj2.Path };
                 var errorMessage = GraphBuilder.FormatCircularDependencyError(projectsInCycle);
-                Should.Throw<CircularDependencyException>(() => new ProjectGraph(entryProject.Path)).Message.ShouldContain(errorMessage.ToString());
+                Should.Throw<CircularDependencyException>(() => new ProjectGraph(entryProject.Path)).Message.ShouldContain(errorMessage);
             }
+        }
+
+        [Fact]
+        public void ProjectCollectionShouldNotInfluenceGlobalProperties()
+        {
+            var entryFile1 = CreateProjectFile(_env, 1, new[] { 3, 4 });
+            var entryFile2 = CreateProjectFile(_env, 2, new []{ 4, 5 });
+            CreateProjectFile(_env, 3);
+            CreateProjectFile(_env, 4);
+            CreateProjectFile(_env, 5);
+
+            var entryPoint1 = new ProjectGraphEntryPoint(entryFile1.Path, new Dictionary<string, string> {["B"] = "EntryPointB", ["C"] = "EntryPointC"});
+            var entryPoint2 = new ProjectGraphEntryPoint(entryFile2.Path, null);
+
+            var collection = _env.CreateProjectCollection().Collection;
+            collection.SetGlobalProperty("A", "CollectionA");
+            collection.SetGlobalProperty("B", "CollectionB");
+
+            var graph = new ProjectGraph(
+                entryPoints: new[] { entryPoint1, entryPoint2 },
+                projectCollection: collection,
+                projectInstanceFactory: null);
+
+            var root1 = GetFirstNodeWithProjectNumber(graph, 1);
+            var globalPropertiesFor1 = new Dictionary<string, string> { ["B"] = "EntryPointB", ["C"] = "EntryPointC", ["IsGraphBuild"] = "true" };
+
+            root1.ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(globalPropertiesFor1);
+            root1.ProjectReferences.First(r => GetProjectNumber(r) == 3).ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(globalPropertiesFor1);
+            root1.ProjectReferences.First(r => GetProjectNumber(r) == 4).ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(globalPropertiesFor1);
+
+            var root2 = GetFirstNodeWithProjectNumber(graph, 2);
+            var globalPropertiesFor2 = new Dictionary<string, string> { ["IsGraphBuild"] = "true" };
+
+            root2.ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(globalPropertiesFor2);
+            root2.ProjectReferences.First(r => GetProjectNumber(r) == 4).ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(globalPropertiesFor2);
+            root2.ProjectReferences.First(r => GetProjectNumber(r) == 5).ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(globalPropertiesFor2);
         }
 
         [Fact]
@@ -349,7 +388,7 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
                 // Projects 2 and 3 both reference project 4, but with different properties, so they should not point to the same node.
                 GetFirstNodeWithProjectNumber(graph, 2).ProjectReferences.First().ShouldNotBe(GetFirstNodeWithProjectNumber(graph, 3).ProjectReferences.First());
                 GetFirstNodeWithProjectNumber(graph, 2).ProjectReferences.First().ProjectInstance.FullPath.ShouldEndWith("4.proj");
-                GetFirstNodeWithProjectNumber(graph, 2).ProjectReferences.First().ProjectInstance.GlobalProperties.ShouldBeEquivalentTo(EmptyGlobalProperties);
+                GetFirstNodeWithProjectNumber(graph, 2).ProjectReferences.First().ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(EmptyGlobalProperties);
                 GetFirstNodeWithProjectNumber(graph, 3).ProjectReferences.First().ProjectInstance.FullPath.ShouldEndWith("4.proj");
                 GetFirstNodeWithProjectNumber(graph, 3).ProjectReferences.First().ProjectInstance.GlobalProperties.Count.ShouldBeGreaterThan(1);
             }
@@ -739,6 +778,85 @@ namespace Microsoft.Build.Experimental.Graph.UnitTests
         }
 
         [Fact]
+        public void GetTargetsListReturnsEmptyTargetsForNodeIfNoTargetsPropagatedToIt()
+        {
+            using (var env = TestEnvironment.Create())
+            {
+                TransientTestFile entryProject = CreateProjectFile(env: env, projectNumber: 1, projectReferences: new[] { 2 }, projectReferenceTargets: new Dictionary<string, string[]> { { "A", new []{ "B" }} }, defaultTargets: "A");
+                CreateProjectFile(env: env, projectNumber: 2);
+
+                var projectGraph = new ProjectGraph(entryProject.Path);
+                projectGraph.ProjectNodes.Count.ShouldBe(2);
+
+                IReadOnlyDictionary<ProjectGraphNode, ImmutableList<string>> targetLists = projectGraph.GetTargetLists(new []{ "Foo" });
+                targetLists.Count.ShouldBe(projectGraph.ProjectNodes.Count);
+                targetLists[GetFirstNodeWithProjectNumber(projectGraph, 1)].ShouldBe(new []{ "Foo" });
+                targetLists[GetFirstNodeWithProjectNumber(projectGraph, 2)].ShouldBeEmpty();
+            }
+        }
+
+        [Fact]
+        public void GetTargetListsReturnsEmptyTargetsForAllNodesWhenDefaultTargetsAreRequestedAndThereAreNoDefaultTargets()
+        {
+            using (var env = TestEnvironment.Create())
+            {
+                // Root project has no default targets.
+                // The project file does not contain any targets
+                TransientTestFile entryProject = CreateProjectFile(env: env, projectNumber: 1, projectReferences: new[] { 2 }, projectReferenceTargets: new Dictionary<string, string[]> { { "A", new[] { "B" } }}, defaultTargets: string.Empty);
+
+                // Dependency has default targets. Even though it gets called with empty targets, B will not get called,
+                // because target propagation only equates empty targets to default targets for the root nodes.
+                CreateProjectFile(env: env, projectNumber: 2, defaultTargets: "B");
+
+                var projectGraph = new ProjectGraph(entryProject.Path);
+                projectGraph.ProjectNodes.Count.ShouldBe(2);
+
+                IReadOnlyDictionary<ProjectGraphNode, ImmutableList<string>> targetLists = projectGraph.GetTargetLists(null);
+                targetLists.Count.ShouldBe(projectGraph.ProjectNodes.Count);
+                targetLists[GetFirstNodeWithProjectNumber(projectGraph, 1)].ShouldBeEmpty();
+                targetLists[GetFirstNodeWithProjectNumber(projectGraph, 2)].ShouldBeEmpty();
+            }
+        }
+
+        [Fact]
+        public void GetTargetListsDoesNotPropagateEmptyTargets()
+        {
+            using (var env = TestEnvironment.Create())
+            {
+                // Target protocol produces empty target
+                // The project file also does not contain any targets
+                TransientTestFile entryProject = CreateProjectFile(env: env, projectNumber: 1, projectReferences: new[] { 2 }, projectReferenceTargets: new Dictionary<string, string[]> { { "A", new[] { " ; ; " } }}, defaultTargets: string.Empty);
+
+                // Dependency has default targets. Even though it gets called with empty targets, B will not get called,
+                // because target propagation only equates empty targets to default targets for the root nodes.
+                CreateProjectFile(env: env, projectNumber: 2, defaultTargets: "B");
+
+                var projectGraph = new ProjectGraph(entryProject.Path);
+                projectGraph.ProjectNodes.Count.ShouldBe(2);
+
+                IReadOnlyDictionary<ProjectGraphNode, ImmutableList<string>> targetLists = projectGraph.GetTargetLists(new []{ "A" });
+                targetLists.Count.ShouldBe(projectGraph.ProjectNodes.Count);
+                targetLists[GetFirstNodeWithProjectNumber(projectGraph, 1)].ShouldBe(new []{ "A" });
+                targetLists[GetFirstNodeWithProjectNumber(projectGraph, 2)].ShouldBeEmpty();
+            }
+        }
+
+        [Fact]
+        public void GetTargetListsThrowsOnInvalidTargetNames()
+        {
+            using (var env = TestEnvironment.Create())
+            {
+                TransientTestFile entryProject = CreateProjectFile(env: env, projectNumber: 1);
+
+                var projectGraph = new ProjectGraph(entryProject.Path);
+                projectGraph.ProjectNodes.Count.ShouldBe(1);
+
+                Should.Throw<ArgumentException>(() => projectGraph.GetTargetLists(new []{ "   " }));
+            }
+        }
+
+
+        [Fact]
         public void GetTargetListsUsesAllTargetsForNonMultitargetingNodes()
         {
             using (var env = TestEnvironment.Create())
@@ -867,7 +985,7 @@ $@"<ItemGroup>
                 projectReferences: null,
                 projectReferenceTargets: null,
                 defaultTargets: "D1",
-                extraContent: MultitargetingSpecification +
+                extraContent: MultitargetingSpecificationPropertyGroup +
                               projectReferenceTargetsProtocol +
 $@"
 <ItemGroup>
@@ -893,7 +1011,7 @@ $@"
                 projectReferences: null,
                 projectReferenceTargets: null,
                 defaultTargets: "D3",
-                extraContent: MultitargetingSpecification + projectReferenceTargetsProtocol);
+                extraContent: MultitargetingSpecificationPropertyGroup + projectReferenceTargetsProtocol);
 
             var graph = new ProjectGraph(entryProject);
 
@@ -1272,6 +1390,17 @@ $@"
                 {
                     new Dictionary<int, int[]>
                     {
+                        {1, new []{4, 2}},
+                        {2, new []{3}},
+                        {3, new []{4}},
+                        {4, new []{5}}
+                    }
+                };
+
+                yield return new object[]
+                {
+                    new Dictionary<int, int[]>
+                    {
                         {1, new []{2, 4}},
                         {2, new []{3}},
                         {3, new []{4}},
@@ -1287,6 +1416,19 @@ $@"
                         {3, new []{5, 4}},
                         {4, new []{5}},
                     }
+                };
+
+                yield return new object[]
+                {
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new []{2, 4, 3, 5} },
+                        {2, new []{5} },
+                        {3, new []{5} },
+                        {4, new []{6} },
+                        {5, new []{7} },
+                        {6, new []{5} }
+                    },
                 };
 
                 yield return new object[]
@@ -1372,7 +1514,7 @@ $@"
             Dictionary<string, string> additionalGlobalProperties = null,
             int expectedInnerBuildCount = 2)
         {
-            additionalGlobalProperties = additionalGlobalProperties ?? new Dictionary<string, string>();
+            additionalGlobalProperties ??= new Dictionary<string, string>();
 
             AssertOuterBuildEvaluation(outerBuild, additionalGlobalProperties);
 
@@ -1391,108 +1533,10 @@ $@"
             }
         }
 
-        private static void AssertOuterBuildAsNonRoot(
-            ProjectGraphNode outerBuild,
-            ProjectGraph graph,
-            Dictionary<string, string> additionalGlobalProperties = null,
-            int expectedInnerBuildCount = 2)
-        {
-            additionalGlobalProperties = additionalGlobalProperties ?? new Dictionary<string, string>();
-
-            AssertOuterBuildEvaluation(outerBuild, additionalGlobalProperties);
-
-            outerBuild.ProjectReferences.ShouldBeEmpty();
-            outerBuild.ReferencingProjects.ShouldNotBeEmpty();
-
-            foreach (var outerBuildReferencer in outerBuild.ReferencingProjects)
-            {
-                var innerBuilds =
-                    outerBuildReferencer.ProjectReferences.Where(
-                        p =>
-                            IsInnerBuild(p) 
-                            && p.ProjectInstance.FullPath == outerBuild.ProjectInstance.FullPath).ToArray();
-
-                innerBuilds.Length.ShouldBe(expectedInnerBuildCount);
-
-                foreach (var innerBuild in innerBuilds)
-                {
-                    AssertInnerBuildEvaluation(innerBuild, true, additionalGlobalProperties);
-
-                    innerBuild.ReferencingProjects.ShouldContain(outerBuildReferencer);
-                    innerBuild.ReferencingProjects.ShouldNotContain(outerBuild);
-
-                    graph.TestOnly_Edges.TestOnly_HasEdge((outerBuild, innerBuild)).ShouldBeFalse();
-
-                    var edgeToOuterBuild = graph.TestOnly_Edges[(outerBuildReferencer, outerBuild)];
-                    var edgeToInnerBuild = graph.TestOnly_Edges[(outerBuildReferencer, innerBuild)];
-
-                    edgeToOuterBuild.ShouldBe(edgeToInnerBuild);
-                }
-            }
-        }
-
-        private static bool IsOuterBuild(ProjectGraphNode project)
-        {
-            return ProjectInterpretation.GetProjectType(project.ProjectInstance) == ProjectInterpretation.ProjectType.OuterBuild;
-        }
-
-        private static bool IsInnerBuild(ProjectGraphNode project)
-        {
-            return ProjectInterpretation.GetProjectType(project.ProjectInstance) == ProjectInterpretation.ProjectType.InnerBuild;
-        }
-
-        private static bool IsNotMultitargeting(ProjectGraphNode project)
-        {
-            return ProjectInterpretation.GetProjectType(project.ProjectInstance) == ProjectInterpretation.ProjectType.NonMultitargeting;
-        }
-
-        private static void AssertNonMultitargetingNode(ProjectGraphNode node, Dictionary<string, string> additionalGlobalProperties = null)
-        {
-            additionalGlobalProperties = additionalGlobalProperties ?? new Dictionary<string, string>();
-
-            IsNotMultitargeting(node).ShouldBeTrue();
-            node.ProjectInstance.GlobalProperties.ShouldBeEquivalentTo(EmptyGlobalProperties.AddRange(additionalGlobalProperties));
-            node.ProjectInstance.GetProperty(InnerBuildPropertyName).ShouldBeNull();
-        }
-
-        private static void AssertOuterBuildEvaluation(ProjectGraphNode outerBuild, Dictionary<string, string> additionalGlobalProperties)
-        {
-            additionalGlobalProperties.ShouldNotBeNull();
-
-            IsOuterBuild(outerBuild).ShouldBeTrue();
-            IsInnerBuild(outerBuild).ShouldBeFalse();
-
-            outerBuild.ProjectInstance.GetProperty(InnerBuildPropertyName).ShouldBeNull();
-            outerBuild.ProjectInstance.GlobalProperties.ShouldBeEquivalentTo(EmptyGlobalProperties.AddRange(additionalGlobalProperties));
-        }
-
-        private static void AssertInnerBuildEvaluation(
-            ProjectGraphNode innerBuild,
-            bool InnerBuildPropertyIsSetViaGlobalProperty,
-            Dictionary<string, string> additionalGlobalProperties)
-        {
-            additionalGlobalProperties.ShouldNotBeNull();
-
-            IsOuterBuild(innerBuild).ShouldBeFalse();
-            IsInnerBuild(innerBuild).ShouldBeTrue();
-
-            var innerBuildPropertyValue = innerBuild.ProjectInstance.GetPropertyValue(InnerBuildPropertyName);
-
-            innerBuildPropertyValue.ShouldNotBeNullOrEmpty();
-
-            if (InnerBuildPropertyIsSetViaGlobalProperty)
-            {
-                innerBuild.ProjectInstance.GlobalProperties.ShouldBeEquivalentTo(
-                    EmptyGlobalProperties
-                        .Add(InnerBuildPropertyName, innerBuildPropertyValue)
-                        .AddRange(additionalGlobalProperties));
-            }
-        }
-
         [Fact]
         public void OuterBuildAsRootShouldDirectlyReferenceInnerBuilds()
         {
-            var projectFile = _env.CreateTestProjectWithFiles($@"<Project>{MultitargetingSpecification}</Project>").ProjectFile;
+            var projectFile = _env.CreateTestProjectWithFiles($@"<Project>{MultitargetingSpecificationPropertyGroup}</Project>").ProjectFile;
 
             var graph = new ProjectGraph(projectFile);
 
@@ -1518,7 +1562,7 @@ $@"
                 projectReferences: null,
                 projectReferenceTargets: null,
                 defaultTargets: null,
-                extraContent: MultitargetingSpecification);
+                extraContent: MultitargetingSpecificationPropertyGroup);
 
 
             var graph = new ProjectGraph(entryProject);
@@ -1552,7 +1596,7 @@ $@"
                 projectReferences: null,
                 projectReferenceTargets: null,
                 defaultTargets: null,
-                extraContent: MultitargetingSpecification);
+                extraContent: MultitargetingSpecificationPropertyGroup);
 
 
             var graph = new ProjectGraph(entryProject);
@@ -1580,7 +1624,7 @@ $@"
         public void DuplicatedInnerBuildMonikersShouldGetDeduplicated()
         {
             // multitarget to duplicate monikers
-            var multitargetingSpecification = MultitargetingSpecification +
+            var multitargetingSpecification = MultitargetingSpecificationPropertyGroup +
                                               @"<PropertyGroup>
                                                     <InnerBuildProperties>a;a</InnerBuildProperties>
                                                 </PropertyGroup>";
@@ -1604,7 +1648,7 @@ $@"
         [Fact]
         public void ReferenceOfMultitargetingProjectShouldNotInheritInnerBuildSpecificGlobalProperties()
         {
-            var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: new[] {2}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification).Path;
+            var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: new[] {2}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup).Path;
             CreateProjectFile(env: _env, projectNumber: 2);
 
             var graph = new ProjectGraph(root);
@@ -1623,7 +1667,7 @@ $@"
         [Fact]
         public void InnerBuildAsRootViaLocalPropertyShouldNotPropagateInnerBuildPropertyToReference()
         {
-            var innerBuildViaLocalProperty = MultitargetingSpecification + $"<PropertyGroup><{InnerBuildPropertyName}>foo</{InnerBuildPropertyName}></PropertyGroup>";
+            var innerBuildViaLocalProperty = MultitargetingSpecificationPropertyGroup + $"<PropertyGroup><{InnerBuildPropertyName}>foo</{InnerBuildPropertyName}></PropertyGroup>";
 
             var root = CreateProjectFile(
                 env: _env,
@@ -1651,7 +1695,7 @@ $@"
         [Fact]
         public void InnerBuildAsRootViaGlobalPropertyShouldNotPropagateInnerBuildPropertyToReference()
         {
-            var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: new[] {2}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification).Path;
+            var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: new[] {2}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup).Path;
             CreateProjectFile(env: _env, projectNumber: 2);
 
             var graph = new ProjectGraph(root, new Dictionary<string, string>{{InnerBuildPropertyName, "foo"}});
@@ -1670,10 +1714,10 @@ $@"
         [Fact]
         public void NonMultitargetingProjectsAreCompatibleWithMultitargetingProjects()
         {
-            var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: new[] {2, 3}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification).Path;
+            var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: new[] {2, 3}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup).Path;
             CreateProjectFile(env: _env, projectNumber: 2, projectReferences: new[] {4});
             CreateProjectFile(env: _env, projectNumber: 3, projectReferences: new[] {4});
-            CreateProjectFile(env: _env, projectNumber: 4, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification);
+            CreateProjectFile(env: _env, projectNumber: 4, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup);
 
             var graph = new ProjectGraph(root);
 
@@ -1691,15 +1735,15 @@ $@"
         [Fact]
         public void InnerBuildsCanHaveSeparateReferences()
         {
-            var extraInnerBuildReferenceSpec = MultitargetingSpecification +
+            var extraInnerBuildReferenceSpec = MultitargetingSpecificationPropertyGroup +
                                           $@"<ItemGroup>
                                                 <ProjectReference Condition=`'$({InnerBuildPropertyName})'=='b'` Include=`4.proj;5.proj`/>
                                             </ItemGroup>".Cleanup();
 
             var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: new[] {2, 3}, projectReferenceTargets: null, defaultTargets: null, extraContent: extraInnerBuildReferenceSpec).Path;
-            CreateProjectFile(env: _env, projectNumber: 2, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification);
+            CreateProjectFile(env: _env, projectNumber: 2, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup);
             CreateProjectFile(env: _env, projectNumber: 3);
-            CreateProjectFile(env: _env, projectNumber: 4, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification);
+            CreateProjectFile(env: _env, projectNumber: 4, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup);
             CreateProjectFile(env: _env, projectNumber: 5);
 
             var graph = new ProjectGraph(root);
@@ -1719,13 +1763,13 @@ $@"
 
             innerBuildWithCommonReferences.ProjectReferences.Count.ShouldBe(4);
             var referenceNumbersSet = innerBuildWithCommonReferences.ProjectReferences.Select(r => Path.GetFileNameWithoutExtension(r.ProjectInstance.FullPath)).ToHashSet();
-            referenceNumbersSet.ShouldBeEquivalentTo(new HashSet<string>{"2", "3"});
+            referenceNumbersSet.ShouldBeSameIgnoringOrder(new HashSet<string>{"2", "3"});
 
             var innerBuildWithAdditionalReferences = GetNodesWithProjectNumber(graph, 1).First(n => n.ProjectInstance.GlobalProperties.TryGetValue(InnerBuildPropertyName, out string p) && p == "b");
 
             innerBuildWithAdditionalReferences.ProjectReferences.Count.ShouldBe(8);
             referenceNumbersSet = innerBuildWithAdditionalReferences.ProjectReferences.Select(r => Path.GetFileNameWithoutExtension(r.ProjectInstance.FullPath)).ToHashSet();
-            referenceNumbersSet.ShouldBeEquivalentTo(new HashSet<string>{"2", "3", "4", "5"});
+            referenceNumbersSet.ShouldBeSameIgnoringOrder(new HashSet<string>{"2", "3", "4", "5"});
         }
 
         [Fact]
@@ -1739,7 +1783,7 @@ $@"
 
             var graph = new ProjectGraph(new []
             {
-                CreateProjectFile(env: _env, projectNumber: 1, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification).Path,
+                CreateProjectFile(env: _env, projectNumber: 1, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup).Path,
                 CreateProjectFile(env: _env, projectNumber: 2, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: referenceToInnerBuild).Path
             },
             additionalGlobalProperties);
@@ -1760,7 +1804,7 @@ $@"
             two.ProjectReferences.ShouldHaveSingleItem();
             two.ProjectReferences.First().ShouldBe(referencedInnerBuild);
 
-            referencedInnerBuild.ReferencingProjects.ShouldBeEquivalentTo(new []{two, outerBuild});
+            referencedInnerBuild.ReferencingProjects.ShouldBeSameIgnoringOrder(new []{two, outerBuild});
         }
 
         [Fact]
@@ -1771,7 +1815,7 @@ $@"
                                            </ItemGroup>";
 
             var root = CreateProjectFile(env: _env, projectNumber: 1, projectReferences: null, projectReferenceTargets: null, defaultTargets: null, extraContent: referenceToInnerBuild).Path;
-            CreateProjectFile(env: _env, projectNumber: 2, projectReferences: new []{3}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecification + $"<PropertyGroup><{InnerBuildPropertyName}>a</{InnerBuildPropertyName}></PropertyGroup>");
+            CreateProjectFile(env: _env, projectNumber: 2, projectReferences: new []{3}, projectReferenceTargets: null, defaultTargets: null, extraContent: MultitargetingSpecificationPropertyGroup + $"<PropertyGroup><{InnerBuildPropertyName}>a</{InnerBuildPropertyName}></PropertyGroup>");
             CreateProjectFile(env: _env, projectNumber: 3);
 
             var additionalGlobalProperties = new Dictionary<string, string>{{"x", "y"}};
@@ -1809,7 +1853,7 @@ $@"
                 projectReferences: null,
                 projectReferenceTargets: null,
                 defaultTargets: null,
-                extraContent: MultitargetingSpecification + referenceToInnerBuild)
+                extraContent: MultitargetingSpecificationPropertyGroup + referenceToInnerBuild)
                 .Path;
 
             CreateProjectFile(
@@ -1818,7 +1862,7 @@ $@"
                 projectReferences: null,
                 projectReferenceTargets: null,
                 defaultTargets: null,
-                extraContent: MultitargetingSpecification);
+                extraContent: MultitargetingSpecificationPropertyGroup);
 
             var graph = new ProjectGraph(new [] { root }, additionalGlobalProperties);
 
@@ -1845,7 +1889,7 @@ $@"
             // the outer build is necessary as the referencing inner build can still call targets on it
             GetNodesWithProjectNumber(graph, 2).Count().ShouldBe(2);
 
-            innerBuild1WithReferenceToInnerBuild2.ProjectReferences.ShouldBeEquivalentTo(new []{outerBuild2, innerBuild2});
+            innerBuild1WithReferenceToInnerBuild2.ProjectReferences.ShouldBeSameIgnoringOrder(new []{outerBuild2, innerBuild2});
         }
 
         public static IEnumerable<object[]> AllNodesShouldHaveGraphBuildGlobalPropertyData
@@ -1933,11 +1977,11 @@ $@"
 
         [Theory]
         [MemberData(nameof(AllNodesShouldHaveGraphBuildGlobalPropertyData))]
-        public void AllNodesShouldHaveGraphBuildGlobalProperty(Dictionary<int, int[]> edges, int[] roots, Dictionary<string, string> globalProperties)
+        public void AllNodesShouldHaveGraphBuildGlobalProperty(Dictionary<int, int[]> edges, int[] entryPoints, Dictionary<string, string> globalProperties)
         {
             using (var env = TestEnvironment.Create())
             {
-                var projectGraph = Helpers.CreateProjectGraph(env, edges, globalProperties, null, roots);
+                var projectGraph = Helpers.CreateProjectGraph(env, edges, globalProperties, null, entryPoints);
 
                 var dot = projectGraph.ToDot();
 
@@ -1946,7 +1990,7 @@ $@"
 
                 foreach (var node in projectGraph.ProjectNodes)
                 {
-                    node.ProjectInstance.GlobalProperties.ShouldBeEquivalentTo(expectedGlobalProperties);
+                    node.ProjectInstance.GlobalProperties.ShouldBeSameIgnoringOrder(expectedGlobalProperties);
                 }
             }
         }
@@ -1965,57 +2009,318 @@ $@"
             }
         }
 
-        private static ProjectGraphNode GetOuterBuild(ProjectGraph graph, int projectNumber)
+        [Theory]
+        [MemberData(nameof(Graphs))]
+        public void GraphShouldSupportTransitiveReferences(Dictionary<int, int[]> edges)
         {
-            return GetNodesWithProjectNumber(graph, projectNumber).FirstOrDefault(IsOuterBuild);
-        }
+            var graph = Helpers.CreateProjectGraph(
+                env: _env,
+                dependencyEdges: edges,
+                extraContentPerProjectNumber: null,
+                extraContentForAllNodes: EnableTransitiveProjectReferencesPropertyGroup
+                );
 
-        private static IReadOnlyCollection<ProjectGraphNode> GetInnerBuilds(ProjectGraph graph, int projectNumber)
-        {
-            var outerBuild = GetOuterBuild(graph, projectNumber);
-
-            if (outerBuild == null)
+            foreach (var node in graph.ProjectNodes)
             {
-                return ImmutableArray<ProjectGraphNode>.Empty;
-            }
-            else
-            {
-                var innerBuilds = GetNodesWithProjectNumber(graph, projectNumber)
-                    .Where(p => IsInnerBuild(p) && p.ProjectInstance.FullPath.Equals(outerBuild.ProjectInstance.FullPath))
-                    .ToArray();
+                var expectedClosure = ComputeClosure(node);
 
-                innerBuilds.ShouldNotBeEmpty();
-
-                return innerBuilds;
+                node.ProjectReferences.ShouldBeSameIgnoringOrder(expectedClosure);
             }
         }
 
-        private static ProjectGraphNode GetFirstNodeWithProjectNumber(ProjectGraph graph, int projectNum) => GetNodesWithProjectNumber(graph, projectNum).First();
-
-        private static IEnumerable<ProjectGraphNode> GetNodesWithProjectNumber(ProjectGraph graph, int projectNum)
+        public static IEnumerable<object[]> TransitiveReferencesAreDefinedPerProjectTestData
         {
-            return graph.ProjectNodes.Where(node => node.ProjectInstance.FullPath.EndsWith(projectNum + ".proj"));
+            get
+            {
+                yield return new object[]
+                {
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {3}},
+                        {2, new[] {3}},
+                        {3, new[] {4}}
+                    },
+                    new Dictionary<int, string>(),
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {3}},
+                        {2, new[] {3}}
+                    }
+                };
+
+                yield return new object[]
+                {
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {2}},
+                        {2, new[] {3}},
+                        {3, new[] {4}}
+                    },
+                    new Dictionary<int, string>
+                    {
+                        {1, EnableTransitiveProjectReferencesPropertyGroup}
+                    },
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {2, 3, 4}},
+                        {2, new[] {3}},
+                        {3, new[] {4}},
+                        {4, new int[0]}
+                    }
+                };
+
+                yield return new object[]
+                {
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {3}},
+                        {2, new[] {3}},
+                        {3, new[] {4}}
+                    },
+                    new Dictionary<int, string>
+                    {
+                        {1, EnableTransitiveProjectReferencesPropertyGroup}
+                    },
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {3, 4}},
+                        {2, new[] {3}}
+                    }
+                };
+
+                yield return new object[]
+                {
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {3}},
+                        {2, new[] {3}},
+                        {3, new[] {4}}
+                    },
+                    new Dictionary<int, string>
+                    {
+                        {1, EnableTransitiveProjectReferencesPropertyGroup},
+                        {2, EnableTransitiveProjectReferencesPropertyGroup}
+                    },
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {3, 4}},
+                        {2, new[] {3, 4}}
+                    }
+                };
+                yield return new object[]
+                {
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {2}},
+                        {2, new[] {3}},
+                        {3, new[] {4}},
+                        {4, new[] {5}},
+                        {5, new[] {6}}
+                    },
+                    new Dictionary<int, string>
+                    {
+                        {1, EnableTransitiveProjectReferencesPropertyGroup},
+                        {3, EnableTransitiveProjectReferencesPropertyGroup},
+                        {5, EnableTransitiveProjectReferencesPropertyGroup}
+                    },
+                    new Dictionary<int, int[]>
+                    {
+                        {1, new[] {2, 3, 4, 5, 6}},
+                        {2, new[] {3}},
+                        {3, new[] {4, 5, 6}},
+                        {4, new[] {5}},
+                        {5, new[] {6}},
+                        {6, new int[0]},
+                    }
+                };
+            }
         }
 
-        private static string GetProjectFileName(ProjectGraphNode node) => Path.GetFileNameWithoutExtension(node.ProjectInstance.FullPath);
-
-        internal static TransientTestFile CreateProjectFile(
-            TestEnvironment env,
-            int projectNumber,
-            int[] projectReferences = null,
-            Dictionary<string, string[]> projectReferenceTargets = null,
-            string defaultTargets = null,
-            string extraContent = null
+        [Theory]
+        [MemberData(nameof(TransitiveReferencesAreDefinedPerProjectTestData))]
+        public void TransitiveReferencesAreDefinedPerProject(
+            Dictionary<int, int[]> edges,
+            Dictionary<int, string> extraContentPerProjectNumber,
+            Dictionary<int, int[]> expectedReferences
             )
         {
-            return Helpers.CreateProjectFile(
-                env,
-                projectNumber,
-                projectReferences,
-                projectReferenceTargets,
-                // Use "Build" when the default target is unspecified since in practice that is usually the default target.
-                defaultTargets ?? "Build",
-                extraContent);
+            var graph = Helpers.CreateProjectGraph(
+                env: _env,
+                dependencyEdges: edges,
+                extraContentPerProjectNumber: extraContentPerProjectNumber
+            );
+
+            graph.AssertReferencesIgnoringOrder(expectedReferences);
+        }
+
+        [Fact]
+        public void TransitiveReferencesShouldNotBeAddedToOuterBuilds()
+        {
+            var graph = Helpers.CreateProjectGraph(
+                env: _env,
+                dependencyEdges: new Dictionary<int, int[]>
+                {
+                    {1, new []{3, 4} },
+                    {2, new []{3, 4} },
+                    {3, new []{4} },
+                    {4, new []{5} },
+                    {5, new []{6} }
+                },
+                extraContentPerProjectNumber: new Dictionary<int, string>
+                {
+                    {
+                        1,
+                        EnableTransitiveProjectReferencesPropertyGroup +
+                        MultitargetingSpecificationPropertyGroup
+                    },
+                    {
+                        2,
+                        EnableTransitiveProjectReferencesPropertyGroup +
+                        HardCodedInnerBuildWithMultitargetingSpecification
+                    },
+                    {
+                        4,
+                        EnableTransitiveProjectReferencesPropertyGroup +
+                        MultitargetingSpecificationPropertyGroup
+                    },
+                    {
+                        5,
+                        HardCodedInnerBuildWithMultitargetingSpecification
+                    },
+                    {
+                        6,
+                        MultitargetingSpecificationPropertyGroup
+                    }
+                }
+            );
+
+            GetOuterBuild(graph, 1).AssertReferencesIgnoringOrder(new []{1, 1});
+
+            var innerBuilds1 = GetInnerBuilds(graph, 1);
+            innerBuilds1.Count.ShouldBe(2);
+
+            foreach (var innerBuild in innerBuilds1)
+            {
+                innerBuild.AssertReferencesIgnoringOrder(new []{3, 4, 4, 4, 5, 6, 6, 6});
+            }
+
+            GetFirstNodeWithProjectNumber(graph, 2).AssertReferencesIgnoringOrder(new []{3, 4, 4, 4, 5, 6, 6, 6});
+
+            GetOuterBuild(graph, 4).AssertReferencesIgnoringOrder(new int[0]);
+
+            var innerBuilds4 = GetInnerBuilds(graph, 4);
+            innerBuilds4.Count.ShouldBe(2);
+
+            foreach (var innerBuild in innerBuilds4)
+            {
+                innerBuild.AssertReferencesIgnoringOrder(new []{5, 6, 6, 6});
+            }
+        }
+
+        [Fact]
+        public void TransitiveReferencesShouldNotOverwriteMultitargetingEdges()
+        {
+            var graph = Helpers.CreateProjectGraph(
+                env: _env,
+                dependencyEdges: new Dictionary<int, int[]>()
+                {
+                    {1, new[] {2}},
+                    {2, new[] {3}}
+                },
+                extraContentPerProjectNumber: new Dictionary<int, string>()
+                {
+                    {
+                        1,
+                        $@"
+<PropertyGroup>
+    <{InnerBuildPropertiesName}>1A;1B</{InnerBuildPropertiesName}>
+</PropertyGroup>
+
+<ItemGroup>
+    <ProjectReference Update='@(ProjectReference)' Targets='1ATarget' Condition=`'$({InnerBuildPropertyName})' == '1A'` />
+    <ProjectReference Update='@(ProjectReference)' Targets='1BTarget' Condition=`'$({InnerBuildPropertyName})' == '1B'` />
+</ItemGroup>"
+                    },
+                    {
+                        2,
+                        $@"
+<PropertyGroup>
+    <{InnerBuildPropertiesName}>2A;2B</{InnerBuildPropertiesName}>
+</PropertyGroup>
+
+<ItemGroup>
+    <ProjectReference Update='@(ProjectReference)' Targets='2ATarget' Condition=`'$({InnerBuildPropertyName})' == '2A'` />
+    <ProjectReference Update='@(ProjectReference)' Targets='2BTarget' Condition=`'$({InnerBuildPropertyName})' == '2B'` />
+</ItemGroup>"
+                    },
+                    {
+                        3,
+                        $@"
+<PropertyGroup>
+    <{InnerBuildPropertiesName}>3A;3B</{InnerBuildPropertiesName}>
+</PropertyGroup>"
+                    }
+                },
+                extraContentForAllNodes: @$"
+<PropertyGroup>
+    <{ProjectInterpretation.AddTransitiveProjectReferencesInStaticGraphPropertyName}>true</{ProjectInterpretation.AddTransitiveProjectReferencesInStaticGraphPropertyName}>
+</PropertyGroup>
+
+<PropertyGroup>
+    <InnerBuildProperty>{InnerBuildPropertyName}</InnerBuildProperty>
+    <InnerBuildPropertyValues>{InnerBuildPropertiesName}</InnerBuildPropertyValues>
+</PropertyGroup>
+
+<ItemGroup>
+    <ProjectReferenceTargets Include='Build' Targets='Build;{MSBuildConstants.ProjectReferenceTargetsOrDefaultTargetsMarker}' />
+    <ProjectReferenceTargets Include='Build' Targets='BuildForOuterBuild' OuterBuild='true' />
+</ItemGroup>");
+
+            var targetLists = graph.GetTargetLists(new[] {"Build"});
+
+            var outerBuild1 = GetOuterBuild(graph, 1);
+            targetLists[outerBuild1].ShouldBe(new[] {"Build"});
+
+            AssertOuterBuildAsRoot(outerBuild1, graph, expectedInnerBuildCount: 2);
+
+            var innerBuildsFor1 = GetInnerBuilds(graph, 1);
+            innerBuildsFor1.Count.ShouldBe(2);
+
+            foreach (var inner1 in innerBuildsFor1)
+            {
+                // Outer build targets are added to inner builds because 
+                targetLists[inner1].ShouldBe(new[] {"BuildForOuterBuild", "Build"});
+            }
+
+            var outerBuild2 = GetOuterBuild(graph, 2);
+            targetLists[outerBuild2].ShouldBe(new[] {"BuildForOuterBuild"});
+            AssertOuterBuildAsNonRoot(outerBuild2, graph, expectedInnerBuildCount: 2);
+
+            var innerBuildsFor2 = GetInnerBuilds(graph, 2);
+            innerBuildsFor2.Count.ShouldBe(2);
+
+            foreach (var inner2 in innerBuildsFor2)
+            {
+                targetLists[inner2].ShouldBe(new[] {"BuildForOuterBuild", "Build", "1ATarget", "1BTarget"});
+            }
+
+            var outerBuild3 = GetOuterBuild(graph, 3);
+            targetLists[outerBuild3].ShouldBe(new[] { "BuildForOuterBuild" });
+
+            outerBuild3.ReferencingProjects.Count.ShouldBe(4);
+
+            AssertOuterBuildAsNonRoot(outerBuild3, graph, expectedInnerBuildCount: 2);
+            var innerBuildsFor3 = GetInnerBuilds(graph, 3);
+            innerBuildsFor3.Count.ShouldBe(2);
+
+            foreach (var inner3 in innerBuildsFor3)
+            {
+                inner3.ReferencingProjects.Count.ShouldBe(4);
+
+                // 3 does not get called with 1ATarget or 1BTarget because those apply only to direct references
+                targetLists[inner3]
+                    .ShouldBe(new[] { "BuildForOuterBuild", "Build", "2ATarget", "2BTarget" });
+            }
         }
 
         public void Dispose()

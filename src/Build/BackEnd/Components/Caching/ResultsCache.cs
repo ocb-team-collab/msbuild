@@ -5,8 +5,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.IO;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Shared;
 
@@ -57,15 +55,15 @@ namespace Microsoft.Build.BackEnd
         {
             lock (_resultsByConfiguration)
             {
-                if (_resultsByConfiguration.ContainsKey(result.ConfigurationId))
+                if (_resultsByConfiguration.TryGetValue(result.ConfigurationId, out BuildResult buildResult))
                 {
-                    if (Object.ReferenceEquals(_resultsByConfiguration[result.ConfigurationId], result))
+                    if (Object.ReferenceEquals(buildResult, result))
                     {
                         // Merging results would be meaningless as we would be merging the object with itself.
                         return;
                     }
 
-                    _resultsByConfiguration[result.ConfigurationId].MergeResults(result);
+                    buildResult.MergeResults(result);
                 }
                 else
                 {
@@ -107,9 +105,8 @@ namespace Microsoft.Build.BackEnd
 
             lock (_resultsByConfiguration)
             {
-                if (_resultsByConfiguration.ContainsKey(request.ConfigurationId))
+                if (_resultsByConfiguration.TryGetValue(request.ConfigurationId, out BuildResult result))
                 {
-                    BuildResult result = _resultsByConfiguration[request.ConfigurationId];
                     foreach (string target in request.Targets)
                     {
                         ErrorUtilities.VerifyThrow(result.HasResultsForTarget(target), "No results in cache for target " + target);
@@ -149,24 +146,20 @@ namespace Microsoft.Build.BackEnd
         /// <param name="request">The request whose results we should return</param>
         /// <param name="configInitialTargets">The initial targets for the request's configuration.</param>
         /// <param name="configDefaultTargets">The default targets for the request's configuration.</param>
-        /// <param name="additionalTargetsToCheckForOverallResult">Any additional targets that need to be checked to determine overall 
-        /// pass or failure, but that are not included as actual results. (E.g. AfterTargets of an entrypoint target)</param>
         /// <param name="skippedResultsDoNotCauseCacheMiss">If false, a cached skipped target will cause this method to return "NotSatisfied".  
         /// If true, then as long as there is a result in the cache (regardless of whether it was skipped or not), this method 
         /// will return "Satisfied". In most cases this should be false, but it may be set to true in a situation where there is no 
         /// chance of re-execution (which is the usual response to missing / skipped targets), and the caller just needs the data.</param>
         /// <returns>A response indicating the results, if any, and the targets needing to be built, if any.</returns>
-        public ResultsCacheResponse SatisfyRequest(BuildRequest request, List<string> configInitialTargets, List<string> configDefaultTargets, List<string> additionalTargetsToCheckForOverallResult, bool skippedResultsDoNotCauseCacheMiss)
+        public ResultsCacheResponse SatisfyRequest(BuildRequest request, List<string> configInitialTargets, List<string> configDefaultTargets, bool skippedResultsDoNotCauseCacheMiss)
         {
             ErrorUtilities.VerifyThrowArgument(request.IsConfigurationResolved, "UnresolvedConfigurationInRequest");
             ResultsCacheResponse response = new ResultsCacheResponse(ResultsCacheResponseType.NotSatisfied);
 
             lock (_resultsByConfiguration)
             {
-                if (_resultsByConfiguration.ContainsKey(request.ConfigurationId))
+                if (_resultsByConfiguration.TryGetValue(request.ConfigurationId, out BuildResult allResults))
                 {
-                    BuildResult allResults = _resultsByConfiguration[request.ConfigurationId];
-
                     // Check for targets explicitly specified.
                     bool explicitTargetsSatisfied = CheckResults(allResults, request.Targets, response.ExplicitTargetsToBuild, skippedResultsDoNotCauseCacheMiss);
 
@@ -207,7 +200,7 @@ namespace Microsoft.Build.BackEnd
                                 targetsToAddResultsFor.AddRange(configDefaultTargets);
                             }
 
-                            response.Results = new BuildResult(request, allResults, targetsToAddResultsFor.ToArray(), additionalTargetsToCheckForOverallResult, null);
+                            response.Results = new BuildResult(request, allResults, targetsToAddResultsFor.ToArray(), null);
                         }
                     }
                     else
@@ -232,10 +225,7 @@ namespace Microsoft.Build.BackEnd
                 BuildResult removedResult;
                 _resultsByConfiguration.TryRemove(configurationId, out removedResult);
 
-                if (removedResult != null)
-                {
-                    removedResult.ClearCachedFiles();
-                }
+                removedResult?.ClearCachedFiles();
             }
         }
 
@@ -245,9 +235,9 @@ namespace Microsoft.Build.BackEnd
 
             translator.TranslateDictionary(
                 ref localReference,
-                (ref int i, ITranslator aTranslator) => aTranslator.Translate(ref i),
-                (ref BuildResult result, ITranslator aTranslator) => aTranslator.Translate(ref result),
-                capacity => new ConcurrentDictionary<int, BuildResult>(Environment.ProcessorCount, capacity));
+                (ITranslator aTranslator, ref int i) => aTranslator.Translate(ref i),
+                (ITranslator aTranslator, ref BuildResult result) => aTranslator.Translate(ref result),
+                capacity => new ConcurrentDictionary<int, BuildResult>(NativeMethodsShared.GetLogicalCoreCount(), capacity));
 
             if (translator.Mode == TranslationDirection.ReadFromStream)
             {
@@ -279,7 +269,7 @@ namespace Microsoft.Build.BackEnd
         /// <param name="host">The component host.</param>
         public void InitializeComponent(IBuildComponentHost host)
         {
-            ErrorUtilities.VerifyThrowArgumentNull(host, "host");
+            ErrorUtilities.VerifyThrowArgumentNull(host, nameof(host));
         }
 
         /// <summary>
@@ -317,7 +307,7 @@ namespace Microsoft.Build.BackEnd
             {
                 if (!result.HasResultsForTarget(target) || (result[target].ResultCode == TargetResultCode.Skipped && !skippedResultsAreOK))
                 {
-                    if (null != targetsMissingResults)
+                    if (targetsMissingResults != null)
                     {
                         targetsMissingResults.Add(target);
                         returnValue = false;

@@ -12,11 +12,12 @@ using System.Text;
 using System.Threading;
 using Microsoft.Build.BackEnd;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Eventing;
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Shared;
 
-namespace Microsoft.Build.Experimental.Graph
+namespace Microsoft.Build.Graph
 {
     /// <summary>
     ///     Represents a graph of evaluated projects.
@@ -57,6 +58,25 @@ namespace Microsoft.Build.Experimental.Graph
         private GraphBuilder.GraphEdges Edges { get; }
 
         internal GraphBuilder.GraphEdges TestOnly_Edges => Edges;
+
+        public GraphConstructionMetrics ConstructionMetrics { get; private set;}
+
+        /// <summary>
+        /// Various metrics on graph construction.
+        /// </summary>
+        public readonly struct GraphConstructionMetrics
+        {
+            public GraphConstructionMetrics(TimeSpan constructionTime, int nodeCount, int edgeCount)
+            {
+                ConstructionTime = constructionTime;
+                NodeCount = nodeCount;
+                EdgeCount = edgeCount;
+            }
+
+            public TimeSpan ConstructionTime { get; }
+            public int NodeCount { get; }
+            public int EdgeCount { get; }
+        }
 
         /// <summary>
         ///     Gets the project nodes representing the entry points.
@@ -156,7 +176,6 @@ namespace Microsoft.Build.Experimental.Graph
         ///     <see cref="InvalidProjectFileException" />
         ///     If a null reference is returned from <paramref name="projectInstanceFactory" />, the InnerException contains
         ///     <see cref="InvalidOperationException" />
-        /// </exception>
         /// </exception>
         public ProjectGraph(string entryProjectFile, ProjectCollection projectCollection, ProjectInstanceFactoryFunc projectInstanceFactory)
             : this(new ProjectGraphEntryPoint(entryProjectFile).AsEnumerable(), projectCollection, projectInstanceFactory)
@@ -311,7 +330,7 @@ namespace Microsoft.Build.Experimental.Graph
                 entryPoints,
                 projectCollection,
                 projectInstanceFactory,
-                Environment.ProcessorCount,
+                NativeMethodsShared.GetLogicalCoreCount(),
                 CancellationToken.None)
         {
         }
@@ -352,7 +371,7 @@ namespace Microsoft.Build.Experimental.Graph
                 entryPoints,
                 projectCollection,
                 projectInstanceFactory,
-                Environment.ProcessorCount,
+                NativeMethodsShared.GetLogicalCoreCount(),
                 cancellationToken)
         {
         }
@@ -396,7 +415,9 @@ namespace Microsoft.Build.Experimental.Graph
         {
             ErrorUtilities.VerifyThrowArgumentNull(projectCollection, nameof(projectCollection));
 
-            projectInstanceFactory = projectInstanceFactory ?? DefaultProjectInstanceFactory;
+            var measurementInfo = BeginMeasurement();
+
+            projectInstanceFactory ??= DefaultProjectInstanceFactory;
 
             var graphBuilder = new GraphBuilder(
                 entryPoints,
@@ -413,6 +434,45 @@ namespace Microsoft.Build.Experimental.Graph
             Edges = graphBuilder.Edges;
 
             _projectNodesTopologicallySorted = new Lazy<IReadOnlyCollection<ProjectGraphNode>>(() => TopologicalSort(GraphRoots, ProjectNodes));
+
+            ConstructionMetrics = EndMeasurement();
+
+            (Stopwatch Timer, string ETWArgs) BeginMeasurement()
+            {
+                string etwArgs = null;
+
+                if (MSBuildEventSource.Log.IsEnabled())
+                {
+                    etwArgs = string.Join(";", entryPoints.Select(
+                        e =>
+                        {
+                            var globalPropertyString = e.GlobalProperties == null
+                                ? string.Empty
+                                : string.Join(", ", e.GlobalProperties.Select(kvp => $"{kvp.Key} = {kvp.Value}"));
+
+                            return $"{e.ProjectFile}({globalPropertyString})";
+                        }));
+
+                    MSBuildEventSource.Log.ProjectGraphConstructionStart(etwArgs);
+                }
+
+                return (Stopwatch.StartNew(), etwArgs);
+            }
+
+            GraphConstructionMetrics EndMeasurement()
+            {
+                if (MSBuildEventSource.Log.IsEnabled())
+                {
+                    MSBuildEventSource.Log.ProjectGraphConstructionStop(measurementInfo.ETWArgs);
+                }
+
+                measurementInfo.Timer.Stop();
+
+                return new GraphConstructionMetrics(
+                    measurementInfo.Timer.Elapsed,
+                    ProjectNodes.Count,
+                    Edges.Count);
+            }
         }
 
         internal string ToDot()
@@ -441,13 +501,13 @@ namespace Microsoft.Build.Experimental.Graph
                     node.ProjectInstance.GlobalProperties.OrderBy(kvp => kvp.Key)
                         .Select(kvp => $"{kvp.Key}={kvp.Value}"));
 
-                sb.AppendLine($"\t{nodeId} [label=<{nodeName}<br/>{globalPropertiesString}>]");
+                sb.Append('\t').Append(nodeId).Append(" [label=<").Append(nodeName).Append("<br/>").Append(globalPropertiesString).AppendLine(">]");
 
                 foreach (var reference in node.ProjectReferences)
                 {
                     var referenceId = nodeIds.GetOrAdd(reference, (n, idProvider) => idProvider(n), nodeIdProvider);
 
-                    sb.AppendLine($"\t{nodeId} -> {referenceId}");
+                    sb.Append('\t').Append(nodeId).Append(" -> ").AppendLine(referenceId);
                 }
             }
 
@@ -497,16 +557,20 @@ namespace Microsoft.Build.Experimental.Graph
         /// </summary>
         /// <remarks>
         ///     This method uses the ProjectReferenceTargets items to determine the targets to run per node. The results can then
-        ///     be used
-        ///     to start building each project individually, assuming a given project is built after its references.
+        ///     be used to start building each project individually, assuming a given project is built after its references.
         /// </remarks>
         /// <param name="entryProjectTargets">
         ///     The target list for the <see cref="GraphRoots" />. May be null or empty, in which case the entry projects' default
         ///     targets will be used.
         /// </param>
-        /// <returns>A dictionary containing the target list for each node.</returns>
+        /// <returns>
+        ///     A dictionary containing the target list for each node. If a node's target list is empty, then no targets were
+        ///     inferred for that node and it should get skipped during a graph based build.
+        /// </returns>
         public IReadOnlyDictionary<ProjectGraphNode, ImmutableList<string>> GetTargetLists(ICollection<string> entryProjectTargets)
         {
+            ThrowOnEmptyTargetNames(entryProjectTargets);
+
             // Seed the dictionary with empty lists for every node. In this particular case though an empty list means "build nothing" rather than "default targets".
             var targetLists = ProjectNodes.ToDictionary(node => node, node => ImmutableList<string>.Empty);
 
@@ -546,6 +610,11 @@ namespace Microsoft.Build.Experimental.Graph
                 foreach (var referenceNode in node.ProjectReferences)
                 {
                     var applicableTargets = targetsToPropagate.GetApplicableTargetsForReference(referenceNode.ProjectInstance);
+
+                    if (applicableTargets.IsEmpty)
+                    {
+                        continue;
+                    }
 
                     var expandedTargets = ExpandDefaultTargets(
                         applicableTargets,
@@ -597,6 +666,19 @@ namespace Microsoft.Build.Experimental.Graph
             }
 
             return targetLists;
+
+            void ThrowOnEmptyTargetNames(ICollection<string> targetNames)
+            {
+                if (targetNames == null || targetNames.Count == 0)
+                {
+                    return;
+                }
+
+                if (targetNames.Any(targetName => string.IsNullOrWhiteSpace(targetName)))
+                {
+                    throw new ArgumentException(ResourceUtilities.FormatResourceStringIgnoreCodeAndKeyword("OM_TargetNameNullOrEmpty", nameof(GetTargetLists)));
+                }
+            }
         }
 
         private static ImmutableList<string> ExpandDefaultTargets(ImmutableList<string> targets, List<string> defaultTargets, ProjectItemInstance graphEdge)
@@ -680,7 +762,7 @@ namespace Microsoft.Build.Experimental.Graph
 
             public override bool Equals(object obj)
             {
-                return !ReferenceEquals(null, obj) && obj is ProjectGraphBuildRequest graphNodeWithTargets && Equals(graphNodeWithTargets);
+                return !(obj is null) && obj is ProjectGraphBuildRequest graphNodeWithTargets && Equals(graphNodeWithTargets);
             }
 
             public override int GetHashCode()

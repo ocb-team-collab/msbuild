@@ -16,14 +16,13 @@ namespace Microsoft.Build.Framework
         /// </summary>
         public ProjectEvaluationStartedEventArgs()
         {
-
         }
 
         /// <summary>
         /// Initializes a new instance of the ProjectEvaluationStartedEventArgs class.
         /// </summary>
         public ProjectEvaluationStartedEventArgs(string message, params object[] messageArgs)
-            : base(message, null, null, DateTime.UtcNow, messageArgs)
+            : base(message, helpKeyword: null, senderName: null, DateTime.UtcNow, messageArgs)
         {
         }
 

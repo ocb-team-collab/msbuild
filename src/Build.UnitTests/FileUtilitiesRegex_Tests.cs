@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Xunit;
+﻿using Xunit;
 using Shouldly;
 using Microsoft.Build.Shared;
-using System.IO;
 using System.Text.RegularExpressions;
 using System.Globalization;
 
@@ -18,7 +12,7 @@ namespace Microsoft.Build.Engine.UnitTests
         private string _altDirectoryStart = new string(MSBuildConstants.ForwardSlash[0], 2);
 
         //below are the legacy regex used before explcitly checking these patterns to reduce allocations
-        
+
         // regular expression used to match file-specs comprising exactly "<drive letter>:" (with no trailing characters)
         internal static readonly Regex DrivePattern = new Regex(@"^[A-Za-z]:$", RegexOptions.Compiled);
 
@@ -355,7 +349,6 @@ namespace Microsoft.Build.Engine.UnitTests
 
             FileUtilitiesRegex.IsUncPattern(winDirectory).ShouldBe(false);
             FileUtilitiesRegex.IsUncPattern(unixDirectory).ShouldBe(false);
-
         }
 
         [Fact]
@@ -366,7 +359,6 @@ namespace Microsoft.Build.Engine.UnitTests
 
             StartsWithUncPattern.IsMatch(winDirectory).ShouldBeTrue();
             StartsWithUncPattern.IsMatch(unixDirectory).ShouldBeTrue();
-
         }
 
         [Fact]

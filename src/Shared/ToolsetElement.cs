@@ -3,20 +3,13 @@
 
 using System;
 using System.Collections.Generic;
-#if FEATURE_SYSTEM_CONFIGURATION
 using System.Configuration;
-#endif
 using System.IO;
-using System.Text;
-using System.Globalization;
-using System.Reflection;
 using Microsoft.Build.Collections;
 using Microsoft.Build.Shared;
 
 namespace Microsoft.Build.Evaluation
 {
-#if FEATURE_SYSTEM_CONFIGURATION
-
     /// <summary>
     /// Helper class for reading toolsets out of the configuration file.
     /// </summary>
@@ -36,7 +29,7 @@ namespace Microsoft.Build.Evaluation
             // If section definition is present and section is not present, this value is not null
             // If section definition is not present and section is also not present, this value is null
             // If the section definition is not present and section is present, then this value is null
-            if (null != configuration)
+            if (configuration != null)
             {
                 ConfigurationSection msbuildSection = configuration.GetSection("msbuildToolsets");
                 configurationSection = msbuildSection as ToolsetConfigurationSection;
@@ -100,12 +93,12 @@ namespace Microsoft.Build.Evaluation
 
             set
             {
-                base["toolsVersion"] = value;
+                base[nameof(toolsVersion)] = value;
             }
         }
 
         /// <summary>
-        /// Property element collection 
+        /// Property element collection
         /// </summary>
         [ConfigurationProperty("", IsDefaultCollection = true)]
         public PropertyElementCollection PropertyElements
@@ -321,7 +314,7 @@ namespace Microsoft.Build.Evaluation
 
             /// <summary>
             /// Collection type
-            /// This has to be public as cannot change access modifier when overriding  
+            /// This has to be public as cannot change access modifier when overriding
             /// </summary>
             public override ConfigurationElementCollectionType CollectionType
             {
@@ -610,7 +603,7 @@ namespace Microsoft.Build.Evaluation
     /// <summary>
     /// This class is used to programmatically read msbuildToolsets section
     /// in from the configuration file.  An example of application config file:
-    /// 
+    ///
     /// &lt;configuration&gt;
     ///     &lt;msbuildToolsets default="2.0"&gt;
     ///         &lt;toolset toolsVersion="2.0"&gt;
@@ -622,7 +615,7 @@ namespace Microsoft.Build.Evaluation
     ///         &lt;/toolset&gt;
     ///     &lt;/msbuildToolsets&gt;
     /// &lt;/configuration&gt;
-    /// 
+    ///
     /// </summary>
     /// <remarks>
     /// Internal for unit testing only
@@ -630,7 +623,7 @@ namespace Microsoft.Build.Evaluation
     internal sealed class ToolsetConfigurationSection : ConfigurationSection
     {
         /// <summary>
-        /// toolsVersion element collection 
+        /// toolsVersion element collection
         /// </summary>
         [ConfigurationProperty("", IsDefaultCollection = true)]
         public ToolsetElementCollection Toolsets
@@ -655,7 +648,7 @@ namespace Microsoft.Build.Evaluation
                 // Note this means we can't distinguish between the attribute being present but containing
                 // an empty string for its value and the attribute not being present at all.
                 string defaultValue = (string)base["default"];
-                return (String.IsNullOrEmpty(defaultValue) ? null : defaultValue);
+                return String.IsNullOrEmpty(defaultValue) ? null : defaultValue;
             }
 
             set
@@ -678,7 +671,7 @@ namespace Microsoft.Build.Evaluation
                 // Note this means we can't distinguish between the attribute being present but containing
                 // an empty string for its value and the attribute not being present at all.
                 string defaultValue = (string)base["msbuildOverrideTasksPath"];
-                return (String.IsNullOrEmpty(defaultValue) ? null : defaultValue);
+                return String.IsNullOrEmpty(defaultValue) ? null : defaultValue;
             }
 
             set
@@ -688,7 +681,7 @@ namespace Microsoft.Build.Evaluation
         }
 
         /// <summary>
-        /// DefaultOverrideToolsVersion attribute on msbuildToolsets element, specifying the toolsversion that should be used by 
+        /// DefaultOverrideToolsVersion attribute on msbuildToolsets element, specifying the toolsversion that should be used by
         /// default to build projects with this version of MSBuild.
         /// </summary>
         [ConfigurationProperty("DefaultOverrideToolsVersion")]
@@ -702,14 +695,13 @@ namespace Microsoft.Build.Evaluation
                 // Note this means we can't distinguish between the attribute being present but containing
                 // an empty string for its value and the attribute not being present at all.
                 string defaultValue = (string)base["DefaultOverrideToolsVersion"];
-                return (String.IsNullOrEmpty(defaultValue) ? null : defaultValue);
+                return String.IsNullOrEmpty(defaultValue) ? null : defaultValue;
             }
 
             set
             {
-                base["DefaultOverrideToolsVersion"] = value;
+                base[nameof(DefaultOverrideToolsVersion)] = value;
             }
         }
     }
-#endif
 }

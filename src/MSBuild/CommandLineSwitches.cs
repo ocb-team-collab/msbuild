@@ -5,8 +5,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using Microsoft.Win32;
 using Microsoft.Build.Shared;
 
 namespace Microsoft.Build.CommandLine
@@ -48,7 +46,6 @@ namespace Microsoft.Build.CommandLine
             OldOM,
 #endif
             DistributedFileLogger,
-            DetailedSummary,
 #if DEBUG
             WaitForDebugger,
 #endif
@@ -93,6 +90,7 @@ namespace Microsoft.Build.CommandLine
             FileLoggerParameters9,
             NodeReuse,
             Preprocess,
+            Targets,
             WarningsAsErrors,
             WarningsAsMessages,
             BinaryLogger,
@@ -104,6 +102,8 @@ namespace Microsoft.Build.CommandLine
             GraphBuild,
             InputResultsCaches,
             OutputResultsCache,
+            LowPriority,
+            DetailedSummary,
             NumberOfParameterizedSwitches,
         }
 
@@ -195,7 +195,6 @@ namespace Microsoft.Build.CommandLine
             internal bool emptyParametersAllowed;
         }
 
-
         // map switches that do not take parameters to their identifiers (taken from ParameterlessSwitch enum)
         // WARNING: keep this map in the same order as the ParameterlessSwitch enumeration
         private static readonly ParameterlessSwitchInfo[] s_parameterlessSwitchesMap =
@@ -222,7 +221,6 @@ namespace Microsoft.Build.CommandLine
             new ParameterlessSwitchInfo(  new string[] { "oldom" },                         ParameterlessSwitch.OldOM,                 null),
 #endif
             new ParameterlessSwitchInfo(  new string[] { "distributedfilelogger", "dfl" },  ParameterlessSwitch.DistributedFileLogger, null),
-            new ParameterlessSwitchInfo(  new string[] { "detailedsummary", "ds" },         ParameterlessSwitch.DetailedSummary,       null),
 #if DEBUG
             new ParameterlessSwitchInfo(  new string[] { "waitfordebugger", "wfd" },        ParameterlessSwitch.WaitForDebugger,       null),
 #endif
@@ -261,6 +259,7 @@ namespace Microsoft.Build.CommandLine
             new ParameterizedSwitchInfo(  new string[] { "fileloggerparameters9", "flp9" },     ParameterizedSwitch.FileLoggerParameters9,      null,                           false,          "MissingFileLoggerParameterError",     true,   false  ),
             new ParameterizedSwitchInfo(  new string[] { "nodereuse", "nr" },                   ParameterizedSwitch.NodeReuse,                  null,                           false,          "MissingNodeReuseParameterError",      true,   false  ),
             new ParameterizedSwitchInfo(  new string[] { "preprocess", "pp" },                  ParameterizedSwitch.Preprocess,                 null,                           false,          null,                                  true,   false  ),
+            new ParameterizedSwitchInfo(  new string[] { "targets", "ts" },                     ParameterizedSwitch.Targets,                    null,                           false,          null,                                  true,   false  ),
             new ParameterizedSwitchInfo(  new string[] { "warnaserror", "err" },                ParameterizedSwitch.WarningsAsErrors,           null,                           true,           null,                                  true,   true   ),
             new ParameterizedSwitchInfo(  new string[] { "warnasmessage", "nowarn" },           ParameterizedSwitch.WarningsAsMessages,         null,                           true,           "MissingWarnAsMessageParameterError",  true,   false  ),
             new ParameterizedSwitchInfo(  new string[] { "binarylogger", "bl" },                ParameterizedSwitch.BinaryLogger,               null,                           false,          null,                                  true,   false  ),
@@ -269,9 +268,11 @@ namespace Microsoft.Build.CommandLine
             new ParameterizedSwitchInfo(  new string[] { "restoreproperty", "rp" },             ParameterizedSwitch.RestoreProperty,            null,                           true,           "MissingRestorePropertyError",         true,   false  ),
             new ParameterizedSwitchInfo(  new string[] { "interactive" },                       ParameterizedSwitch.Interactive,                null,                           false,          null,                                  true,   false  ),
             new ParameterizedSwitchInfo(  new string[] { "isolateprojects", "isolate" },        ParameterizedSwitch.IsolateProjects,            null,                           false,          null,                                  true,   false  ),
-            new ParameterizedSwitchInfo(  new string[] { "graphbuild", "graph" },               ParameterizedSwitch.GraphBuild,                 null,                           false,          null,                                  true,   false  ),
+            new ParameterizedSwitchInfo(  new string[] { "graphbuild", "graph" },               ParameterizedSwitch.GraphBuild,                 null,                           true,           null,                                  true,   false  ),
             new ParameterizedSwitchInfo(  new string[] { "inputResultsCaches", "irc" },         ParameterizedSwitch.InputResultsCaches,         null,                           true,           null,                                  true,   true   ),
             new ParameterizedSwitchInfo(  new string[] { "outputResultsCache", "orc" },         ParameterizedSwitch.OutputResultsCache,         "DuplicateOutputResultsCache",  false,          null,                                  true,   true   ),
+            new ParameterizedSwitchInfo(  new string[] { "lowpriority", "low" },                ParameterizedSwitch.LowPriority,                null,                           false,          null,                                  true,   false  ),
+            new ParameterizedSwitchInfo(  new string[] { "detailedsummary", "ds" },             ParameterizedSwitch.DetailedSummary,            null,                           false,          null,                                  true,   false  ),
         };
 
         /// <summary>
@@ -295,7 +296,7 @@ namespace Microsoft.Build.CommandLine
             {
                 foreach (string parameterlessSwitchName in switchInfo.switchNames)
                 {
-                    if (String.Compare(switchName, parameterlessSwitchName, StringComparison.OrdinalIgnoreCase) == 0)
+                    if (String.Equals(switchName, parameterlessSwitchName, StringComparison.OrdinalIgnoreCase))
                     {
                         parameterlessSwitch = switchInfo.parameterlessSwitch;
                         duplicateSwitchErrorMessage = switchInfo.duplicateSwitchErrorMessage;
@@ -304,7 +305,7 @@ namespace Microsoft.Build.CommandLine
                 }
             }
 
-            return (parameterlessSwitch != ParameterlessSwitch.Invalid);
+            return parameterlessSwitch != ParameterlessSwitch.Invalid;
         }
 
         /// <summary>
@@ -365,7 +366,7 @@ namespace Microsoft.Build.CommandLine
                 }
             }
 
-            return (parameterizedSwitch != ParameterizedSwitch.Invalid);
+            return parameterizedSwitch != ParameterizedSwitch.Invalid;
         }
 
         /// <summary>
@@ -494,7 +495,6 @@ namespace Microsoft.Build.CommandLine
                     // check if they were all stored successfully i.e. they were all non-empty (after removing quoting, if requested)
                     parametersStored = (emptyParameters == 0);
                 }
-
             }
             else
             {
@@ -556,7 +556,7 @@ namespace Microsoft.Build.CommandLine
         /// <returns>true, if switch has been seen before</returns>
         internal bool IsParameterlessSwitchSet(ParameterlessSwitch parameterlessSwitch)
         {
-            return (_parameterlessSwitches[(int)parameterlessSwitch].commandLineArg != null);
+            return _parameterlessSwitches[(int)parameterlessSwitch].commandLineArg != null;
         }
 
         /// <summary>
@@ -571,7 +571,7 @@ namespace Microsoft.Build.CommandLine
         {
             get
             {
-                return (_parameterlessSwitches[(int)parameterlessSwitch].commandLineArg != null);
+                return _parameterlessSwitches[(int)parameterlessSwitch].commandLineArg != null;
             }
         }
 
@@ -593,7 +593,7 @@ namespace Microsoft.Build.CommandLine
         /// <returns>true, if switch has been seen before</returns>
         internal bool IsParameterizedSwitchSet(ParameterizedSwitch parameterizedSwitch)
         {
-            return (_parameterizedSwitches[(int)parameterizedSwitch].commandLineArg != null);
+            return _parameterizedSwitches[(int)parameterizedSwitch].commandLineArg != null;
         }
 
         // used to indicate a null parameter list for a switch
@@ -788,7 +788,7 @@ namespace Microsoft.Build.CommandLine
         /// <returns>true, if any errors were found</returns>
         internal bool HaveErrors()
         {
-            return (_errorMessage != null);
+            return _errorMessage != null;
         }
 
         /// <summary>

@@ -2,7 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
@@ -123,14 +122,12 @@ namespace Microsoft.Build.Tasks
                     {
                         writeOutput = false;
                     }
-
                 }
                 catch(System.Xml.XmlException)
                 {
                     writeOutput = true;
                 }
             }
-
 
             if (AppConfigFile != null)
             {
@@ -158,7 +155,7 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         private static bool IsMatch(AssemblyName suggestedRedirect, string name, string culture, string publicKeyToken)
         {
-            if (String.Compare(suggestedRedirect.Name, name, StringComparison.OrdinalIgnoreCase) != 0)
+            if (!String.Equals(suggestedRedirect.Name, name, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
@@ -178,7 +175,7 @@ namespace Microsoft.Build.Tasks
             }
 
             if (!String.IsNullOrEmpty(culture) &&
-                String.Compare(cultureString, culture, StringComparison.OrdinalIgnoreCase) != 0)
+                !String.Equals(cultureString, culture, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
@@ -191,7 +188,7 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         private static bool ByteArrayMatchesString(Byte[] a, string s)
         {
-            return String.Compare(ResolveAssemblyReference.ByteArrayToString(a), s, StringComparison.OrdinalIgnoreCase) != 0;
+            return !String.Equals(ResolveAssemblyReference.ByteArrayToString(a), s, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -361,7 +358,7 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         private IDictionary<AssemblyName, string> ParseSuggestedRedirects()
         {
-            ErrorUtilities.VerifyThrow(SuggestedRedirects != null && SuggestedRedirects.Length > 0, "This should not be called if there is no suggested redirect.");
+            ErrorUtilities.VerifyThrow(SuggestedRedirects?.Length > 0, "This should not be called if there is no suggested redirect.");
 
             var map = new Dictionary<AssemblyName, string>();
             foreach (var redirect in SuggestedRedirects)

@@ -264,7 +264,7 @@ namespace Microsoft.Build.Collections
         /// <returns>True if they are equivalent, false otherwise.</returns>
         public bool Equals(PropertyDictionary<T> other)
         {
-            if (null == other)
+            if (other == null)
             {
                 return false;
             }
@@ -284,7 +284,7 @@ namespace Microsoft.Build.Collections
                 foreach (T leftProp in this)
                 {
                     T rightProp = other[leftProp.Key];
-                    if (rightProp == null || !rightProp.Equals(leftProp))
+                    if (rightProp?.Equals(leftProp) != true)
                     {
                         return false;
                     }
@@ -356,7 +356,7 @@ namespace Microsoft.Build.Collections
         {
             value = this[key];
 
-            return (value != null);
+            return value != null;
         }
 
         #endregion
@@ -492,22 +492,33 @@ namespace Microsoft.Build.Collections
 
         /// <summary>
         /// Helper to convert into a read-only dictionary of string, string.
+        /// TODO: for performance, consider switching to returning IDictionary
+        /// and returning ArrayDictionary if lookup of results is not needed.
         /// </summary>
         internal Dictionary<string, string> ToDictionary()
         {
-            Dictionary<string, string> dictionary;
-
             lock (_properties)
             {
-                dictionary = new Dictionary<string, string>(_properties.Count, MSBuildNameIgnoreCaseComparer.Default);
+                var dictionary = new Dictionary<string, string>(_properties.Count, MSBuildNameIgnoreCaseComparer.Default);
 
                 foreach (T property in this)
                 {
                     dictionary[property.Key] = property.EscapedValue;
                 }
-            }
 
-            return dictionary;
+                return dictionary;
+            }
+        }
+
+        internal void Enumerate(Action<string, string> keyValueCallback)
+        {
+            lock (_properties)
+            {
+                foreach (var kvp in _properties)
+                {
+                    keyValueCallback(kvp.Key, EscapingUtilities.UnescapeAll(kvp.EscapedValue));
+                }
+            }
         }
     }
 }

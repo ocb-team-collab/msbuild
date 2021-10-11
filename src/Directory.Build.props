@@ -11,6 +11,10 @@
 
   <!-- Override project defaults provided by Repo toolset -->
   <PropertyGroup>
+    <!-- Ensure that compiler errors emit full paths so that files
+         can be correctly annotated in GitHub. -->
+    <GenerateFullPaths>true</GenerateFullPaths>
+
     <!-- Do not mangle paths for test assemblies, because Shoudly assertions want actual on-disk paths. -->
     <DeterministicSourcePaths Condition="'$(IsTestProject)' == 'true'">false</DeterministicSourcePaths>
 
@@ -20,16 +24,17 @@
     <CustomBeforeMicrosoftCommonTargets>$(MSBuildThisFileDirectory)Directory.BeforeCommon.targets</CustomBeforeMicrosoftCommonTargets>
 
     <Platforms>AnyCPU;x64</Platforms>
-    
+
     <!-- Defaults for target frameworks and architecture -->
     <LibraryTargetFrameworks>$(FullFrameworkTFM);netstandard2.0</LibraryTargetFrameworks>
-    <LibraryTargetFrameworks Condition="'$(MonoBuild)'=='true'">net461</LibraryTargetFrameworks>
+    <LibraryTargetFrameworks Condition="'$(DotNetBuildFromSource)' == 'true'">netstandard2.0</LibraryTargetFrameworks>
+    <LibraryTargetFrameworks Condition="'$(MonoBuild)'=='true'">$(FullFrameworkTFM)</LibraryTargetFrameworks>
     <PlatformTarget>AnyCPU</PlatformTarget>
 
     <!-- Target frameworks for Exe and unit test projects (ie projects with runtime output) -->
-    <RuntimeOutputTargetFrameworks>netcoreapp2.1</RuntimeOutputTargetFrameworks>
-    <RuntimeOutputTargetFrameworks Condition="'$(OsEnvironment)'=='windows'">$(FullFrameworkTFM);$(RuntimeOutputTargetFrameworks)</RuntimeOutputTargetFrameworks>
-    <RuntimeOutputTargetFrameworks Condition="'$(MonoBuild)' == 'true'">net461</RuntimeOutputTargetFrameworks>
+    <RuntimeOutputTargetFrameworks>net5.0</RuntimeOutputTargetFrameworks>
+    <RuntimeOutputTargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) and '$(DotNetBuildFromSource)' != 'true'">$(FullFrameworkTFM);$(RuntimeOutputTargetFrameworks)</RuntimeOutputTargetFrameworks>
+    <RuntimeOutputTargetFrameworks Condition="'$(MonoBuild)' == 'true'">$(FullFrameworkTFM)</RuntimeOutputTargetFrameworks>
 
     <!-- Don't automatically append target framework to output path, since we want to put the Platform Target beforehand, if it's not AnyCPU -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -51,12 +56,10 @@
     <GenerateResourceMSBuildRuntime>CurrentRuntime</GenerateResourceMSBuildRuntime>
 
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- Disable warnings from XML documentation. https://github.com/Microsoft/msbuild/issues/2927 -->
-    <NoWarn>$(NoWarn);1570;1572;1573;1587</NoWarn>
 
-    <GenAPIAdditionalParameters>$(GenAPIAdditionalParameters) -excludeApiList:&quot;$(RepoRoot)ref\ExcludeAPIList.txt&quot;</GenAPIAdditionalParameters>
-    <GenAPIAdditionalParameters>$(GenAPIAdditionalParameters) -excludeAttributesList:&quot;$(RepoRoot)ref\ExcludeAttributeList.txt&quot;</GenAPIAdditionalParameters>
-    <GenAPIAdditionalParameters>$(GenAPIAdditionalParameters) -headerFile:&quot;$(RepoRoot)ref\LicenseHeader.txt&quot;</GenAPIAdditionalParameters>
+    <GenAPIAdditionalParameters>$(GenAPIAdditionalParameters) --exclude-api-list:&quot;$(RepoRoot)ref\ExcludeAPIList.txt&quot;</GenAPIAdditionalParameters>
+    <GenAPIAdditionalParameters>$(GenAPIAdditionalParameters) --exclude-attributes-list:&quot;$(RepoRoot)ref\ExcludeAttributeList.txt&quot;</GenAPIAdditionalParameters>
+    <GenAPIAdditionalParameters>$(GenAPIAdditionalParameters) --header-file:&quot;$(RepoRoot)ref\LicenseHeader.txt&quot;</GenAPIAdditionalParameters>
 
     <PackageLicenseUrl Condition="'$(PackageLicenseExpression)' == ''">http://go.microsoft.com/fwlink/?LinkId=329770</PackageLicenseUrl>
     <PackageProjectUrl>http://go.microsoft.com/fwlink/?LinkId=624683</PackageProjectUrl>

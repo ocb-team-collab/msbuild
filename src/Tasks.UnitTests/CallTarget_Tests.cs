@@ -2,16 +2,12 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.IO;
-using System.Reflection;
-using System.Collections;
 using System.Collections.Generic;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
-using Microsoft.Build.Tasks;
 using Microsoft.Build.Utilities;
-using System.Text.RegularExpressions;
+using Shouldly;
 using Xunit;
 
 namespace Microsoft.Build.UnitTests
@@ -109,6 +105,22 @@ namespace Microsoft.Build.UnitTests
             logger.AssertLogContains("Inside A");
             logger.AssertLogContains("Inside B");
             logger.AssertLogContains("Inside C");
+        }
+
+        [Fact]
+        public void FailsWithOnlyTargetErrors()
+        {
+            MockLogger logger = ObjectModelHelpers.BuildProjectExpectFailure(@"
+                <Project>
+                  <Target Name='Init'>
+                    <CallTarget Targets='Inside' />
+                  </Target>
+                  <Target Name='Inside'>
+                    <Error />
+                  </Target>
+                </Project>");
+
+            logger.ErrorCount.ShouldBe (1);
         }
 
         /// <summary>

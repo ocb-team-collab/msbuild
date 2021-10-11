@@ -3,11 +3,8 @@
 
 #if FEATURE_WIN32_REGISTRY
 
-using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Security;
 
 using Microsoft.Build.Shared;
 using error = Microsoft.Build.Shared.ErrorUtilities;
@@ -43,12 +40,12 @@ namespace Microsoft.Build.Evaluation
     {
         /// <summary>
         /// Registry location for storing tools version dependent data for msbuild
-        /// </summary> 
+        /// </summary>
         private const string MSBuildRegistryPath = @"SOFTWARE\Microsoft\MSBuild";
 
         /// <summary>
         /// Cached registry wrapper at root of the msbuild entries
-        /// </summary> 
+        /// </summary>
         private RegistryKeyWrapper _msbuildRegistryWrapper;
 
         /// <summary>
@@ -65,7 +62,7 @@ namespace Microsoft.Build.Evaluation
         internal ToolsetRegistryReader(PropertyDictionary<ProjectPropertyInstance> environmentProperties, PropertyDictionary<ProjectPropertyInstance> globalProperties, RegistryKeyWrapper msbuildRegistryWrapper)
             : base(environmentProperties, globalProperties)
         {
-            error.VerifyThrowArgumentNull(msbuildRegistryWrapper, "msbuildRegistryWrapper");
+            error.VerifyThrowArgumentNull(msbuildRegistryWrapper, nameof(msbuildRegistryWrapper));
 
             _msbuildRegistryWrapper = msbuildRegistryWrapper;
         }
@@ -196,10 +193,7 @@ namespace Microsoft.Build.Evaluation
             }
             finally
             {
-                if (toolsVersionWrapper != null)
-                {
-                    toolsVersionWrapper.Dispose();
-                }
+                toolsVersionWrapper?.Dispose();
             }
         }
 
@@ -227,23 +221,20 @@ namespace Microsoft.Build.Evaluation
             }
             finally
             {
-                if (toolsVersionWrapper != null)
-                {
-                    toolsVersionWrapper.Dispose();
-                }
+                toolsVersionWrapper?.Dispose();
             }
         }
 
         /// <summary>
-        /// Provides an enumerator over property definitions for a specified sub-toolset version 
-        /// under a specified toolset version. 
+        /// Provides an enumerator over property definitions for a specified sub-toolset version
+        /// under a specified toolset version.
         /// </summary>
         /// <param name="toolsVersion">The tools version.</param>
         /// <param name="subToolsetVersion">The sub-toolset version.</param>
         /// <returns>An enumeration of property definitions.</returns>
         protected override IEnumerable<ToolsetPropertyDefinition> GetSubToolsetPropertyDefinitions(string toolsVersion, string subToolsetVersion)
         {
-            ErrorUtilities.VerifyThrowArgumentLength(subToolsetVersion, "subToolsetVersion");
+            ErrorUtilities.VerifyThrowArgumentLength(subToolsetVersion, nameof(subToolsetVersion));
 
             RegistryKeyWrapper toolsVersionWrapper = null;
             RegistryKeyWrapper subToolsetWrapper = null;
@@ -275,15 +266,9 @@ namespace Microsoft.Build.Evaluation
             }
             finally
             {
-                if (toolsVersionWrapper != null)
-                {
-                    toolsVersionWrapper.Dispose();
-                }
+                toolsVersionWrapper?.Dispose();
 
-                if (subToolsetWrapper != null)
-                {
-                    subToolsetWrapper.Dispose();
-                }
+                subToolsetWrapper?.Dispose();
             }
         }
 
@@ -305,7 +290,7 @@ namespace Microsoft.Build.Evaluation
         {
             string propertyValue = null;
 
-            if (propertyName != null && propertyName.Length == 0)
+            if (propertyName?.Length == 0)
             {
                 InvalidToolsetDefinitionException.Throw("PropertyNameInRegistryHasZeroLength", toolsetWrapper.Name);
             }

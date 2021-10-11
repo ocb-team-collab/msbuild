@@ -18,7 +18,7 @@ using Microsoft.Build.Evaluation;
 using Microsoft.Build.Exceptions;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
-using Microsoft.Build.Experimental.Graph;
+using Microsoft.Build.Graph;
 using Microsoft.Build.Logging;
 using Microsoft.Build.Shared;
 using Microsoft.Build.Utilities;
@@ -58,6 +58,11 @@ namespace Microsoft.Build.UnitTests.BackEnd
         private readonly ITestOutputHelper _output;
 
         /// <summary>
+        /// The transient state corresponding to setting MSBUILDINPROCENVCHECK to 1.
+        /// </summary>
+        private readonly TransientTestState _inProcEnvCheckTransientEnvironmentVariable;
+
+        /// <summary>
         /// SetUp
         /// </summary>
         public BuildManager_Tests(ITestOutputHelper output)
@@ -77,7 +82,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             _projectCollection = new ProjectCollection();
 
             _env = TestEnvironment.Create(output);
-            _env.SetEnvironmentVariable("MSBUILDINPROCENVCHECK", "1");
+            _inProcEnvCheckTransientEnvironmentVariable = _env.SetEnvironmentVariable("MSBUILDINPROCENVCHECK", "1");
         }
 
         /// <summary>
@@ -205,6 +210,14 @@ namespace Microsoft.Build.UnitTests.BackEnd
             _logger.AllBuildEvents.OfType<ProjectEvaluationFinishedEventArgs>()
                 .Count()
                 .ShouldBe(3);
+        }
+
+        [Fact]
+        public void GraphBuildOptionsDefaults()
+        {
+            var options = new GraphBuildOptions();
+
+            options.Build.ShouldBeTrue();
         }
 
         /// <summary>
@@ -943,6 +956,68 @@ namespace Microsoft.Build.UnitTests.BackEnd
             _logger.AssertLogContains("[errormessage]");
         }
 
+        [Fact]
+        public void DeferredMessageShouldBeLogged()
+        {
+            string contents = CleanupFileContents(@"
+              <Project>
+                 <Target Name='Build'>
+                     <Message Text='[Message]' Importance='high'/>
+                     <Warning Text='[Warn]'/>	
+                </Target>
+              </Project>
+            ");
+
+            MockLogger logger;
+
+            const string highMessage = "deferred[High]";
+            const string normalMessage = "deferred[Normal]";
+            const string lowMessage = "deferred[Low]";
+
+            using (var buildManagerSession = new Helpers.BuildManagerSession(
+                _env,
+                deferredMessages: new[]
+                {
+                    new BuildManager.DeferredBuildMessage(highMessage, MessageImportance.High),
+                    new BuildManager.DeferredBuildMessage(normalMessage, MessageImportance.Normal),
+                    new BuildManager.DeferredBuildMessage(lowMessage, MessageImportance.Low)
+                }))
+            {
+                var result = buildManagerSession.BuildProjectFile(_env.CreateFile("build.proj", contents).Path);
+
+                result.OverallResult.ShouldBe(BuildResultCode.Success);
+
+                logger = buildManagerSession.Logger;
+            }
+
+            logger.AssertLogContains("[Warn]");
+            logger.AssertLogContains("[Message]");
+
+            logger.AssertLogContains(highMessage);
+            logger.AssertLogContains(normalMessage);
+            logger.AssertLogContains(lowMessage);
+
+            var deferredMessages = logger.BuildMessageEvents.Where(e => e.Message.StartsWith("deferred")).ToArray();
+
+            deferredMessages.Length.ShouldBe(3);
+
+            deferredMessages[0].Message.ShouldBe(highMessage);
+            deferredMessages[0].Importance.ShouldBe(MessageImportance.High);
+            deferredMessages[1].Message.ShouldBe(normalMessage);
+            deferredMessages[1].Importance.ShouldBe(MessageImportance.Normal);
+            deferredMessages[2].Message.ShouldBe(lowMessage);
+            deferredMessages[2].Importance.ShouldBe(MessageImportance.Low);
+
+            logger.BuildStartedEvents.Count.ShouldBe(1);
+            logger.BuildFinishedEvents.Count.ShouldBe(1);
+            logger.ProjectStartedEvents.Count.ShouldBe(1);
+            logger.ProjectFinishedEvents.Count.ShouldBe(1);
+            logger.TargetStartedEvents.Count.ShouldBe(1);
+            logger.TargetFinishedEvents.Count.ShouldBe(1);
+            logger.TaskStartedEvents.Count.ShouldBe(2);
+            logger.TaskFinishedEvents.Count.ShouldBe(2);
+        }
+
         /// <summary>
         /// A build with a message, error and warning, verify that 
         /// we only get errors, warnings, and project started and finished when OnlyLogCriticalEvents is true
@@ -1438,8 +1513,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// <summary>
         /// A canceled build
         /// </summary>
-        [Fact]
-        [Trait("Category", "mono-osx-failing")]
+        [Fact(Timeout = 20_000)]
         public void CancelledBuild()
         {
             string contents = CleanupFileContents(@"
@@ -1456,7 +1530,10 @@ namespace Microsoft.Build.UnitTests.BackEnd
 
             asyncResult.ExecuteAsync(null, null);
             _buildManager.CancelAllSubmissions();
-            asyncResult.WaitHandle.WaitOne();
+            // This test intermittently hangs. This timeout is designed to prevent that, turning a hang into a failure.
+            // Todo: Investigate why this test sometimes hangs.
+            asyncResult.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
+            asyncResult.IsCompleted.ShouldBeTrue("Failing to complete by this point indicates a hang.");
             BuildResult result = asyncResult.BuildResult;
             _buildManager.EndBuild();
 
@@ -1545,7 +1622,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// cancel the task and exit out after a short period wherein we wait for the task to exit cleanly. 
         /// </summary>
         [Fact]
-        [Trait("Category", "mono-osx-failing")]
         public void CancelledBuildWithDelay40()
         {
             string contents = CleanupFileContents(@"
@@ -1577,7 +1653,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// cancel the task and exit out after a short period wherein we wait for the task to exit cleanly. 
         /// </summary>
         [Fact]
-        [Trait("Category", "mono-osx-failing")]
         public void CancelledBuildInTaskHostWithDelay40()
         {
             string contents = CleanupFileContents(@"
@@ -2238,8 +2313,10 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// overall build result -- and thus the return value of the MSBuild task -- should reflect
         /// that failure. 
         /// </summary>
-        [Fact]
-        public void FailedAfterTargetInP2PShouldCauseOverallBuildFailure()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void FailedAfterTargetInP2PShouldCauseOverallBuildFailure(bool disableInProcNode)
         {
             var projA = _env.CreateFile(".proj").Path;
             var projB = _env.CreateFile(".proj").Path;
@@ -2269,6 +2346,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             File.WriteAllText(projA, CleanupFileContents(contentsA));
             File.WriteAllText(projB, CleanupFileContents(contentsB));
 
+            _parameters.DisableInProcNode = disableInProcNode;
             _buildManager.BeginBuild(_parameters);
             var data = new BuildRequestData(projA, new Dictionary<string, string>(), null, new[] { "Build" }, new HostServices());
             BuildResult result = _buildManager.PendBuildRequest(data).Execute();
@@ -2284,8 +2362,10 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// that failure.  Specifically tests where there are multiple entrypoint targets with 
         /// AfterTargets, only one of which fails. 
         /// </summary>
-        [Fact]
-        public void FailedAfterTargetInP2PShouldCauseOverallBuildFailure_MultipleEntrypoints()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void FailedAfterTargetInP2PShouldCauseOverallBuildFailure_MultipleEntrypoints(bool disableInProcNode)
         {
             var projA = _env.CreateFile(".proj").Path;
             var projB = _env.CreateFile(".proj").Path;
@@ -2327,6 +2407,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             File.WriteAllText(projA, CleanupFileContents(contentsA));
             File.WriteAllText(projB, CleanupFileContents(contentsB));
 
+            _parameters.DisableInProcNode = disableInProcNode;
             _buildManager.BeginBuild(_parameters);
             var data = new BuildRequestData(projA, new Dictionary<string, string>(), null, new[] { "Build" }, new HostServices());
             BuildResult result = _buildManager.PendBuildRequest(data).Execute();
@@ -2347,8 +2428,10 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// that failure. This should also be true if the AfterTarget is an AfterTarget of the 
         /// entrypoint target.
         /// </summary>
-        [Fact]
-        public void FailedNestedAfterTargetInP2PShouldCauseOverallBuildFailure()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void FailedNestedAfterTargetInP2PShouldCauseOverallBuildFailure(bool disableInProcNode)
         {
             var projA = _env.CreateFile(".proj").Path;
             var projB = _env.CreateFile(".proj").Path;
@@ -2382,6 +2465,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             File.WriteAllText(projA, CleanupFileContents(contentsA));
             File.WriteAllText(projB, CleanupFileContents(contentsB));
 
+            _parameters.DisableInProcNode = disableInProcNode;
             _buildManager.BeginBuild(_parameters);
             var data = new BuildRequestData(projA, new Dictionary<string, string>(), null, new[] { "Build" }, new HostServices());
             BuildResult result = _buildManager.PendBuildRequest(data).Execute();
@@ -3214,7 +3298,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         /// was loaded by MSBuild, not supplied directly by the user.
         /// </remarks>
         [Fact]
-        [Trait("Category", "mono-osx-failing")]
         public void Regress265010()
         {
             string contents = CleanupFileContents(@"
@@ -3538,7 +3621,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         }
 
         [Fact]
-        [Trait("Category", "mono-osx-failing")] // out-of-proc nodes not working on mono yet
         public void ShouldBuildMutatedProjectInstanceWhoseProjectWasPreviouslyBuiltAsAP2PDependency()
         {
             const string mainProjectContents = @"<Project>
@@ -3632,7 +3714,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         }
 
         [Fact]
-        [Trait("Category", "mono-osx-failing")] // out-of-proc nodes not working on mono yet
         public void OutOfProcFileBasedP2PBuildSucceeds()
         {
             const string mainProject = @"<Project>
@@ -3701,7 +3782,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
-        [Trait("Category", "mono-osx-failing")] // out-of-proc nodes not working on mono yet
         public void OutOfProcProjectInstanceBasedBuildDoesNotReloadFromDisk(bool shouldSerializeEntireState)
         {
             const string mainProject = @"<Project>
@@ -3788,7 +3868,6 @@ namespace Microsoft.Build.UnitTests.BackEnd
         }
 
         [Fact]
-        [Trait("Category", "mono-osx-failing")] // out-of-proc nodes not working on mono yet
         public void OutOfProcEvaluationIdsUnique()
         {
             const string mainProject = @"<Project>
@@ -3915,7 +3994,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
                 var buildParameters = new BuildParameters()
                 {
                     DisableInProcNode = true,
-                    MaxNodeCount = Environment.ProcessorCount,
+                    MaxNodeCount = NativeMethodsShared.GetLogicalCoreCount(),
                     EnableNodeReuse = false,
                     Loggers = new List<ILogger>()
                     {
@@ -4024,6 +4103,35 @@ $@"<Project InitialTargets=`Sleep`>
                     manager.EndBuild();
                     manager.Dispose();
                 }
+            }
+        }
+
+        [Fact]
+        public void BuildWithZeroConnectionTimeout()
+        {
+            string contents = CleanupFileContents(@"
+<Project>
+ <Target Name='test'>
+    <Message Text='Text'/>
+ </Target>
+</Project>
+");
+            // Do not use MSBUILDINPROCENVCHECK because this test case is expected to leave a defunct in-proc node behind.
+            _inProcEnvCheckTransientEnvironmentVariable.Revert();
+            _env.SetEnvironmentVariable("MSBUILDNODECONNECTIONTIMEOUT", "0");
+
+            BuildRequestData data = GetBuildRequestData(contents);
+            try
+            {
+                BuildResult result = _buildManager.Build(_parameters, data);
+
+                // The build should either finish successfully (very unlikely).
+                result.OverallResult.ShouldBe(BuildResultCode.Success);
+            }
+            catch (Exception e)
+            {
+                // Or it should throw InternalErrorException because the node didn't get connected within 0ms.
+                e.ShouldBeOfType<InternalErrorException>();
             }
         }
 
@@ -4178,6 +4286,36 @@ $@"<Project InitialTargets=`Sleep`>
             GraphBuildResult result = _buildManager.Build(_parameters, data);
             result.OverallResult.ShouldBe(BuildResultCode.Failure);
             result.CircularDependency.ShouldBeTrue();
+        }
+
+        [Fact]
+        public void GraphBuildShouldBeAbleToConstructGraphButSkipBuild()
+        {
+            var graph = Helpers.CreateProjectGraph(env: _env, dependencyEdges: new Dictionary<int, int[]> {{1, new[] {2, 3}}});
+
+            MockLogger logger = null;
+
+            using (var buildSession = new Helpers.BuildManagerSession(_env))
+            {
+                var graphResult = buildSession.BuildGraphSubmission(
+                    new GraphBuildRequestData(
+                        projectGraphEntryPoints: new[] {new ProjectGraphEntryPoint(graph.GraphRoots.First().ProjectInstance.FullPath)},
+                        targetsToBuild: new string[0],
+                        hostServices: null,
+                        flags: BuildRequestDataFlags.None,
+                        graphBuildOptions: new GraphBuildOptions {Build = false}));
+
+                graphResult.OverallResult.ShouldBe(BuildResultCode.Success);
+                logger = buildSession.Logger;
+            }
+
+            logger.EvaluationStartedEvents.Count.ShouldBe(3);
+            logger.ProjectStartedEvents.ShouldBeEmpty();
+            logger.TargetStartedEvents.ShouldBeEmpty();
+            logger.BuildStartedEvents.ShouldHaveSingleItem();
+            logger.BuildFinishedEvents.ShouldHaveSingleItem();
+            logger.FullLog.ShouldContain("Static graph loaded in");
+            logger.FullLog.ShouldContain("3 nodes, 2 edges");
         }
     }
 }

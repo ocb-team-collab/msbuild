@@ -148,7 +148,7 @@ namespace Microsoft.Build.Execution
         {
             ErrorUtilities.VerifyThrowArgumentNull(result, nameof(result));
 
-            // We verify that we got results from the same configuration, but not necessarily the same request, because we are 
+            // We verify that we got results from the same configuration, but not necessarily the same request, because we are
             // rather flexible in how users are allowed to submit multiple requests for the same configuration.  In this case, the
             // request id of the result will match the first request, even though it will contain results for all requests (including
             // this one.)
@@ -198,9 +198,16 @@ namespace Microsoft.Build.Execution
                 bool hasCompleted = (Interlocked.Exchange(ref _completionInvoked, 1) == 1);
                 if (!hasCompleted)
                 {
+                    // Did this submission have warnings elevated to errors? If so, mark it as
+                    // failed even though it succeeded (with warnings--but they're errors).
+                    if (((IBuildComponentHost)BuildManager).LoggingService.HasBuildSubmissionLoggedErrors(BuildResult.SubmissionId))
+                    {
+                        BuildResult.SetOverallResult(overallResult: false);
+                    }
+
                     _completionEvent.Set();
 
-                    if (null != _completionCallback)
+                    if (_completionCallback != null)
                     {
                         void Callback(object state)
                         {

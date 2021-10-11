@@ -3,15 +3,13 @@
 
 using System;
 using System.IO;
-using System.Reflection;
-using System.Collections;
+using System.Linq;
+
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Tasks;
 using Microsoft.Build.Utilities;
-using System.Text.RegularExpressions;
 
-using Microsoft.Build.Shared;
 using Shouldly;
 using Xunit;
 using Xunit.Abstractions;
@@ -406,7 +404,6 @@ namespace Microsoft.Build.UnitTests
                 }
                 ");
 
-
             // -------------------------------------------------------
             // TeamBuild.proj
             // -------------------------------------------------------
@@ -552,7 +549,6 @@ namespace Microsoft.Build.UnitTests
             }
         }
 
-
         /// <summary>
         /// Check if passing different global properties via metadata works
         /// </summary>
@@ -607,7 +603,6 @@ namespace Microsoft.Build.UnitTests
                 File.Delete(projectFile2);
             }
         }
-
 
         /// <summary>
         /// Check if passing different global properties via metadata works
@@ -713,7 +708,6 @@ namespace Microsoft.Build.UnitTests
             }
         }
 
-
         /// <summary>
         /// Check if passing additional global properties via metadata works
         /// </summary>
@@ -771,7 +765,6 @@ namespace Microsoft.Build.UnitTests
                 File.Delete(projectFile2);
             }
         }
-
 
         /// <summary>
         /// Check if passing additional global properties via metadata works
@@ -1407,6 +1400,93 @@ namespace Microsoft.Build.UnitTests
 
             // 2nd invocation of t_missing should fail the build resulting in target not found error (MSB4057)
             logger.FullLog.ShouldContain("MSB4057");
+        }
+
+        [Fact]
+        public void MSBuildTaskPassesTaskIdToSpawnedBuilds()
+        {
+            string projectFile1 = ObjectModelHelpers.CreateTempFileOnDisk(@"
+                <Project>
+                    <Target Name=`Build`>
+                        <Message Text=`test`/>
+                    </Target>
+                </Project>");
+
+            string projectFile2 = ObjectModelHelpers.CreateTempFileOnDisk(@"
+                <Project>
+                    <Target Name=`Build`>
+                        <MSBuild Projects=`" + projectFile1 + @"` Targets=`Build` />
+                    </Target>	
+                </Project>");
+
+            try
+            {
+                Project project = new Project(projectFile2);
+                var logger = new MockLogger();
+
+                Assert.True(project.Build(logger));
+
+                var expectedTaskId = logger.TaskStartedEvents.First(t => t.TaskName == "MSBuild").BuildEventContext.TaskId;
+                var actualTaskId = logger.ProjectStartedEvents
+                    .Where(p => p.ParentProjectBuildEventContext?.TaskId > 0)
+                    .First()
+                    .ParentProjectBuildEventContext.TaskId;
+
+                Assert.Equal(expectedTaskId, actualTaskId);
+            }
+            finally
+            {
+                File.Delete(projectFile1);
+                File.Delete(projectFile2);
+            }
+        }
+
+        [Fact]
+        public void CustomTaskWithBuildProjectFilePassesTaskId()
+        {
+            string projectFile1 = ObjectModelHelpers.CreateTempFileOnDisk($@"
+                <Project>
+                    <UsingTask TaskName=`{nameof(BuildProjectFileTask)}` AssemblyFile =`{typeof(BuildProjectFileTask).Assembly.Location}` />
+                    <Target Name=`Build`>
+                        <{nameof(BuildProjectFileTask)} Project=`$(MSBuildThisFileFullPath)` Targets=`Other` />
+                    </Target>
+                    <Target Name=`Other`>
+                        <Message Text=`test`/>
+                    </Target>
+                </Project>");
+
+            try
+            {
+                Project project = new Project(projectFile1);
+                var logger = new MockLogger();
+
+                Assert.True(project.Build(logger));
+
+                var expectedTaskId = logger.TaskStartedEvents.First(t => t.TaskName == nameof(BuildProjectFileTask)).BuildEventContext.TaskId;
+                var actualTaskId = logger.ProjectStartedEvents
+                    .Where(p => p.ParentProjectBuildEventContext?.TaskId > 0)
+                    .First()
+                    .ParentProjectBuildEventContext.TaskId;
+
+                Assert.Equal(expectedTaskId, actualTaskId);
+            }
+            finally
+            {
+                File.Delete(projectFile1);
+            }
+        }
+    }
+
+    public class BuildProjectFileTask : Task
+    {
+        public string Project { get; set; }
+        public string[] Targets { get; set; }
+
+        public override bool Execute()
+        {
+            this.BuildEngine.BuildProjectFile(Project, Targets, null, null);
+
+            return true;
         }
     }
 }

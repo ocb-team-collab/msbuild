@@ -3,14 +3,13 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Text;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Execution;
 using System.Collections;
 using Microsoft.Build.Shared;
 using TaskItem = Microsoft.Build.Execution.ProjectItemInstance.TaskItem;
 using Microsoft.Build.Collections;
+using Microsoft.Build.Utilities;
 
 namespace Microsoft.Build.BackEnd.Logging
 {
@@ -43,7 +42,8 @@ namespace Microsoft.Build.BackEnd.Logging
             requestEntry.RequestConfiguration.ToolsVersion,
             requestEntry.RequestConfiguration.Project.PropertiesToBuildWith,
             requestEntry.RequestConfiguration.Project.ItemsToBuildWith,
-            parentBuildEventContext
+            parentBuildEventContext,
+            requestEntry.RequestConfiguration.Project.EvaluationId
             )
         {
         }
@@ -51,7 +51,7 @@ namespace Microsoft.Build.BackEnd.Logging
         /// <summary>
         /// Constructs a project logging context.
         /// </summary>
-        internal ProjectLoggingContext(NodeLoggingContext nodeLoggingContext, BuildRequest request, string projectFullPath, string toolsVersion, BuildEventContext parentBuildEventContext)
+        internal ProjectLoggingContext(NodeLoggingContext nodeLoggingContext, BuildRequest request, string projectFullPath, string toolsVersion, BuildEventContext parentBuildEventContext, int evaluationId = BuildEventContext.InvalidEvaluationId)
             : this
             (
             nodeLoggingContext,
@@ -62,7 +62,8 @@ namespace Microsoft.Build.BackEnd.Logging
             toolsVersion,
             null,
             null,
-            parentBuildEventContext
+            parentBuildEventContext,
+            evaluationId
             )
         {
         }
@@ -70,7 +71,7 @@ namespace Microsoft.Build.BackEnd.Logging
         /// <summary>
         /// Constructs a project logging contexts.
         /// </summary>
-        private ProjectLoggingContext(NodeLoggingContext nodeLoggingContext, int submissionId, int configurationId, string projectFullPath, List<string> targets, string toolsVersion, PropertyDictionary<ProjectPropertyInstance> projectProperties, ItemDictionary<ProjectItemInstance> projectItems, BuildEventContext parentBuildEventContext)
+        private ProjectLoggingContext(NodeLoggingContext nodeLoggingContext, int submissionId, int configurationId, string projectFullPath, List<string> targets, string toolsVersion, PropertyDictionary<ProjectPropertyInstance> projectProperties, ItemDictionary<ProjectItemInstance> projectItems, BuildEventContext parentBuildEventContext, int evaluationId = BuildEventContext.InvalidEvaluationId)
             : base(nodeLoggingContext)
         {
             _nodeLoggingContext = nodeLoggingContext;
@@ -85,7 +86,9 @@ namespace Microsoft.Build.BackEnd.Logging
             string[] propertiesToSerialize = LoggingService.PropertiesToSerialize;
 
             // If we are only logging critical events lets not pass back the items or properties
-            if (!LoggingService.OnlyLogCriticalEvents && (!LoggingService.RunningOnRemoteNode || LoggingService.SerializeAllProperties))
+            if (!LoggingService.OnlyLogCriticalEvents &&
+                !LoggingService.IncludeEvaluationPropertiesAndItems &&
+                (!LoggingService.RunningOnRemoteNode || LoggingService.SerializeAllProperties))
             {
                 if (projectProperties != null)
                 {
@@ -101,7 +104,10 @@ namespace Microsoft.Build.BackEnd.Logging
                 items = new ProjectItemInstanceEnumeratorProxy(projectItemsEnumerator);
             }
 
-            if (projectProperties != null && propertiesToSerialize != null && propertiesToSerialize.Length > 0 && !LoggingService.SerializeAllProperties)
+            if (projectProperties != null &&
+                !LoggingService.IncludeEvaluationPropertiesAndItems &&
+                propertiesToSerialize?.Length > 0 &&
+                !LoggingService.SerializeAllProperties)
             {
                 PropertyDictionary<ProjectPropertyInstance> projectPropertiesToSerialize = new PropertyDictionary<ProjectPropertyInstance>();
                 foreach (string propertyToGet in propertiesToSerialize)
@@ -127,8 +133,8 @@ namespace Microsoft.Build.BackEnd.Logging
                 projectFullPath,
                 String.Join(";", targets),
                 properties,
-                items
-                );
+                items,
+                evaluationId);
             LoggingService.LogComment(this.BuildEventContext, MessageImportance.Low, "ToolsVersionInEffectForBuild", toolsVersion);
 
             this.IsValid = true;
@@ -171,7 +177,7 @@ namespace Microsoft.Build.BackEnd.Logging
         /// </summary>
         /// <remarks>
         /// This class is designed to be passed to loggers.
-        /// The expense of copying items is only incurred if and when 
+        /// The expense of copying items is only incurred if and when
         /// a logger chooses to enumerate over it.
         /// The type of the items enumerated over is imposed by backwards compatibility for ProjectStartedEvent.
         /// </remarks>
@@ -221,7 +227,7 @@ namespace Microsoft.Build.BackEnd.Logging
         /// </summary>
         /// <remarks>
         /// This class is designed to be passed to loggers.
-        /// The expense of copying items is only incurred if and when 
+        /// The expense of copying items is only incurred if and when
         /// a logger chooses to enumerate over it.
         /// The type of the items enumerated over is imposed by backwards compatibility for ProjectStartedEvent.
         /// </remarks>
