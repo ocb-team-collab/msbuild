@@ -984,10 +984,14 @@ namespace Microsoft.Build.BackEnd
                         if (taskFactory2 == null)
                         {
                             task = _taskFactoryWrapper.TaskFactory.CreateTask(loggingHost);
+
+                            _loadedTask = null;
                         }
                         else
                         {
                             task = taskFactory2.CreateTask(loggingHost, taskIdentityParameters);
+
+                            _loadedTask = _taskFactoryWrapper.TaskFactoryLoadedType;
                         }
                     }
                     finally
@@ -997,6 +1001,7 @@ namespace Microsoft.Build.BackEnd
 #endif
                     }
                 }
+
             }
             catch (InvalidCastException e)
             {
