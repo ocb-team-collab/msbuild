@@ -1,5 +1,5 @@
 @echo off
-IF "%1" == "" ((echo Please specify which test to run - e.g.: copy) & exit /B 1)
+IF "%1" == "" ((echo Usage: dominobuild [testname]) & exit /B 1)
 
 set _Static_Artifacts_MsBuild=%~dp0..\artifacts\bin\MSBuild\Debug\net472
 set _Static_Artifacts_MicrosftBuildTasks=%~dp0..\artifacts\bin\Microsoft.Build.Tasks\Debug\net472
@@ -14,10 +14,12 @@ set _Static_Source=%~dp0%1
 IF NOT EXIST %_Static_Artifacts_MsBuild%\current mkdir %_Static_Artifacts_MsBuild%\current
 copy %_Static_Artifacts_MicrosftBuildTasks%\Microsoft.Common.props %_Static_Artifacts_MsBuild%\current\Microsoft.common.props
 
-IF NOT EXIST %_Static_Intermediate% mkdir %_Static_Intermediate%
-IF NOT EXIST %_Static_Intermediate_MetaBuildGraph% mkdir %_Static_Intermediate_MetaBuildGraph%
-IF NOT EXIST %_Static_Intermediate_MetaBuildOutput% mkdir %_Static_Intermediate_MetaBuildOutput%
-IF NOT EXIST %_Static_Intermediate_ProductBuildGraph% mkdir %_Static_Intermediate_ProductBuildGraph%
+IF EXIST %_Static_Intermediate% rmdir /S/Q %_Static_Intermediate%
+mkdir %_Static_Intermediate%
+mkdir %_Static_Intermediate_MetaBuildGraph%
+mkdir %_Static_Intermediate_MetaBuildOutput%
+mkdir %_Static_Intermediate_ProductBuildGraph%
+mkdir %_Static_Intermediate_ProductBuildOutput%
 
 echo Creating MetaBuild
 %_Static_Artifacts_MicrosoftBuildTargetLauncher%\Microsoft.Build.TaskLauncher.exe meta %_Static_Source% %_Static_Artifacts_MsBuild%\MSBuild.exe %_Static_Intermediate_MetaBuildGraph% %_Static_Intermediate_MetaBuildOutput% 

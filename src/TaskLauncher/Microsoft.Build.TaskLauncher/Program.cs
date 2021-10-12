@@ -27,12 +27,20 @@ namespace Microsoft.Build.TaskLauncher
                 return 0;
             }
 
-            if (Environment.GetEnvironmentVariable("MICROSOFT_BUILD_TASKLAUNCHER_DEBUG") == "1")
+            switch (Environment.GetEnvironmentVariable("MICROSOFT_BUILD_TASKLAUNCHER_DEBUG"))
             {
-                while(!Debugger.IsAttached)
-                {
-                    System.Threading.Thread.Sleep(100);
-                }
+                case "1":
+                    Debugger.Launch();
+                    break;
+                case "2":
+                    Process currentProcess = Process.GetCurrentProcess();
+                    Console.WriteLine($"Waiting for debugger to attach ({currentProcess.MainModule.FileName} PID {currentProcess.Id}).  Press enter to continue...");
+
+                    while (!Debugger.IsAttached)
+                    {
+                        System.Threading.Thread.Sleep(100);
+                    }
+                    break;
             }
 
             if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
@@ -312,9 +320,10 @@ namespace Microsoft.Build.TaskLauncher
 {{
 	tool: tool,
 	arguments: [ Cmd.rawArgument(""run"") ],
-	consoleInput: ""{NormalizeRawString(stdIn.ToString(), stdIn)}"",
-	description: ""{target.Name + "_" + NormalizeRawString(target.LocationString, new StringBuilder())}"",
+	consoleInput: ""{NormalizeRawString(stdIn.ToString())}"",
+	description: ""{target.Name + "_" + NormalizeRawString(target.LocationString)}"",
 	workingDirectory: d`{Path.GetDirectoryName(graph.ProjectPath)}`,
+    unsafe: {{ passThroughEnvironmentVariables: [""MICROSOFT_BUILD_TASKLAUNCHER_DEBUG"", ""MSBUILDDEBUGONSTART""] }},
     environmentVariables: [{string.Join(",\n", envVars.Select(envVar => $"\t{{ name: \"{envVar.Item1}\", value: \"{envVar.Item2}\" }}"))}],
 	consoleOutput: p`{Path.Combine(outputDirectory, "target" + i + ".out")}`,
 	dependencies: [
@@ -369,7 +378,7 @@ namespace Microsoft.Build.TaskLauncher
             List<(string, string)> envVars = new List<(string, string)>()
             {
                 ("MSBUILDSTATIC", "1"),
-                ("MSBUILDSTATIC_OUTPUT", NormalizeRawString(outputGraph, new StringBuilder())),
+                ("MSBUILDSTATIC_OUTPUT", NormalizeRawString(outputGraph)),
                 ("ProgramData", Environment.GetEnvironmentVariable("ProgramData"))
             };
 
@@ -380,11 +389,23 @@ namespace Microsoft.Build.TaskLauncher
                     msBuild,
                     Path.GetDirectoryName(msBuild)));
             specContents.AppendLine(
-                string.Format("const {0} = Transformer.execute(\n{{\n\ttool: tool,\n\targuments: [ Cmd.rawArgument(\"{1}\") ],\n\tenvironmentVariables: [{2}],\n\tdescription: \"{3}\",\n\tworkingDirectory: d`{4}`,\n\tconsoleOutput: p`{5}`,\n\tdependencies: [{6}],\n\timplicitOutputs: [{7}]\n}});\n",
+                string.Format(@"const {0} = Transformer.execute(
+{{
+    tool: tool,
+    arguments: [ Cmd.rawArgument(""{1}"") ],
+    environmentVariables: [{2}],
+    description: ""{3}"",
+    workingDirectory: d`{4}`,
+    consoleOutput: p`{5}`,
+    dependencies: [{6}],
+    implicitOutputs: [{7}],
+    unsafe: {{ passThroughEnvironmentVariables: [""MICROSOFT_BUILD_TASKLAUNCHER_DEBUG"", ""MSBUILDDEBUGONSTART""] }},
+}});
+",
                     "msbuild0",
-                    NormalizeRawString(projectFile, new StringBuilder()),
+                    NormalizeRawString(projectFile),
                     string.Join(",\n", envVars.Select(envVar => $"\t{{ name: \"{envVar.Item1}\", value: \"{envVar.Item2}\" }}")),
-                    "Running static msbuild for: " + projectFile,
+                    "Running static msbuild for: " + NormalizeRawString(projectFile),
                     Path.GetDirectoryName(projectFile),
                     Path.Combine(outputDirectory, "msbuild0.out"),
                     string.Join(",\n\t\t", inputs),
@@ -442,42 +463,44 @@ namespace Microsoft.Build.TaskLauncher
             File.WriteAllText(modulePath, "module({ name: 'test', nameResolutionSemantics: NameResolutionSemantics.implicitProjectReferences, projects: [ f`spec.dsc` ]});");
         }
 
-        private static string NormalizeRawString(string raw, StringBuilder builder)
+        private static StringBuilder stringBuilder = new StringBuilder();
+
+        private static string NormalizeRawString(string raw)
         {
-            builder.Clear();
+            stringBuilder.Clear();
 
             foreach (char t in raw)
             {
                 switch (t)
                 {
                     case '"':
-                        builder.Append("\\\"");
+                        stringBuilder.Append("\\\"");
                         break;
                     case '\\':
-                        builder.Append("\\\\");
+                        stringBuilder.Append("\\\\");
                         break;
                     case '\b':
-                        builder.Append("\\b");
+                        stringBuilder.Append("\\b");
                         break;
                     case '\f':
-                        builder.Append("\\f");
+                        stringBuilder.Append("\\f");
                         break;
                     case '\n':
-                        builder.Append("\\n");
+                        stringBuilder.Append("\\n");
                         break;
                     case '\r':
-                        builder.Append("\\r");
+                        stringBuilder.Append("\\r");
                         break;
                     case '\t':
-                        builder.Append("\\t");
+                        stringBuilder.Append("\\t");
                         break;
                     default:
-                        builder.Append(t);
+                        stringBuilder.Append(t);
                         break;
                 }
             }
 
-            return builder.ToString();
+            return stringBuilder.ToString();
         }
 
         private static int RunTarget()
