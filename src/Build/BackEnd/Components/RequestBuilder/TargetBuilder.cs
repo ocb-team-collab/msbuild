@@ -255,7 +255,7 @@ namespace Microsoft.Build.BackEnd
         /// 2. The changes made by this target are NOT visible to the calling target.
         /// 3. Changes made by the calling target OVERRIDE changes made by this target.
         /// </remarks>
-        async Task<ITargetResult[]> ITargetBuilderCallback.LegacyCallTarget(string[] targets, bool continueOnError, ElementLocation taskLocation)
+        async Task<ITargetResult[]> ITargetBuilderCallback.LegacyCallTarget(string[] targets, bool continueOnError, ElementLocation taskLocation, List<StaticTarget.Task> tasks)
         {
             List<TargetSpecification> targetToPush = new List<TargetSpecification>();
             ITargetResult[] results = new TargetResult[targets.Length];
@@ -288,11 +288,15 @@ namespace Microsoft.Build.BackEnd
                     {
                         targetToPush.Clear();
                         targetToPush.Add(new TargetSpecification(targets[i], taskLocation));
+                        var staticTargets = new List<StaticTarget>();
 
                         // We push the targets one at a time to emulate the original CallTarget behavior.
                         bool pushed = await PushTargets(targetToPush, currentTargetEntry, callTargetLookup, false, true, TargetBuiltReason.None);
                         ErrorUtilities.VerifyThrow(pushed, "Failed to push any targets onto the stack.  Target: {0} Current Target: {1}", targets[i], currentTargetEntry.Target.Name);
-                        await ProcessTargetStack(taskBuilder, null /* TODO(hackathon): null */);
+                        await ProcessTargetStack(taskBuilder, staticTargets);
+
+                        // todo hackathon; what about other things on this target?
+                        tasks.AddRange(staticTargets.SelectMany(t => t.Tasks));
 
                         if (!_cancellationToken.IsCancellationRequested)
                         {

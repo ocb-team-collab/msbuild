@@ -746,8 +746,16 @@ namespace Microsoft.Build.BackEnd
 
             if (_buildRequestEntry.IsStatic)
             {
-
-                if (host.TaskInstance is ITaskStatic)
+                if (host.TaskInstance is MSBuild)
+                {
+                    throw new Exception("NYI");
+                }
+                else if (host.TaskInstance is CallTarget)
+                {
+                    CallTarget callTargetTask = host.TaskInstance as CallTarget;
+                    await callTargetTask.ExecuteInternal(tasks);
+                }
+                else if (host.TaskInstance is ITaskStatic)
                 {
                     taskExecutionHost.Execute();
                     GatherTaskOutputs(taskExecutionHost, howToExecuteTask, bucket);
@@ -827,7 +835,7 @@ namespace Microsoft.Build.BackEnd
                 else if (taskType == typeof(CallTarget))
                 {
                     CallTarget callTargetTask = host.TaskInstance as CallTarget;
-                    taskResult = await callTargetTask.ExecuteInternal();
+                    taskResult = await callTargetTask.ExecuteInternal(null);
                 }
                 else
                 {
