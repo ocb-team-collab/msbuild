@@ -413,8 +413,6 @@ namespace Microsoft.Build.BackEnd
                     IDictionary<string, string> taskIdentityParameters = GatherTaskIdentityParameters(bucket.Expander);
                     TaskRequirements? requirements = _taskExecutionHost.FindTask(taskIdentityParameters);
 
-                    var task = new StaticTarget.Task();
-
                     if (requirements != null)
                     {
                         TaskLoggingContext taskLoggingContext = _targetLoggingContext.LogTaskBatchStarted(_projectFullPath, _targetChildInstance);
@@ -430,14 +428,14 @@ namespace Microsoft.Build.BackEnd
                                 )
                             {
 #if FEATURE_APARTMENT_STATE
-                                taskResult = ExecuteTaskInSTAThread(bucket, taskLoggingContext, taskIdentityParameters, taskHost, howToExecuteTask, task);
+                                taskResult = ExecuteTaskInSTAThread(bucket, taskLoggingContext, taskIdentityParameters, taskHost, howToExecuteTask, tasks);
 #else
                                 throw new PlatformNotSupportedException(TaskRequirements.RequireSTAThread.ToString());
 #endif
                             }
                             else
                             {
-                                taskResult = await InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, task);
+                                taskResult = await InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, tasks);
                             }
 
                             if (lookupHash != null)
@@ -473,9 +471,6 @@ namespace Microsoft.Build.BackEnd
                             }
                         }
                     }
-
-                    if (task.Name != null)
-                        tasks.Add(task);
                 }
                 else
                 {
@@ -550,7 +545,7 @@ namespace Microsoft.Build.BackEnd
         /// Any bug fixes made to this code, please ensure that you also fix that code.
         /// </comment>
         [SuppressMessage("Microsoft.Design", "CA1031:DoNotCatchGeneralExceptionTypes", Justification = "Exception is caught and rethrown in the correct thread.")]
-        private WorkUnitResult ExecuteTaskInSTAThread(ItemBucket bucket, TaskLoggingContext taskLoggingContext, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
+        private WorkUnitResult ExecuteTaskInSTAThread(ItemBucket bucket, TaskLoggingContext taskLoggingContext, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, List<StaticTarget.Task> tasks)
         {
             WorkUnitResult taskResult = new WorkUnitResult(WorkUnitResultCode.Failed, WorkUnitActionCode.Stop, null);
             Thread staThread = null;
@@ -563,7 +558,7 @@ namespace Microsoft.Build.BackEnd
                     Lookup.Scope scope = bucket.Lookup.EnterScope("STA Thread for Task");
                     try
                     {
-                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, task).Result;
+                        taskResult = InitializeAndExecuteTask(taskLoggingContext, bucket, taskIdentityParameters, taskHost, howToExecuteTask, tasks).Result;
                     }
                     catch (Exception e) when (!ExceptionHandling.IsCriticalException(e))
                     {
@@ -647,7 +642,7 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Initializes and executes the task.
         /// </summary>
-        private async Task<WorkUnitResult> InitializeAndExecuteTask(TaskLoggingContext taskLoggingContext, ItemBucket bucket, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
+        private async Task<WorkUnitResult> InitializeAndExecuteTask(TaskLoggingContext taskLoggingContext, ItemBucket bucket, IDictionary<string, string> taskIdentityParameters, TaskHost taskHost, TaskExecutionMode howToExecuteTask, List<StaticTarget.Task> tasks)
         {
             if (!_taskExecutionHost.InitializeForBatch(taskLoggingContext, bucket, taskIdentityParameters))
             {
@@ -658,7 +653,7 @@ namespace Microsoft.Build.BackEnd
             {
                 // UNDONE: Move this and the task host.
                 taskHost.LoggingContext = taskLoggingContext;
-                WorkUnitResult executionResult = await ExecuteInstantiatedTask(_taskExecutionHost, taskLoggingContext, taskHost, bucket, howToExecuteTask, task);
+                WorkUnitResult executionResult = await ExecuteInstantiatedTask(_taskExecutionHost, taskLoggingContext, taskHost, bucket, howToExecuteTask, tasks);
 
                 ErrorUtilities.VerifyThrow(executionResult != null, "Unexpected null execution result");
 
@@ -734,7 +729,7 @@ namespace Microsoft.Build.BackEnd
         /// <param name="bucket">The batching bucket</param>
         /// <param name="howToExecuteTask">The task execution mode</param>
         /// <returns>The result of running the task.</returns>
-        private async Task<WorkUnitResult> ExecuteInstantiatedTask(ITaskExecutionHost taskExecutionHost, TaskLoggingContext taskLoggingContext, TaskHost taskHost, ItemBucket bucket, TaskExecutionMode howToExecuteTask, StaticTarget.Task task)
+        private async Task<WorkUnitResult> ExecuteInstantiatedTask(ITaskExecutionHost taskExecutionHost, TaskLoggingContext taskLoggingContext, TaskHost taskHost, ItemBucket bucket, TaskExecutionMode howToExecuteTask, List<StaticTarget.Task> tasks)
         {
             UpdateContinueOnError(bucket, taskHost);
 
@@ -759,10 +754,12 @@ namespace Microsoft.Build.BackEnd
                 }
                 else if (!(host.TaskInstance is ITaskStaticSkip))
                 {
+                    var task = new StaticTarget.Task();
                     task.Parameters = taskExecutionHost.CalculatedParameters;
                     task.Name = taskExecutionHost.LoadedTask.Type.AssemblyQualifiedName;
                     task.AssemblyFile = taskExecutionHost.LoadedTask.Assembly.AssemblyFile;
                     task.AssemblyName = taskExecutionHost.LoadedTask.Assembly.AssemblyName;
+                    tasks.Add(task);
 
                     if (host.TaskInstance is ITaskHybrid)
                     {
