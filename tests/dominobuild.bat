@@ -14,11 +14,15 @@ set _Static_Source=%~dp0%1
 IF NOT EXIST %_Static_Artifacts_MsBuild%\current mkdir %_Static_Artifacts_MsBuild%\current
 copy %_Static_Artifacts_MicrosftBuildTasks%\Microsoft.Common.props %_Static_Artifacts_MsBuild%\current\Microsoft.common.props
 
-IF EXIST %_Static_Intermediate% rmdir /S/Q %_Static_Intermediate%
-mkdir %_Static_Intermediate%
+IF NOT EXIST %_Static_Intermediate% mkdir %_Static_Intermediate%
+
+IF EXIST %_Static_Intermediate_MetaBuildGraph% rmdir /S/Q %_Static_Intermediate_MetaBuildGraph%
 mkdir %_Static_Intermediate_MetaBuildGraph%
+IF EXIST %_Static_Intermediate_MetaBuildOutput% rmdir /S/Q %_Static_Intermediate_MetaBuildOutput%
 mkdir %_Static_Intermediate_MetaBuildOutput%
+IF EXIST %_Static_Intermediate_ProductBuildGraph% rmdir /S/Q %_Static_Intermediate_ProductBuildGraph%
 mkdir %_Static_Intermediate_ProductBuildGraph%
+IF EXIST %_Static_Intermediate_ProductBuildOutput% rmdir /S/Q %_Static_Intermediate_ProductBuildOutput%
 mkdir %_Static_Intermediate_ProductBuildOutput%
 
 echo Creating MetaBuild
