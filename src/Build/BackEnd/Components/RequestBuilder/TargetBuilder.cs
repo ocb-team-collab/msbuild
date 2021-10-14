@@ -296,7 +296,7 @@ namespace Microsoft.Build.BackEnd
                         await ProcessTargetStack(taskBuilder, staticTargets);
 
                         // todo hackathon; what about other things on this target?
-                        tasks.AddRange(staticTargets.SelectMany(t => t.Tasks));
+                        tasks?.AddRange(staticTargets.SelectMany(t => t.Tasks));
 
                         if (!_cancellationToken.IsCancellationRequested)
                         {
