@@ -872,7 +872,7 @@ namespace Microsoft.Build.BackEnd
         /// Called by the internal MSBuild task.
         /// Does not take the lock because it is called by another request builder thread.
         /// </summary>
-        public async Task<BuildEngineResult> InternalBuildProjects(string[] projectFileNames, string[] targetNames, IDictionary[] globalProperties, IList<String>[] undefineProperties, string[] toolsVersion, bool returnTargetOutputs, bool skipNonexistentTargets = false)
+        public async Task<BuildEngineResult> InternalBuildProjects(string[] projectFileNames, string[] targetNames, IDictionary[] globalProperties, IList<String>[] undefineProperties, string[] toolsVersion, bool returnTargetOutputs, bool skipNonexistentTargets = false, List<StaticTarget.Task> tasks = null)
         {
             ErrorUtilities.VerifyThrowArgumentNull(projectFileNames, nameof(projectFileNames));
             ErrorUtilities.VerifyThrowArgumentNull(globalProperties, nameof(globalProperties));
@@ -885,7 +885,7 @@ namespace Microsoft.Build.BackEnd
                 List<IDictionary<string, ITaskItem[]>> targetOutputsPerProject = null;
 
                 // This is really a legacy CallTarget invocation
-                ITargetResult[] results = await _targetBuilderCallback.LegacyCallTarget(targetNames, ContinueOnError, _taskLocation);
+                ITargetResult[] results = await _targetBuilderCallback.LegacyCallTarget(targetNames, ContinueOnError, _taskLocation, tasks);
 
                 if (returnTargetOutputs)
                 {
@@ -1058,7 +1058,7 @@ namespace Microsoft.Build.BackEnd
                 if (projectFileNames.Length == 1 && projectFileNames[0] == null && globalProperties[0] == null && (undefineProperties == null || undefineProperties[0] == null) && toolsVersion[0] == null)
                 {
                     // This is really a legacy CallTarget invocation
-                    ITargetResult[] results = await _targetBuilderCallback.LegacyCallTarget(targetNames, ContinueOnError, _taskLocation);
+                    ITargetResult[] results = await _targetBuilderCallback.LegacyCallTarget(targetNames, ContinueOnError, _taskLocation, null /* todo hackathon */);
 
                     if (returnTargetOutputs)
                     {

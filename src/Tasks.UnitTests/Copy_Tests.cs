@@ -113,7 +113,7 @@ namespace Microsoft.Build.UnitTests
                     UseSymboliclinksIfPossible = UseSymbolicLinks,
                 };
 
-                t.Execute(m.CopyFile, _parallelismThreadCount);
+                t.Execute(m.CopyFile, _parallelismThreadCount, false);
 
                 // Expect for there to have been no copies.
                 Assert.Equal(0, m.copyCount);
@@ -1458,7 +1458,8 @@ namespace Microsoft.Build.UnitTests
                     filesActuallyCopied.Add(new KeyValuePair<FileState, FileState>(source, dest));
                 }
                 return true;
-            }, _parallelismThreadCount);
+            }, _parallelismThreadCount
+            , false);
 
             Assert.True(success);
             Assert.Equal(2, filesActuallyCopied.Count);
@@ -1524,7 +1525,8 @@ namespace Microsoft.Build.UnitTests
                     filesActuallyCopied.Add(new KeyValuePair<FileState, FileState>(source, dest));
                 }
                 return true;
-            }, _parallelismThreadCount);
+            }, _parallelismThreadCount
+            , false);
 
             Assert.True(success);
             Assert.Equal(4, filesActuallyCopied.Count);
@@ -1771,7 +1773,7 @@ namespace Microsoft.Build.UnitTests
             };
 
             var copyFunctor = new CopyFunctor(2, false /* do not throw on failure */);
-            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount);
+            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount, false);
 
             Assert.False(result);
             engine.AssertLogDoesntContain("MSB3026");
@@ -1837,7 +1839,7 @@ namespace Microsoft.Build.UnitTests
             };
 
             var copyFunctor = new CopyFunctor(2, false /* do not throw on failure */);
-            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount);
+            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount, false);
 
             Assert.True(result);
             engine.AssertLogContains("MSB3026");
@@ -1863,7 +1865,7 @@ namespace Microsoft.Build.UnitTests
             };
 
             var copyFunctor = new CopyFunctor(2, false /* do not throw on failure */);
-            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount);
+            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount, false);
 
             Assert.True(result);
             engine.AssertLogContains("MSB3026");
@@ -1894,7 +1896,7 @@ namespace Microsoft.Build.UnitTests
             };
 
             var copyFunctor = new CopyFunctor(4, false /* do not throw */);
-            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount);
+            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount, false);
 
             Assert.False(result);
             engine.AssertLogContains("MSB3026");
@@ -1922,7 +1924,7 @@ namespace Microsoft.Build.UnitTests
             };
 
             var copyFunctor = new CopyFunctor(3, true /* throw */);
-            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount);
+            bool result = t.Execute(copyFunctor.Copy, _parallelismThreadCount, false);
 
             Assert.False(result);
             engine.AssertLogContains("MSB3026");

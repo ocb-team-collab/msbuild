@@ -13,7 +13,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Given a list of items, determine which are in the cone of the folder passed in and which aren't.
     /// </summary>
-    public class FindUnderPath : TaskExtension
+    public class FindUnderPath : TaskExtension, ITaskStatic
     {
         /// <summary>
         /// Filter based on whether items fall under this path or not.

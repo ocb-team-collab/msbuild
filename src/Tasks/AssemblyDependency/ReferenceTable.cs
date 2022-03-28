@@ -638,7 +638,9 @@ namespace Microsoft.Build.Tasks
             {
                 ResolveReference(assemblyName, rawFileNameCandidate, reference);
 
-                if (reference.IsResolved)
+                // In static mode, there's no guarantee the file will exist so don't try to probe/read it
+                // TODO: should we only do this for hint path things?
+                if (reference.IsResolved && !GlobalEnvVars.GlobalIsStatic)
                 {
                     AssemblyNameExtension possiblyBetterAssemblyName;
 

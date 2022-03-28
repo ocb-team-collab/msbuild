@@ -11,7 +11,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Given a list of items, remove duplicate items. Attributes are not considered. Case insensitive.
     /// </summary>
-    public class RemoveDuplicates : TaskExtension
+    public class RemoveDuplicates : TaskExtension, ITaskStatic
     {
         /// <summary>
         /// The left-hand set of items to be RemoveDuplicatesed from.

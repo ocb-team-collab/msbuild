@@ -73,7 +73,7 @@ namespace Microsoft.Build.Tasks
         protected override string GenerateFullPathToTool() { throw null; }
         protected override bool ValidateParameters() { throw null; }
     }
-    public partial class AssignCulture : Microsoft.Build.Tasks.TaskExtension
+    public partial class AssignCulture : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public AssignCulture() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -116,7 +116,7 @@ namespace Microsoft.Build.Tasks
         public string VcxToDefaultPlatformMapping { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class AssignTargetPath : Microsoft.Build.Tasks.TaskExtension
+    public partial class AssignTargetPath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public AssignTargetPath() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -181,7 +181,7 @@ namespace Microsoft.Build.Tasks
         public CommandLineBuilderExtension(bool quoteHyphensOnCommandLine, bool useNewLineSeparator) { }
         protected string GetQuotedText(string unquotedText) { throw null; }
     }
-    public partial class ConvertToAbsolutePath : Microsoft.Build.Tasks.TaskExtension
+    public partial class ConvertToAbsolutePath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public ConvertToAbsolutePath() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -190,7 +190,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] Paths { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class Copy : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask
+    public partial class Copy : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskHybrid
     {
         public Copy() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -209,6 +209,7 @@ namespace Microsoft.Build.Tasks
         public bool UseSymboliclinksIfPossible { get { throw null; } set { } }
         public void Cancel() { }
         public override bool Execute() { throw null; }
+        public bool ExecuteStatic() { throw null; }
     }
     public partial class CreateCSharpManifestResourceName : Microsoft.Build.Tasks.CreateManifestResourceName
     {
@@ -262,7 +263,7 @@ namespace Microsoft.Build.Tasks
         protected override string CreateManifestName(string fileName, string linkFileName, string rootNamespace, string dependentUponFileName, System.IO.Stream binaryStream) { throw null; }
         protected override bool IsSourceFile(string fileName) { throw null; }
     }
-    public partial class Delete : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask
+    public partial class Delete : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskStaticSkip
     {
         public Delete() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -272,6 +273,7 @@ namespace Microsoft.Build.Tasks
         public bool TreatErrorsAsWarnings { get { throw null; } set { } }
         public void Cancel() { }
         public override bool Execute() { throw null; }
+        public bool ExecuteStatic() { throw null; }
     }
     public sealed partial class DownloadFile : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask
     {
@@ -352,7 +354,7 @@ namespace Microsoft.Build.Tasks
         public bool IsInsideConditionalBlock { get { throw null; } set { } }
         public string Name { get { throw null; } set { } }
     }
-    public partial class FindAppConfigFile : Microsoft.Build.Tasks.TaskExtension
+    public partial class FindAppConfigFile : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public FindAppConfigFile() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -391,7 +393,7 @@ namespace Microsoft.Build.Tasks
         public string TargetPlatformVersion { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class FindUnderPath : Microsoft.Build.Tasks.TaskExtension
+    public partial class FindUnderPath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public FindUnderPath() { }
         public Microsoft.Build.Framework.ITaskItem[] Files { get { throw null; } set { } }
@@ -450,7 +452,7 @@ namespace Microsoft.Build.Tasks
         protected override bool OnManifestResolved(Microsoft.Build.Tasks.Deployment.ManifestUtilities.Manifest manifest) { throw null; }
         protected internal override bool ValidateInputs() { throw null; }
     }
-    public partial class GenerateBindingRedirects : Microsoft.Build.Tasks.TaskExtension
+    public partial class GenerateBindingRedirects : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskHybrid
     {
         public GenerateBindingRedirects() { }
         public Microsoft.Build.Framework.ITaskItem AppConfigFile { get { throw null; } set { } }
@@ -459,6 +461,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] SuggestedRedirects { get { throw null; } set { } }
         public string TargetName { get { throw null; } set { } }
         public override bool Execute() { throw null; }
+        public bool ExecuteStatic() { throw null; }
     }
     public sealed partial class GenerateBootstrapper : Microsoft.Build.Tasks.TaskExtension
     {
@@ -625,7 +628,7 @@ namespace Microsoft.Build.Tasks
         public string MetadataName { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class GetFrameworkPath : Microsoft.Build.Tasks.TaskExtension
+    public partial class GetFrameworkPath : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public GetFrameworkPath() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -698,7 +701,7 @@ namespace Microsoft.Build.Tasks
         public bool WarnWhenNoSDKsFound { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class GetReferenceAssemblyPaths : Microsoft.Build.Tasks.TaskExtension
+    public partial class GetReferenceAssemblyPaths : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public GetReferenceAssemblyPaths() { }
         public bool BypassFrameworkInstallChecks { get { throw null; } set { } }
@@ -794,7 +797,7 @@ namespace Microsoft.Build.Tasks
         protected override string GenerateFullPathToTool() { throw null; }
         protected override bool ValidateParameters() { throw null; }
     }
-    public partial class MakeDir : Microsoft.Build.Tasks.TaskExtension
+    public partial class MakeDir : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskStaticSkip
     {
         public MakeDir() { }
         [Microsoft.Build.Framework.RequiredAttribute]
@@ -803,7 +806,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] DirectoriesCreated { get { throw null; } }
         public override bool Execute() { throw null; }
     }
-    public sealed partial class Message : Microsoft.Build.Tasks.TaskExtension
+    public sealed partial class Message : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITask, Microsoft.Build.Framework.ITaskHybrid
     {
         public Message() { }
         public string Code { get { throw null; } set { } }
@@ -813,6 +816,7 @@ namespace Microsoft.Build.Tasks
         public bool IsCritical { get { throw null; } set { } }
         public string Text { get { throw null; } set { } }
         public override bool Execute() { throw null; }
+        public bool ExecuteStatic() { throw null; }
     }
     public partial class Move : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ICancelableTask, Microsoft.Build.Framework.ITask
     {
@@ -850,7 +854,7 @@ namespace Microsoft.Build.Tasks
         public bool UseResultsCache { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class ReadLinesFromFile : Microsoft.Build.Tasks.TaskExtension
+    public partial class ReadLinesFromFile : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public ReadLinesFromFile() { }
         [Microsoft.Build.Framework.RequiredAttribute]
@@ -881,7 +885,7 @@ namespace Microsoft.Build.Tasks
         public Microsoft.Build.Framework.ITaskItem[] RemovedDirectories { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class RemoveDuplicates : Microsoft.Build.Tasks.TaskExtension
+    public partial class RemoveDuplicates : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public RemoveDuplicates() { }
         [Microsoft.Build.Framework.OutputAttribute]
@@ -908,7 +912,7 @@ namespace Microsoft.Build.Tasks
         public string TargetFrameworkVersion { get { throw null; } set { } }
         public override bool Execute() { throw null; }
     }
-    public partial class ResolveAssemblyReference : Microsoft.Build.Tasks.TaskExtension
+    public partial class ResolveAssemblyReference : Microsoft.Build.Tasks.TaskExtension, Microsoft.Build.Framework.ITaskStatic
     {
         public ResolveAssemblyReference() { }
         public string[] AllowedAssemblyExtensions { get { throw null; } set { } }

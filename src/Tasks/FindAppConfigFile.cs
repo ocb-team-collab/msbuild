@@ -13,7 +13,7 @@ namespace Microsoft.Build.Tasks
     /// For compat reasons, it has to follow a particular arbitrary algorithm.
     /// It also adds the TargetPath metadata.
     /// </summary>
-    public class FindAppConfigFile : TaskExtension
+    public class FindAppConfigFile : TaskExtension, ITaskStatic
     {
         // The list to search through
         private ITaskItem[] _primaryList;

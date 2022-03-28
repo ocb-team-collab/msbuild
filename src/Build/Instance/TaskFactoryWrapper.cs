@@ -180,7 +180,7 @@ namespace Microsoft.Build.Execution
         /// <summary>
         /// Sets the given property on the task.
         /// </summary>
-        internal void SetPropertyValue(ITask task, TaskPropertyInfo property, object value)
+        public static void SetPropertyValue(ITask task, TaskPropertyInfo property, object value)
         {
             ErrorUtilities.VerifyThrowArgumentNull(task, nameof(task));
             ErrorUtilities.VerifyThrowArgumentNull(property, nameof(property));

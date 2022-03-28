@@ -1003,7 +1003,7 @@ namespace Microsoft.Build.UnitTests.BackEnd
             ITaskBuilder taskBuilder = _host.GetComponent(BuildComponentType.TaskBuilder) as ITaskBuilder;
 
             // GetAwaiter().GetResult() will flatten any AggregateException throw by the task.
-            entry.ExecuteTarget(taskBuilder, entry.RequestEntry, GetProjectLoggingContext(entry.RequestEntry), CancellationToken.None).GetAwaiter().GetResult();
+            entry.ExecuteTarget(taskBuilder, entry.RequestEntry, GetProjectLoggingContext(entry.RequestEntry), CancellationToken.None, null /* TODO(hackathon): this can't be null*/).GetAwaiter().GetResult();
             ((IBuildComponent)taskBuilder).ShutdownComponent();
         }
 

@@ -10,6 +10,7 @@ using System.Reflection;
 #if FEATURE_APPDOMAIN
 using System.Runtime.Remoting;
 #endif
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -121,6 +122,14 @@ namespace Microsoft.Build.BackEnd
         /// we use this list to disconnect the task items once we're done.
         /// </summary>
         private List<TaskItem> _remotedTaskItems;
+
+        private Dictionary<string, StaticTarget.Task.Parameter> _calculatedParameters;
+
+        public Dictionary<string, StaticTarget.Task.Parameter> CalculatedParameters { get { return _calculatedParameters; } }
+
+        private LoadedType _loadedTask = null;
+
+        public LoadedType LoadedTask { get { return _loadedTask; }}
 
         /// <summary>
         /// We need access to the build component host so that we can get at the 
@@ -314,6 +323,8 @@ namespace Microsoft.Build.BackEnd
             TaskInstance.BuildEngine = _buildEngine;
             TaskInstance.HostObject = _taskHost;
 
+            _calculatedParameters = new Dictionary<string, StaticTarget.Task.Parameter>();
+            
             return true;
         }
 
@@ -697,9 +708,9 @@ namespace Microsoft.Build.BackEnd
         /// <summary>
         /// Called on the local side.
         /// </summary>
-        private bool SetTaskItemParameter(TaskPropertyInfo parameter, ITaskItem item)
+        private bool SetTaskItemParameter(TaskPropertyInfo parameter, ITaskItem item, StaticTarget.Task.Parameter staticParameter)
         {
-            return InternalSetTaskParameter(parameter, item);
+            return InternalSetTaskParameter(parameter, item, staticParameter);
         }
 
         /// <summary>
@@ -707,18 +718,20 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         private bool SetValueParameter(TaskPropertyInfo parameter, Type parameterType, string expandedParameterValue)
         {
+            var staticParameter = new StaticTarget.Task.Parameter(new StaticTarget.Task.Primitive(expandedParameterValue, parameterType));
+
             if (parameterType == typeof(bool))
             {
                 // Convert the string to the appropriate datatype, and set the task's parameter.
-                return InternalSetTaskParameter(parameter, ConversionUtilities.ConvertStringToBool(expandedParameterValue));
+                return InternalSetTaskParameter(parameter, ConversionUtilities.ConvertStringToBool(expandedParameterValue), staticParameter);
             }
             else if (parameterType == typeof(string))
             {
-                return InternalSetTaskParameter(parameter, expandedParameterValue);
+                return InternalSetTaskParameter(parameter, expandedParameterValue, staticParameter);
             }
             else
             {
-                return InternalSetTaskParameter(parameter, Convert.ChangeType(expandedParameterValue, parameterType, CultureInfo.InvariantCulture));
+                return InternalSetTaskParameter(parameter, Convert.ChangeType(expandedParameterValue, parameterType, CultureInfo.InvariantCulture), staticParameter);
             }
         }
 
@@ -734,11 +747,14 @@ namespace Microsoft.Build.BackEnd
                 // Loop through all the TaskItems in our arraylist, and convert them.
                 ArrayList finalTaskInputs = new ArrayList(taskItems.Count);
 
+                StaticTarget.Task.Parameter staticParameter = null;
+
                 if (parameterType != typeof(ITaskItem[]))
                 {
                     foreach (TaskItem item in taskItems)
                     {
                         currentItem = item;
+
                         if (parameterType == typeof(string[]))
                         {
                             finalTaskInputs.Add(item.ItemSpec);
@@ -752,6 +768,8 @@ namespace Microsoft.Build.BackEnd
                             finalTaskInputs.Add(Convert.ChangeType(item.ItemSpec, parameterType.GetElementType(), CultureInfo.InvariantCulture));
                         }
                     }
+
+                    staticParameter = new StaticTarget.Task.Parameter(new StaticTarget.Task.PrimitiveList(taskItems.Select(t => t.ItemSpec).ToList(), parameterType));
                 }
                 else
                 {
@@ -763,9 +781,11 @@ namespace Microsoft.Build.BackEnd
 
                         finalTaskInputs.Add(item);
                     }
+
+                    staticParameter = new StaticTarget.Task.Parameter(taskItems.Cast<ITaskItem>().Select(t => new StaticTarget.Task.TaskItem(t)).ToList());
                 }
 
-                return InternalSetTaskParameter(parameter, finalTaskInputs.ToArray(parameterType.GetElementType()));
+                return InternalSetTaskParameter(parameter, finalTaskInputs.ToArray(parameterType.GetElementType()), staticParameter);
             }
             catch (Exception ex)
             {
@@ -952,6 +972,8 @@ namespace Microsoft.Build.BackEnd
                         AppDomainSetup,
 #endif
                         IsOutOfProc);
+
+                    _loadedTask = _taskFactoryWrapper.TaskFactoryLoadedType;
                 }
                 else
                 {
@@ -962,10 +984,14 @@ namespace Microsoft.Build.BackEnd
                         if (taskFactory2 == null)
                         {
                             task = _taskFactoryWrapper.TaskFactory.CreateTask(loggingHost);
+
+                            _loadedTask = null;
                         }
                         else
                         {
                             task = taskFactory2.CreateTask(loggingHost, taskIdentityParameters);
+
+                            _loadedTask = _taskFactoryWrapper.TaskFactoryLoadedType;
                         }
                     }
                     finally
@@ -975,6 +1001,7 @@ namespace Microsoft.Build.BackEnd
 #endif
                     }
                 }
+
             }
             catch (InvalidCastException e)
             {
@@ -1199,7 +1226,7 @@ namespace Microsoft.Build.BackEnd
 
                         RecordItemForDisconnectIfNecessary(finalTaskItems[0]);
 
-                        success = SetTaskItemParameter(parameter, finalTaskItems[0]);
+                        success = SetTaskItemParameter(parameter, finalTaskItems[0], new StaticTarget.Task.Parameter(new StaticTarget.Task.TaskItem(finalTaskItems[0])));
 
                         taskParameterSet = true;
                     }
@@ -1326,7 +1353,7 @@ namespace Microsoft.Build.BackEnd
         /// <remarks>
         /// Logging currently enabled only by an env var.
         /// </remarks>
-        private bool InternalSetTaskParameter(TaskPropertyInfo parameter, IList parameterValue)
+        private bool InternalSetTaskParameter(TaskPropertyInfo parameter, IList parameterValue, StaticTarget.Task.Parameter staticParameter)
         {
             if (LogTaskInputs &&
                 !_taskLoggingContext.LoggingService.OnlyLogCriticalEvents &&
@@ -1341,7 +1368,7 @@ namespace Microsoft.Build.BackEnd
                     parameter.LogItemMetadata);
             }
 
-            return InternalSetTaskParameter(parameter, (object)parameterValue);
+            return InternalSetTaskParameter(parameter, (object)parameterValue, staticParameter);
         }
 
         private static readonly string TaskParameterFormatString = ItemGroupLoggingHelper.TaskParameterPrefix + "{0}={1}";
@@ -1352,7 +1379,8 @@ namespace Microsoft.Build.BackEnd
         private bool InternalSetTaskParameter
         (
             TaskPropertyInfo parameter,
-            object parameterValue
+            object parameterValue,
+            StaticTarget.Task.Parameter staticParameter
         )
         {
             bool success = false;
@@ -1372,7 +1400,9 @@ namespace Microsoft.Build.BackEnd
 
             try
             {
-                _taskFactoryWrapper.SetPropertyValue(TaskInstance, parameter, parameterValue);
+                _calculatedParameters.Add(parameter.Name, staticParameter);
+
+                TaskFactoryWrapper.SetPropertyValue(TaskInstance, parameter, parameterValue);
                 success = true;
             }
             catch (LoggerException)

@@ -57,7 +57,9 @@ namespace Microsoft.Build.Tasks
             // However, we should consider Trim() the hintpath https://github.com/microsoft/msbuild/issues/4603
             if (!string.IsNullOrEmpty(hintPath) && !FileUtilities.PathIsInvalid(hintPath))
             {
-                if (ResolveAsFile(FileUtilities.NormalizePath(hintPath), assemblyName, isPrimaryProjectReference, wantSpecificVersion, true, assembliesConsideredAndRejected))
+                // If this is static mode, assume that the hint path is valid. We can't confirm because the file might not exist yet
+                bool isMatch = GlobalEnvVars.GlobalIsStatic || ResolveAsFile(FileUtilities.NormalizePath(hintPath), assemblyName, isPrimaryProjectReference, wantSpecificVersion, true, assembliesConsideredAndRejected);
+                if (isMatch)
                 {
                     userRequestedSpecificFile = true;
                     foundPath = hintPath;

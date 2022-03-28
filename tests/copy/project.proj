@@ -1,0 +1,15 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <InputFilenames Include="input1.txt" />
+    <InputFilenames Include="input2.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <InputFiles Include="@(InputFilenames->'src\%(filename)%(extension)')" />
+  </ItemGroup>
+  <ItemGroup>
+    <OutputFiles Include="@(InputFiles->'obj\%(filename)%(extension)')" />
+  </ItemGroup>
+  <Target Name="Build" Inputs="@(InputFiles)" Outputs="@(OutputFiles)">
+    <Copy SourceFiles="@(InputFiles)" DestinationFolder="obj" />
+  </Target>
+</Project>

@@ -17,7 +17,7 @@ namespace Microsoft.Build.Tasks
     /// Take suggested redirects (from the ResolveAssemblyReference and GenerateOutOfBandAssemblyTables tasks)
     /// and add them to an intermediate copy of the App.config file.
     /// </summary>
-    public class GenerateBindingRedirects : TaskExtension
+    public class GenerateBindingRedirects : TaskExtension, ITaskHybrid
     {
         // <param name="SuggestedRedirects">RAR suggested binding redirects.</param>
         // <param name="AppConfigFile">The source App.Config file.</param>
@@ -50,6 +50,16 @@ namespace Microsoft.Build.Tasks
         /// Execute the task.
         /// </summary>
         public override bool Execute()
+        {
+            return Execute(false);
+        }
+
+        public bool ExecuteStatic()
+        {
+            return Execute(true);
+        }
+
+        private bool Execute(bool isStatic)
         {
             if (SuggestedRedirects == null || SuggestedRedirects.Length == 0)
             {
@@ -128,7 +138,7 @@ namespace Microsoft.Build.Tasks
                 OutputAppConfigFile.SetMetadata(ItemMetadataNames.targetPath, TargetName);
             }
 
-            if(writeOutput)
+            if (!isStatic && writeOutput)
             {
                 using (var stream = FileUtilities.OpenWrite(OutputAppConfigFile.ItemSpec, false))
                 {

@@ -27,7 +27,7 @@ namespace Microsoft.Build.Tasks
     /// There are plenty of corner cases with this task. See the unit test for
     /// more details.
     /// </summary>
-    public class AssignCulture : TaskExtension
+    public class AssignCulture : TaskExtension, ITaskStatic
     {
         #region Properties
 

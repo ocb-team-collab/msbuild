@@ -14,7 +14,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Delete files from disk.
     /// </summary>
-    public class Delete : TaskExtension, ICancelableTask
+    public class Delete : TaskExtension, ICancelableTask, ITaskStaticSkip
     {
         #region Properties
 
@@ -58,6 +58,16 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         public override bool Execute()
         {
+            return Execute(false);
+        }
+
+        public bool ExecuteStatic()
+        {
+            return Execute(true);
+        }
+
+        private bool Execute(bool isStatic)
+        {
             var deletedFilesList = new List<ITaskItem>();
             var deletedFilesSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -78,7 +88,10 @@ namespace Microsoft.Build.Tasks
                             // Do not log a fake command line as well, as it's superfluous, and also potentially expensive
                             Log.LogMessageFromResources(MessageImportance.Normal, "Delete.DeletingFile", file.ItemSpec);
 
-                            File.Delete(file.ItemSpec);
+                            if (!isStatic)
+                            {
+                                File.Delete(file.ItemSpec);
+                            }
                         }
                         else
                         {

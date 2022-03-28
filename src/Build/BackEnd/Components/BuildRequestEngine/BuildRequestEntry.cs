@@ -168,6 +168,9 @@ namespace Microsoft.Build.BackEnd
         /// </summary>
         public BuildResult Result { get; private set; }
 
+        public bool IsStatic => GlobalIsStatic;
+        public static bool GlobalIsStatic = Environment.GetEnvironmentVariable("MSBUILDSTATIC") == "1";
+
         /// <summary>
         /// Returns the request builder.
         /// </summary>

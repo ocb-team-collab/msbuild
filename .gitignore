@@ -222,3 +222,6 @@ stage1/
 
 # ETL traces    
 *.etl.zip
+
+.tools
+launchSettings.json

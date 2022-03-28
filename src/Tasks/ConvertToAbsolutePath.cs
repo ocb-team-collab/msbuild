@@ -12,7 +12,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Task to call Path.GetFullPath
     /// </summary>
-    public class ConvertToAbsolutePath : TaskExtension
+    public class ConvertToAbsolutePath : TaskExtension, ITaskStatic
     {
         private ITaskItem[] _paths;
 

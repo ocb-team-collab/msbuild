@@ -27,7 +27,7 @@ namespace Microsoft.Build.Tasks
     /// Given a list of assemblyFiles, determine the closure of all assemblyFiles that
     /// depend on those assemblyFiles including second and nth-order dependencies too.
     /// </summary>
-    public class ResolveAssemblyReference : TaskExtension
+    public class ResolveAssemblyReference : TaskExtension, ITaskStatic
     {
         /// <summary>
         /// key assembly used to trigger inclusion of facade references.
@@ -45,11 +45,6 @@ namespace Microsoft.Build.Tasks
         /// <param name="targetFrameworkDirectory">TargetFramework directory to search for redist or subset list</param>
         /// <returns>String array of redist or subset lists</returns>
         private delegate string[] GetListPath(string targetFrameworkDirectory);
-
-        /// <summary>
-        /// Cache of system state information, used to optimize performance.
-        /// </summary>
-        internal SystemState _cache = null;
 
         /// <summary>
         /// Construct
@@ -1997,42 +1992,6 @@ namespace Microsoft.Build.Tasks
         }
         #endregion
 
-        #region StateFile
-        /// <summary>
-        /// Reads the state file (if present) into the cache.
-        /// </summary>
-        internal void ReadStateFile(FileExists fileExists)
-        {
-            _cache = SystemState.DeserializeCacheByTranslator(_stateFile, Log);
-
-            // Construct the cache only if we can't find any caches.
-            if (_cache == null && AssemblyInformationCachePaths != null && AssemblyInformationCachePaths.Length > 0)
-            {
-                _cache = SystemState.DeserializePrecomputedCachesByTranslator(AssemblyInformationCachePaths, Log, fileExists);
-            }
-
-            if (_cache == null)
-            {
-                _cache = new SystemState();
-            }
-        }
-
-        /// <summary>
-        /// Write out the state file if a state name was supplied and the cache is dirty.
-        /// </summary>
-        internal void WriteStateFile()
-        {
-            if (!String.IsNullOrEmpty(AssemblyInformationCacheOutputPath))
-            {
-                _cache.SerializePrecomputedCacheByTranslator(AssemblyInformationCacheOutputPath, Log);
-            }
-            else if (!String.IsNullOrEmpty(_stateFile) && _cache.IsDirty)
-            {
-                _cache.SerializeCacheByTranslator(_stateFile, Log);
-            }
-        }
-        #endregion
-
         #region App.config
         /// <summary>
         /// Read the app.config and get any assembly remappings from it.
@@ -2256,19 +2215,6 @@ namespace Microsoft.Build.Tasks
                             Log.LogWarningWithCodeFromResources("ResolveAssemblyReference.InvalidInstalledAssemblySubsetTablesFile", filename, SubsetListFinder.SubsetListFolder, e.Message);
                         }
                     }
-
-                    // Load any prior saved state.
-                    ReadStateFile(fileExists);
-                    _cache.SetGetLastWriteTime(getLastWriteTime);
-                    _cache.SetInstalledAssemblyInformation(installedAssemblyTableInfo);
-
-                    // Cache delegates.
-                    getAssemblyName = _cache.CacheDelegate(getAssemblyName);
-                    getAssemblyMetadata = _cache.CacheDelegate(getAssemblyMetadata);
-                    fileExists = _cache.CacheDelegate(fileExists);
-                    directoryExists = _cache.CacheDelegate(directoryExists);
-                    getDirectories = _cache.CacheDelegate(getDirectories);
-                    getRuntimeVersion = _cache.CacheDelegate(getRuntimeVersion);
 
                     _projectTargetFramework = FrameworkVersionFromString(_projectTargetFrameworkAsString);
 
@@ -2510,14 +2456,6 @@ namespace Microsoft.Build.Tasks
                     this.DependsOnSystemRuntime = useSystemRuntime.ToString();
                     this.DependsOnNETStandard = useNetStandard.ToString();
 
-                    WriteStateFile();
-
-                    // Save the new state out and put into the file exists if it is actually on disk.
-                    if (_stateFile != null && fileExists(_stateFile))
-                    {
-                        _filesWritten.Add(new TaskItem(_stateFile));
-                    }
-
                     // Log the results.
                     success = LogResults(dependencyTable, idealAssemblyRemappings, idealAssemblyRemappingsIdentities, generalResolutionExceptions);
 
@@ -2529,7 +2467,8 @@ namespace Microsoft.Build.Tasks
                         {
                             AssemblyNameExtension assemblyName = null;
 
-                            if (fileExists(item.ItemSpec) && !Reference.IsFrameworkFile(item.ItemSpec, _targetFrameworkDirectories))
+                            // Can't look at the binary in static mode; it might not exist
+                            if (!GlobalEnvVars.GlobalIsStatic && fileExists(item.ItemSpec) && !Reference.IsFrameworkFile(item.ItemSpec, _targetFrameworkDirectories))
                             {
                                 try
                                 {

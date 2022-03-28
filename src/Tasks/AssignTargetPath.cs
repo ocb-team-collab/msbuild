@@ -13,7 +13,7 @@ namespace Microsoft.Build.Tasks
     /// Create a new list of items that have &lt;TargetPath&gt; attributes if none was present in
     /// the input.
     /// </summary>
-    public class AssignTargetPath : TaskExtension
+    public class AssignTargetPath : TaskExtension, ITaskStatic
     {
         #region Properties
 

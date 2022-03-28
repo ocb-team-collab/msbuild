@@ -18,7 +18,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// A task that copies files.
     /// </summary>
-    public class Copy : TaskExtension, ICancelableTask
+    public class Copy : TaskExtension, ICancelableTask, ITaskHybrid
     {
         internal const string AlwaysRetryEnvVar = "MSBUILDALWAYSRETRY";
         internal const string AlwaysOverwriteReadOnlyFilesEnvVar = "MSBUILDALWAYSOVERWRITEREADONLYFILES";
@@ -366,10 +366,12 @@ namespace Microsoft.Build.Tasks
         /// <param name="parallelism">
         /// Thread parallelism allowed during copies. 1 uses the original algorithm, >1 uses newer algorithm.
         /// </param>
+        /// <param name="staticEvaluation">Whether we are in static mode.</param>
         internal bool Execute
         (
             CopyFileWithState copyFile,
-            int parallelism
+            int parallelism,
+            bool staticEvaluation
         )
         {
             // If there are no source files then just return success.
@@ -397,8 +399,8 @@ namespace Microsoft.Build.Tasks
             // Use single-threaded code path when requested or when there is only copy to make
             // (no need to create all the parallel infrastructure for that case).
             bool success = parallelism == 1 || DestinationFiles.Length == 1
-                ? CopySingleThreaded(copyFile, out destinationFilesSuccessfullyCopied)
-                : CopyParallel(copyFile, parallelism, out destinationFilesSuccessfullyCopied);
+                ? CopySingleThreaded(copyFile, staticEvaluation, out destinationFilesSuccessfullyCopied)
+                : CopyParallel(copyFile, parallelism, staticEvaluation, out destinationFilesSuccessfullyCopied);
 
             // copiedFiles contains only the copies that were successful.
             CopiedFiles = destinationFilesSuccessfullyCopied.ToArray();
@@ -412,6 +414,7 @@ namespace Microsoft.Build.Tasks
         /// </summary>
         private bool CopySingleThreaded(
             CopyFileWithState copyFile,
+            bool staticEvaluation,
             out List<ITaskItem> destinationFilesSuccessfullyCopied)
         {
             bool success = true;
@@ -442,7 +445,7 @@ namespace Microsoft.Build.Tasks
 
                 if (!copyComplete)
                 {
-                    if (DoCopyIfNecessary(new FileState(SourceFiles[i].ItemSpec), new FileState(DestinationFiles[i].ItemSpec), copyFile))
+                    if (staticEvaluation || DoCopyIfNecessary(new FileState(SourceFiles[i].ItemSpec), new FileState(DestinationFiles[i].ItemSpec), copyFile))
                     {
                         filesActuallyCopied[destPath] = SourceFiles[i].ItemSpec;
                         copyComplete = true;
@@ -473,6 +476,7 @@ namespace Microsoft.Build.Tasks
         private bool CopyParallel(
             CopyFileWithState copyFile,
             int parallelism,
+            bool staticEvaluation,
             out List<ITaskItem> destinationFilesSuccessfullyCopied)
         {
             bool success = true;
@@ -542,7 +546,7 @@ namespace Microsoft.Build.Tasks
 
                         if (!copyComplete)
                         {
-                            if (DoCopyIfNecessary(
+                            if (staticEvaluation || DoCopyIfNecessary(
                                 new FileState(sourceItem.ItemSpec),
                                 new FileState(destItem.ItemSpec),
                                 copyFile))
@@ -897,7 +901,16 @@ namespace Microsoft.Build.Tasks
         /// <returns></returns>
         public override bool Execute()
         {
-            return Execute(CopyFileWithLogging, s_parallelism);
+            return Execute(CopyFileWithLogging, s_parallelism, false);
+        }
+
+        /// <summary>
+        /// Standard static evaluation entry point.
+        /// </summary>
+        /// <returns></returns>
+        public bool ExecuteStatic()
+        {
+            return Execute(CopyFileWithLogging, s_parallelism, true);
         }
 
         #endregion

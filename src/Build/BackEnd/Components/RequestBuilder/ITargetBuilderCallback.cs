@@ -30,6 +30,6 @@ namespace Microsoft.Build.BackEnd
         ///    items and properties by the CALLING target will override any changes made by the
         ///    CALLED target.
         /// </remarks>
-        Task<ITargetResult[]> LegacyCallTarget(string[] targets, bool continueOnError, ElementLocation referenceLocation);
+        Task<ITargetResult[]> LegacyCallTarget(string[] targets, bool continueOnError, ElementLocation referenceLocation, System.Collections.Generic.List<StaticTarget.Task> tasks);
     }
 }

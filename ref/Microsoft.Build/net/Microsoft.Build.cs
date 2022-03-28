@@ -1,5 +1,128 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
+namespace Microsoft.Build.BackEnd
+{
+    [System.Runtime.Serialization.DataContractAttribute]
+    public partial class StaticGraph
+    {
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<Microsoft.Build.BackEnd.Shared.StaticFile> Files;
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public string ProjectPath;
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget> StaticTargets;
+        public StaticGraph() { }
+    }
+    [System.Runtime.Serialization.DataContractAttribute]
+    public partial class StaticTarget
+    {
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public long Id;
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public string Name;
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task> Tasks;
+        public StaticTarget() { }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<long> InputFileIds { get { throw null; } set { } }
+        public Microsoft.Build.Construction.ElementLocation Location { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public string LocationString { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public System.Collections.Generic.List<long> OutputFileIds { get { throw null; } set { } }
+        public void RecordInput(long fileId) { }
+        public void RecordOutput(long fileId) { }
+        [System.Runtime.Serialization.DataContractAttribute]
+        public partial class Task
+        {
+            [System.Runtime.Serialization.DataMemberAttribute]
+            public string AssemblyFile;
+            [System.Runtime.Serialization.DataMemberAttribute]
+            public string AssemblyName;
+            [System.Runtime.Serialization.DataMemberAttribute]
+            public string Name;
+            [System.Runtime.Serialization.DataMemberAttribute]
+            public System.Collections.Generic.Dictionary<string, Microsoft.Build.BackEnd.StaticTarget.Task.Parameter> Parameters;
+            public Task() { }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class Parameter
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.ParameterType ParameterType;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.Primitive Primitive;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.PrimitiveList Primitives;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem TaskItem;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem> TaskItems;
+                public Parameter(Microsoft.Build.BackEnd.StaticTarget.Task.Primitive primitive) { }
+                public Parameter(Microsoft.Build.BackEnd.StaticTarget.Task.PrimitiveList value) { }
+                public Parameter(Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem value) { }
+                public Parameter(System.Collections.Generic.List<Microsoft.Build.BackEnd.StaticTarget.Task.TaskItem> value) { }
+            }
+            public enum ParameterType
+            {
+                Primitive = 0,
+                Primitives = 1,
+                TaskItem = 2,
+                TaskItems = 3,
+            }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class Primitive
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string Type;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string Value;
+                public Primitive(string value, System.Type type) { }
+            }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class PrimitiveList
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string Type;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public System.Collections.Generic.List<string> Values;
+                public PrimitiveList(System.Collections.Generic.List<string> values, System.Type type) { }
+            }
+            [System.Runtime.Serialization.DataContractAttribute]
+            public partial class TaskItem
+            {
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public string ItemSpec;
+                [System.Runtime.Serialization.DataMemberAttribute]
+                public System.Collections.Generic.Dictionary<string, string> Metadata;
+                public TaskItem(Microsoft.Build.Framework.ITaskItem taskItem) { }
+            }
+        }
+    }
+}
+namespace Microsoft.Build.BackEnd.Shared
+{
+    public partial class SimulatedFileSystem
+    {
+        internal SimulatedFileSystem() { }
+        public static readonly Microsoft.Build.BackEnd.Shared.SimulatedFileSystem Instance;
+        public System.Collections.Generic.IEnumerable<Microsoft.Build.BackEnd.Shared.StaticFile> KnownFiles { get { throw null; } }
+        public long GetFileId(string filePath) { throw null; }
+        public long RecordOutput(Microsoft.Build.BackEnd.StaticTarget producingTarget, Microsoft.Build.Framework.ITaskItem outputItem) { throw null; }
+        public long RecordOutput(Microsoft.Build.BackEnd.StaticTarget producingTarget, string filePath) { throw null; }
+    }
+    [System.Runtime.Serialization.DataContractAttribute]
+    public partial class StaticFile
+    {
+        public StaticFile() { }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public long Id { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public string Path { get { throw null; } set { } }
+        public Microsoft.Build.BackEnd.StaticTarget ProducingTarget { get { throw null; } set { } }
+        [System.Runtime.Serialization.DataMemberAttribute]
+        public long? ProducingTargetId { get { throw null; } set { } }
+    }
+}
 namespace Microsoft.Build.Construction
 {
     public abstract partial class ElementLocation

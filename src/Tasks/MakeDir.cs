@@ -12,7 +12,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// A task that creates a directory
     /// </summary>
-    public class MakeDir : TaskExtension
+    public class MakeDir : TaskExtension, ITaskStaticSkip
     {
         [Required]
         public ITaskItem[] Directories

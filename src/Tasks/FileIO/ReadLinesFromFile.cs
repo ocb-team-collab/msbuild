@@ -13,7 +13,7 @@ namespace Microsoft.Build.Tasks
     /// <summary>
     /// Read a list of items from a file.
     /// </summary>
-    public class ReadLinesFromFile : TaskExtension
+    public class ReadLinesFromFile : TaskExtension, ITaskStatic
     {
         /// <summary>
         /// File to read lines from.
